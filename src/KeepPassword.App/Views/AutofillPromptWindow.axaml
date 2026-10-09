@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:autofill="using:KeepPassword.Core.Autofill"
+        x:Class="KeepPassword.App.Views.AutofillPromptWindow"
+        Title="填入账号"
+        Width="460"
+        Height="520"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True">
+  <Border Classes="card" Margin="16">
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Top">
+        <TextBlock Text="选择要填入的条目" Classes="h1" />
+        <TextBlock x:Name="ContextText" TextWrapping="Wrap" Foreground="#5C6B7A" Margin="0,8,0,4" />
+        <TextBlock Text="即使刚刚解锁过，填入前也要再输入一次短密钥。" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,8" />
+      </StackPanel>
+      <StackPanel DockPanel.Dock="Bottom">
+        <TextBlock Text="短密钥" Classes="label" />
+        <TextBox x:Name="ShortKeyBox" PasswordChar="•" />
+        <TextBlock x:Name="ErrorText" Foreground="#C0353A" Margin="0,8,0,0" IsVisible="False" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+          <Button Classes="ghost" Content="取消" Click="OnCancel" />
+          <Button Classes="accent" Content="填入" Click="OnFill" />
+        </StackPanel>
+      </StackPanel>
+      <ListBox x:Name="MatchList" Margin="0,8">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="autofill:AutofillCandidate">
+            <StackPanel Margin="2">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+              <TextBlock Classes="muted">
+                <Run Text="{Binding Username}" />
+                <Run Text=" · " />
+                <Run Text="{Binding Domain}" />
+              </TextBlock>
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+  </Border>
+</Window>

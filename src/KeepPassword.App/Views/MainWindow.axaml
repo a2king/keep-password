@@ -1,0 +1,104 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:KeepPassword.App.ViewModels"
+        x:Class="KeepPassword.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="Keep Password"
+        Width="1120"
+        Height="740"
+        MinWidth="860"
+        MinHeight="560"
+        WindowStartupLocation="CenterScreen">
+  <DockPanel Margin="16">
+    <Border DockPanel.Dock="Top" Background="White" CornerRadius="12" Padding="16,12" Margin="0,0,0,12">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel>
+          <TextBlock Text="Keep Password" FontSize="18" FontWeight="SemiBold" Foreground="#142033" />
+          <TextBlock Text="{Binding Account, StringFormat=已解锁 · {0}}" Classes="muted" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <Button Classes="ghost" Content="验证码" Click="OnTotp" />
+          <Button Classes="ghost" Content="用户管理" Click="OnUsers" />
+          <Button Classes="accent" Content="锁定" Click="OnLock" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Padding="4,8,4,0">
+      <TextBlock Text="{Binding AutofillHint}" Classes="muted" TextWrapping="Wrap" />
+    </Border>
+
+    <Grid ColumnDefinitions="360,*" ColumnSpacing="12">
+      <Border Background="White" CornerRadius="12" Padding="12">
+        <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="8">
+          <TextBox Grid.Row="0" Text="{Binding Search}" Watermark="搜索名称、网址、用户名、备注" />
+          <WrapPanel Grid.Row="1">
+            <Button Classes="ghost" Content="导入 CSV" Click="OnImport" />
+            <Button Classes="ghost" Content="新建登录" Click="OnNewLogin" />
+            <Button Classes="ghost" Content="新建验证码" Click="OnNewTotp" />
+          </WrapPanel>
+          <TextBlock Grid.Row="2" Text="还没有条目" IsVisible="{Binding ShowEmpty}" Classes="muted" Margin="4,0,0,0" />
+          <ScrollViewer Grid.Row="3">
+            <ItemsControl ItemsSource="{Binding Groups}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:DomainGroupView">
+                  <StackPanel>
+                    <TextBlock Text="{Binding Domain}" Classes="domain" />
+                    <ItemsControl ItemsSource="{Binding Entries}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:EntryItemView">
+                          <Button Classes="entry" Classes.selected="{Binding IsSelected}" Tag="{Binding Id}" Click="OnEntry">
+                            <StackPanel>
+                              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                              <TextBlock Text="{Binding Username}" Classes="muted" />
+                            </StackPanel>
+                          </Button>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </Border>
+
+      <Border Grid.Column="1" Background="White" CornerRadius="12" Padding="20">
+        <Grid RowDefinitions="*,Auto">
+          <TextBlock Text="从左侧选择一条记录，或新建登录、新建验证码。"
+                     IsVisible="{Binding !HasDetail}"
+                     Foreground="#5C6B7A"
+                     TextWrapping="Wrap"
+                     VerticalAlignment="Center"
+                     HorizontalAlignment="Center" />
+          <ScrollViewer IsVisible="{Binding HasDetail}">
+            <StackPanel Spacing="0">
+              <TextBlock Text="名称" Classes="label" Margin="0,0,0,4" />
+              <TextBox Text="{Binding Name}" />
+              <TextBlock Text="网址" Classes="label" />
+              <TextBox Text="{Binding Url}" Watermark="https://example.com" />
+              <TextBlock Text="用户名" Classes="label" />
+              <TextBox Text="{Binding Username}" />
+              <TextBlock Text="密码" Classes="label" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox x:Name="PasswordBox" Text="{Binding Password}" PasswordChar="•" />
+                <Button Grid.Column="1" Classes="ghost" Content="{Binding PasswordToggleText}" Click="OnTogglePassword" />
+              </Grid>
+              <TextBlock Text="备注" Classes="label" />
+              <TextBox Text="{Binding Note}" AcceptsReturn="True" MinHeight="72" TextWrapping="Wrap" />
+              <TextBlock Text="验证码密钥（Base32，可留空）" Classes="label" />
+              <TextBox Text="{Binding TotpSecret}" Watermark="手填 Base32 密钥" />
+              <TextBlock Text="{Binding TotpPreview}" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
+            </StackPanel>
+          </ScrollViewer>
+          <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" Margin="0,12,0,0">
+            <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Foreground="#3D4A59" TextWrapping="Wrap" />
+            <Button Grid.Column="1" Classes="danger" Content="删除" Click="OnDelete" IsVisible="{Binding HasDetail}" />
+            <Button Grid.Column="2" Classes="accent" Content="保存" Click="OnSave" IsVisible="{Binding HasDetail}" />
+          </Grid>
+        </Grid>
+      </Border>
+    </Grid>
+  </DockPanel>
+</Window>

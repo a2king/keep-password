@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="KeepPassword.App.Views.UserManagementWindow"
+        Title="用户管理"
+        Width="440"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <Border Classes="card" Margin="20">
+    <StackPanel>
+      <TextBlock Text="修改短密钥" Classes="h1" />
+      <TextBlock Text="提交前必须再次输入主密码，并且验证通过。短密钥只更新验证哈希，主密码和保险库内容不变。"
+                 TextWrapping="Wrap" Foreground="#5C6B7A" Margin="0,8,0,0" />
+      <TextBlock x:Name="AccountText" Classes="muted" Margin="0,8,0,0" />
+      <TextBlock Text="新短密钥" Classes="label" />
+      <TextBox x:Name="NewKeyBox" PasswordChar="•" />
+      <TextBlock Text="确认新短密钥" Classes="label" />
+      <TextBox x:Name="ConfirmBox" PasswordChar="•" />
+      <TextBlock Text="主密码" Classes="label" />
+      <TextBox x:Name="MasterBox" PasswordChar="•" />
+      <TextBlock x:Name="ErrorText" Foreground="#C0353A" TextWrapping="Wrap" Margin="0,12,0,0" IsVisible="False" />
+      <TextBlock x:Name="BusyText" Text="正在验证主密码…" Foreground="#5C6B7A" Margin="0,12,0,0" IsVisible="False" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+        <Button Classes="ghost" Content="取消" Click="OnCancel" />
+        <Button x:Name="SaveButton" Classes="accent" Content="保存短密钥" Click="OnSave" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

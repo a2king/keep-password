@@ -1,0 +1,42 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:KeepPassword.App.ViewModels"
+        x:Class="KeepPassword.App.Views.UnlockWindow"
+        x:DataType="vm:UnlockViewModel"
+        Title="Keep Password"
+        Width="460"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen">
+  <Border Classes="card" Margin="28">
+    <StackPanel Spacing="0">
+      <TextBlock Text="Keep Password" Classes="h1" />
+      <TextBlock Text="{Binding Title}" FontSize="16" Margin="0,6,0,8" />
+      <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" Foreground="#5C6B7A" />
+
+      <TextBlock Text="账号" Classes="label" />
+      <TextBox Text="{Binding Account}" Watermark="例如 ada" />
+
+      <TextBlock Text="主密码" Classes="label" />
+      <TextBox x:Name="MasterBox" PasswordChar="•" Watermark="主密码" />
+
+      <StackPanel IsVisible="{Binding IsCreate}">
+        <TextBlock Text="确认主密码" Classes="label" />
+        <TextBox x:Name="ConfirmMasterBox" PasswordChar="•" />
+      </StackPanel>
+
+      <TextBlock Text="短密钥" Classes="label" />
+      <TextBox x:Name="ShortBox" PasswordChar="•" Watermark="固定短密钥" />
+
+      <StackPanel IsVisible="{Binding IsCreate}">
+        <TextBlock Text="确认短密钥" Classes="label" />
+        <TextBox x:Name="ConfirmShortBox" PasswordChar="•" />
+      </StackPanel>
+
+      <TextBlock Text="{Binding Error}" Foreground="#C0353A" TextWrapping="Wrap" Margin="0,12,0,0" IsVisible="{Binding HasError}" />
+      <TextBlock Text="正在处理…" Foreground="#5C6B7A" Margin="0,12,0,0" IsVisible="{Binding IsBusy}" />
+
+      <Button Classes="accent" Content="{Binding SubmitText}" Margin="0,18,0,0" HorizontalAlignment="Stretch" Click="OnSubmit" IsEnabled="{Binding !IsBusy}" />
+    </StackPanel>
+  </Border>
+</Window>
