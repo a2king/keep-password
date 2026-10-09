@@ -111,28 +111,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        {
-            Title = "导入 CSV",
-            AllowMultiple = false,
-            FileTypeFilter =
-            [
-                new FilePickerFileType("CSV") { Patterns = ["*.csv", "*.tsv", "*.txt"] }
-            ]
-        });
-        if (files.Count == 0)
+        var path = await SafeStoragePickers.PickOpenFileAsync(
+            this,
+            "导入 CSV",
+            [new FilePickerFileType("CSV") { Patterns = ["*.csv", "*.tsv", "*.txt"] }],
+            _pauseWatcher);
+        if (string.IsNullOrWhiteSpace(path))
         {
             return;
         }
 
-        await using var stream = await files[0].OpenReadAsync();
-        using var reader = new StreamReader(stream);
-        var text = await reader.ReadToEndAsync();
         try
         {
+            var text = await File.ReadAllTextAsync(path);
             View.ImportCsv(text);
         }
-        catch (FormatException ex)
+        catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
         {
             await Dialogs.AlertAsync(this, "无法导入", ex.Message);
         }

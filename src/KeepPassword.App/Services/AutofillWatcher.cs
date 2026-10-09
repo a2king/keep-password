@@ -43,7 +43,19 @@ public sealed class AutofillWatcher
 
         try
         {
-            var field = _detector.DetectForeground().FirstOrDefault();
+            // UI Automation 扫树可能很慢；放到后台，避免拖死界面和文件对话框。
+            var field = await Task.Run(() =>
+            {
+                try
+                {
+                    return _detector.DetectForeground().FirstOrDefault();
+                }
+                catch (Exception)
+                {
+                    return null;
+                }
+            });
+
             if (field is null)
             {
                 _lastKey = null;

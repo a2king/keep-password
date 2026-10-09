@@ -1,7 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Platform.Storage;
 using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
 using KeepPassword.Core.Vault;
@@ -57,17 +56,7 @@ public partial class UnlockWindow : Window
 
     private async void OnBrowseDirectory(object? sender, RoutedEventArgs e)
     {
-        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-        {
-            Title = "选择缓存目录",
-            AllowMultiple = false
-        });
-        if (folders.Count == 0)
-        {
-            return;
-        }
-
-        var path = folders[0].TryGetLocalPath();
+        var path = await SafeStoragePickers.PickFolderAsync(this, "选择缓存目录");
         if (!string.IsNullOrWhiteSpace(path))
         {
             DirectoryBox.Text = path;
