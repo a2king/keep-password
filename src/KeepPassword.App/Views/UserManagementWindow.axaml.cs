@@ -27,10 +27,17 @@ public partial class UserManagementWindow : Window
 
     private async void OnBrowseDirectory(object? sender, RoutedEventArgs e)
     {
-        var path = await SafeStoragePickers.PickFolderAsync(this, "选择缓存目录", _pauseWatcher);
-        if (!string.IsNullOrWhiteSpace(path))
+        try
         {
-            DirectoryBox.Text = path;
+            var path = await SafeStoragePickers.PickFolderAsync(this, "选择缓存目录", _pauseWatcher);
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                DirectoryBox.Text = path;
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex.Message);
         }
     }
 

@@ -56,10 +56,17 @@ public partial class UnlockWindow : Window
 
     private async void OnBrowseDirectory(object? sender, RoutedEventArgs e)
     {
-        var path = await SafeStoragePickers.PickFolderAsync(this, "选择缓存目录");
-        if (!string.IsNullOrWhiteSpace(path))
+        try
         {
-            DirectoryBox.Text = path;
+            var path = await SafeStoragePickers.PickFolderAsync(this, "选择缓存目录");
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                DirectoryBox.Text = path;
+            }
+        }
+        catch (Exception ex)
+        {
+            View.Error = ex.Message;
         }
     }
 

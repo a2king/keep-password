@@ -1,12 +1,13 @@
 using System.Runtime.Versioning;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using KeepPassword.App.Platform.Windows;
 
 namespace KeepPassword.App.Services;
 
 /// <summary>
-/// 统一选文件/选目录。Windows 走系统 STA 对话框，避免 Avalonia 文件框卡死；
+/// 统一选文件/选目录。Windows 在 UI 线程调用系统对话框，避免 Avalonia 文件框卡死/闪退；
 /// 打开对话框期间会暂停程序补全扫描。
 /// </summary>
 public static class SafeStoragePickers
@@ -71,15 +72,26 @@ public static class SafeStoragePickers
         string title,
         IReadOnlyList<FilePickerFileType>? filters)
     {
-        var handle = TopLevelHandle(owner);
-        return Win32StorageDialogs.PickOpenFileAsync(handle, title, ToWin32Filter(filters));
+        // 必须在创建 Avalonia 窗口的 UI STA 线程上调用，不能另开线程传 HWND。
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            return Dispatcher.UIThread.InvokeAsync(() =>
+                Win32StorageDialogs.PickOpenFile(TopLevelHandle(owner), title, ToWin32Filter(filters))).GetTask();
+        }
+
+        return Task.FromResult(Win32StorageDialogs.PickOpenFile(TopLevelHandle(owner), title, ToWin32Filter(filters)));
     }
 
     [SupportedOSPlatform("windows")]
     private static Task<string?> PickFolderWindowsAsync(TopLevel owner, string title)
     {
-        var handle = TopLevelHandle(owner);
-        return Win32StorageDialogs.PickFolderAsync(handle, title);
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            return Dispatcher.UIThread.InvokeAsync(() =>
+                Win32StorageDialogs.PickFolder(TopLevelHandle(owner), title)).GetTask();
+        }
+
+        return Task.FromResult(Win32StorageDialogs.PickFolder(TopLevelHandle(owner), title));
     }
 
     private static nint TopLevelHandle(TopLevel owner)
@@ -98,7 +110,7 @@ public static class SafeStoragePickers
     {
         if (filters is null || filters.Count == 0)
         {
-            return "所有文件\0*.*\0\0";
+            return "All Files\0*.*\0\0";
         }
 
         var parts = new List<string>();
@@ -111,7 +123,7 @@ public static class SafeStoragePickers
             parts.Add(patterns);
         }
 
-        parts.Add("所有文件");
+        parts.Add("All Files");
         parts.Add("*.*");
         return string.Join('\0', parts) + "\0\0";
     }
