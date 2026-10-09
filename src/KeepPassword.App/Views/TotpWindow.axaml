@@ -1,0 +1,37 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:KeepPassword.App.ViewModels"
+        x:Class="KeepPassword.App.Views.TotpWindow"
+        x:DataType="vm:TotpPageViewModel"
+        Title="验证码"
+        Width="560"
+        Height="600"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Kp.Bg}"
+        Icon="/Assets/logo.png">
+  <DockPanel Margin="24">
+    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,16">
+      <TextBlock Text="验证码" Classes="h1" />
+      <TextBlock Text="包含账号上的密钥，以及单独保存的验证码。SHA-1，6 位，30 秒。" Classes="muted" TextWrapping="Wrap" Margin="0,6,0,0" />
+    </StackPanel>
+    <TextBlock DockPanel.Dock="Top" Text="还没有验证码密钥。" IsVisible="{Binding IsEmpty}" Classes="muted" Margin="0,8,0,0" />
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Rows}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:TotpRowView">
+            <Border Background="White" CornerRadius="14" Padding="16" Margin="0,0,0,10" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1">
+              <Grid ColumnDefinitions="*,Auto,Auto">
+                <StackPanel>
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" />
+                  <TextBlock Text="{Binding RemainingText}" Classes="muted" Margin="0,4,0,0" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding Code}" FontSize="28" FontWeight="SemiBold" Foreground="#0572EC" VerticalAlignment="Center" Margin="16,0" />
+                <Button Grid.Column="2" Classes="soft" Content="复制" Click="OnCopy" Tag="{Binding Code}" VerticalAlignment="Center" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

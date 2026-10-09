@@ -1,0 +1,76 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="KeepPassword.Setup.MainWindow"
+        Title="安装 Keep Password"
+        Width="560"
+        Height="420"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Icon="/Assets/logo.png">
+  <Panel>
+    <Border>
+      <Border.Background>
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+          <GradientStop Color="#151B2B" Offset="0" />
+          <GradientStop Color="#1F2A44" Offset="0.55" />
+          <GradientStop Color="#0B4F9C" Offset="1" />
+        </LinearGradientBrush>
+      </Border.Background>
+    </Border>
+
+    <Border Background="White" CornerRadius="18" Margin="24" Padding="28" BoxShadow="0 18 48 0 #1A152033">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,18">
+          <Image Source="/Assets/logo.png" Width="40" Height="40" />
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="Keep Password" FontSize="22" FontWeight="SemiBold" />
+            <TextBlock x:Name="StepTitle" Text="安装向导" Foreground="#6B778C" FontSize="12" />
+          </StackPanel>
+        </StackPanel>
+
+        <!-- 欢迎页 -->
+        <StackPanel x:Name="WelcomePage" Spacing="0">
+          <TextBlock Text="欢迎安装 Keep Password"
+                     FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
+          <TextBlock Text="将覆盖已有安装目录中的程序文件，并清理旧版本残留。保险库和缓存不会被删除。不需要安装 .NET。"
+                     TextWrapping="Wrap" Foreground="#6B778C" Margin="0,0,0,14" />
+          <TextBlock Text="安装目录" FontSize="12" FontWeight="SemiBold" Foreground="#6B778C" Margin="0,0,0,6" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox x:Name="PathBox" />
+            <Button Grid.Column="1" Content="浏览" Click="OnBrowse" Padding="12,8" CornerRadius="10" />
+          </Grid>
+          <CheckBox x:Name="StartMenuBox" Content="创建开始菜单快捷方式" IsChecked="True" Margin="0,16,0,0" />
+          <CheckBox x:Name="DesktopBox" Content="创建桌面快捷方式" IsChecked="True" Margin="0,8,0,0" />
+          <CheckBox x:Name="LaunchBox" Content="安装完成后立即运行" IsChecked="True" Margin="0,8,0,0" />
+          <TextBlock x:Name="WelcomeError" TextWrapping="Wrap" Foreground="#D14343" Margin="0,12,0,0" IsVisible="False" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,20,0,0">
+            <Button Classes="ghost" Content="取消" Click="OnCancel" />
+            <Button Classes="accent" Content="立即安装" Click="OnStartInstall" />
+          </StackPanel>
+        </StackPanel>
+
+        <!-- 进度页 -->
+        <StackPanel x:Name="ProgressPage" IsVisible="False">
+          <TextBlock Text="正在安装…"
+                     FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
+          <TextBlock x:Name="ProgressText" Text="准备中" TextWrapping="Wrap" Foreground="#6B778C" Margin="0,0,0,16" />
+          <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Height="12" CornerRadius="6" />
+          <TextBlock x:Name="PercentText" Text="0%" Foreground="#6B778C" Margin="0,8,0,0" />
+        </StackPanel>
+
+        <!-- 完成页 -->
+        <StackPanel x:Name="FinishPage" IsVisible="False">
+          <TextBlock x:Name="FinishTitle" Text="安装完成"
+                     FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
+          <TextBlock x:Name="FinishText"
+                     Text="Keep Password 已安装到本机。可以开始使用了。"
+                     TextWrapping="Wrap" Foreground="#6B778C" Margin="0,0,0,12" />
+          <TextBlock x:Name="FinishError" TextWrapping="Wrap" Foreground="#D14343" Margin="0,0,0,12" IsVisible="False" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,20,0,0">
+            <Button x:Name="FinishButton" Classes="accent" Content="完成" Click="OnFinish" />
+          </StackPanel>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+  </Panel>
+</Window>

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Keep Password",
+  "version": "1.0.0",
+  "description": "在登录页填入 Keep Password 保险库中的用户名和密码",
+  "permissions": ["nativeMessaging"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

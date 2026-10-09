@@ -1,0 +1,186 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="KeepPassword.App.App"
+             RequestedThemeVariant="Light">
+  <Application.Resources>
+    <SolidColorBrush x:Key="Kp.Bg" Color="#EEF1F6" />
+    <SolidColorBrush x:Key="Kp.Sidebar" Color="#151B2B" />
+    <SolidColorBrush x:Key="Kp.SidebarHover" Color="#222A3D" />
+    <SolidColorBrush x:Key="Kp.SidebarActive" Color="#2A3550" />
+    <SolidColorBrush x:Key="Kp.Accent" Color="#0572EC" />
+    <SolidColorBrush x:Key="Kp.AccentHover" Color="#0463CE" />
+    <SolidColorBrush x:Key="Kp.Surface" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Kp.SurfaceMuted" Color="#F4F6FA" />
+    <SolidColorBrush x:Key="Kp.Border" Color="#E3E8F0" />
+    <SolidColorBrush x:Key="Kp.Text" Color="#152033" />
+    <SolidColorBrush x:Key="Kp.TextMuted" Color="#6B778C" />
+    <SolidColorBrush x:Key="Kp.Danger" Color="#D14343" />
+    <SolidColorBrush x:Key="Kp.Selection" Color="#E7F1FD" />
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+    <Style Selector="Window">
+      <Setter Property="FontFamily" Value="Inter, Segoe UI Variable, Microsoft YaHei UI, PingFang SC, WenQuanYi Micro Hei, Noto Sans CJK SC, sans-serif" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Background" Value="{DynamicResource Kp.Bg}" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
+    </Style>
+
+    <Style Selector="Button.accent">
+      <Setter Property="Background" Value="{DynamicResource Kp.Accent}" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Padding" Value="18,10" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.accent:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.AccentHover}" />
+    </Style>
+    <Style Selector="Button.accent:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="#9DBCE8" />
+    </Style>
+
+    <Style Selector="Button.ghost">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
+      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+    </Style>
+
+    <Style Selector="Button.soft">
+      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
+      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.soft:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#E8EDF5" />
+    </Style>
+
+    <Style Selector="Button.danger">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Danger}" />
+      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#FDECEC" />
+    </Style>
+
+    <Style Selector="Button.nav">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="#C9D2E3" />
+      <Setter Property="Padding" Value="10,12" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Margin" Value="8,2" />
+    </Style>
+    <Style Selector="Button.nav:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.SidebarHover}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.nav.active /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.SidebarActive}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <Style Selector="Button.entry">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="Margin" Value="4,2" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.entry:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+    </Style>
+    <Style Selector="Button.entry.selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Selection}" />
+    </Style>
+
+    <Style Selector="TextBox">
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+      <Setter Property="Padding" Value="12,8" />
+    </Style>
+    <Style Selector="TextBox:focus">
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />
+      <Setter Property="Background" Value="White" />
+    </Style>
+
+    <Style Selector="TextBlock.h1">
+      <Setter Property="FontSize" Value="26" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
+      <Setter Property="LetterSpacing" Value="-0.3" />
+    </Style>
+    <Style Selector="TextBlock.h2">
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="{DynamicResource Kp.TextMuted}" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="Foreground" Value="{DynamicResource Kp.TextMuted}" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,12,0,6" />
+    </Style>
+    <Style Selector="TextBlock.domain">
+      <Setter Property="Foreground" Value="{DynamicResource Kp.TextMuted}" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Margin" Value="14,14,14,4" />
+      <Setter Property="LetterSpacing" Value="0.4" />
+    </Style>
+
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
+      <Setter Property="CornerRadius" Value="18" />
+      <Setter Property="BoxShadow" Value="0 18 48 0 #1A152033" />
+      <Setter Property="Padding" Value="32" />
+      <Setter Property="BorderBrush" Value="#80FFFFFF" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.panel">
+      <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="Border.field">
+      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="14,12" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+    <Style Selector="ListBox">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="ListBoxItem">
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="Margin" Value="0,2" />
+      <Setter Property="CornerRadius" Value="12" />
+    </Style>
+    <Style Selector="CheckBox">
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
+    </Style>
+  </Application.Styles>
+</Application>
