@@ -122,6 +122,17 @@ public sealed class VaultSession : IDisposable
         }
     }
 
+    public bool CanSoftUnlock
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return !_unlocked && _masterKey.Length > 0;
+            }
+        }
+    }
+
     public bool VerifyShortKey(string? shortKey)
     {
         if (string.IsNullOrEmpty(shortKey))
@@ -136,7 +147,7 @@ public sealed class VaultSession : IDisposable
                 return false;
             }
 
-            return Argon2Id.Verify(shortKey, _shortKey.Profile, _shortKey.Salt, _shortKey.Hash);
+            return MatchesShortKey(shortKey);
         }
     }
 
@@ -173,6 +184,43 @@ public sealed class VaultSession : IDisposable
         }
     }
 
+    /// <summary>
+    /// 界面锁定：保留内存中的主密钥和条目，之后可用短密钥解锁。
+    /// </summary>
+    public void SoftLock()
+    {
+        lock (_gate)
+        {
+            _unlocked = false;
+        }
+    }
+
+    public void UnlockWithShortKey(string shortKey)
+    {
+        if (string.IsNullOrEmpty(shortKey))
+        {
+            throw new ArgumentException("请填写短密钥。", nameof(shortKey));
+        }
+
+        lock (_gate)
+        {
+            if (_masterKey.Length == 0)
+            {
+                throw new UnlockFailedException("会话已失效，请用主密码重新打开。");
+            }
+
+            if (!MatchesShortKey(shortKey))
+            {
+                throw new UnlockFailedException("短密钥不正确。");
+            }
+
+            _unlocked = true;
+        }
+    }
+
+    /// <summary>
+    /// 彻底锁定：清除内存中的主密钥和条目，之后必须用主密码重新打开。
+    /// </summary>
     public void Lock()
     {
         lock (_gate)
@@ -182,6 +230,9 @@ public sealed class VaultSession : IDisposable
     }
 
     public void Dispose() => Lock();
+
+    private bool MatchesShortKey(string shortKey) =>
+        Argon2Id.Verify(shortKey, _shortKey.Profile, _shortKey.Salt, _shortKey.Hash);
 
     private void EnsureUnlocked()
     {
@@ -198,6 +249,7 @@ public sealed class VaultSession : IDisposable
             CryptographicOperations.ZeroMemory(_masterKey);
         }
 
+        _masterKey = [];
         _entries.Clear();
         _unlocked = false;
     }

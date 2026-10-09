@@ -1,6 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
 namespace KeepPassword.Core.Paths;
 
 /// <summary>
@@ -9,13 +6,6 @@ namespace KeepPassword.Core.Paths;
 public static class CacheDirectory
 {
     public const string SettingsFileName = "settings.json";
-
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = true
-    };
 
     public static string SettingsFile()
     {
@@ -37,25 +27,13 @@ public static class CacheDirectory
 
     public static string Resolve(string settingsFile, string defaultDirectory)
     {
-        if (!File.Exists(settingsFile))
+        var settings = AppSettings.Read(settingsFile);
+        if (string.IsNullOrWhiteSpace(settings.Directory))
         {
             return Normalize(defaultDirectory);
         }
 
-        try
-        {
-            var settings = JsonSerializer.Deserialize<SettingsDto>(File.ReadAllText(settingsFile), Options);
-            if (string.IsNullOrWhiteSpace(settings?.Directory))
-            {
-                return Normalize(defaultDirectory);
-            }
-
-            return Normalize(settings.Directory);
-        }
-        catch (JsonException)
-        {
-            return Normalize(defaultDirectory);
-        }
+        return Normalize(settings.Directory);
     }
 
     public static string Switch(string settingsFile, string currentDirectory, string newDirectory)
@@ -178,16 +156,9 @@ public static class CacheDirectory
 
     private static void Write(string settingsFile, string directory)
     {
-        var folder = Path.GetDirectoryName(settingsFile);
-        if (!string.IsNullOrEmpty(folder))
-        {
-            Directory.CreateDirectory(folder);
-        }
-
-        var json = JsonSerializer.Serialize(new SettingsDto { Directory = directory }, Options);
-        var temp = settingsFile + ".tmp";
-        File.WriteAllText(temp, json);
-        File.Move(temp, settingsFile, overwrite: true);
+        var dto = AppSettings.Read(settingsFile);
+        dto.Directory = directory;
+        AppSettings.Write(settingsFile, dto);
     }
 
     private static bool IsInside(string parent, string child)
@@ -222,9 +193,4 @@ public static class CacheDirectory
     private static string Trim(string path) => path.Trim().TrimEnd('\\', '/');
 
     private static string Join(char separator, params string[] parts) => string.Join(separator, parts);
-
-    private sealed class SettingsDto
-    {
-        public string? Directory { get; set; }
-    }
 }

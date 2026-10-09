@@ -4,6 +4,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
+using KeepPassword.Core.Paths;
 using KeepPassword.Core.Vault;
 
 namespace KeepPassword.App.Views;
@@ -14,27 +15,45 @@ public partial class MainWindow : Window
     private readonly VaultSession? _session;
     private readonly VaultLocation? _location;
     private readonly Action<bool>? _pauseWatcher;
+    private readonly Func<int>? _getAutoLockSeconds;
+    private readonly Action<int>? _setAutoLockSeconds;
 
     public bool AllowClose { get; set; }
 
     public event EventHandler? LockRequested;
+
+    public event EventHandler? UserActivity;
 
     public MainWindow()
     {
         InitializeComponent();
         _totpTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _totpTimer.Tick += (_, _) => View?.RefreshTotp();
+        PointerMoved += (_, _) => NotifyActivity();
+        PointerPressed += (_, _) => NotifyActivity();
+        KeyDown += (_, _) => NotifyActivity();
+        TextInput += (_, _) => NotifyActivity();
     }
 
-    public MainWindow(VaultSession session, bool platformAutofillSupported, VaultLocation location, Action<bool>? pauseWatcher = null)
+    public MainWindow(
+        VaultSession session,
+        bool platformAutofillSupported,
+        VaultLocation location,
+        Action<bool>? pauseWatcher = null,
+        Func<int>? getAutoLockSeconds = null,
+        Action<int>? setAutoLockSeconds = null)
         : this()
     {
         _session = session;
         _location = location;
         _pauseWatcher = pauseWatcher;
+        _getAutoLockSeconds = getAutoLockSeconds;
+        _setAutoLockSeconds = setAutoLockSeconds;
         DataContext = new MainViewModel(session, platformAutofillSupported);
         _totpTimer.Start();
     }
+
+    private void NotifyActivity() => UserActivity?.Invoke(this, EventArgs.Empty);
 
     public MainViewModel? View => DataContext as MainViewModel;
 
@@ -144,17 +163,19 @@ public partial class MainWindow : Window
 
     private async void OnUsers(object? sender, RoutedEventArgs e)
     {
-        if (_session is null)
+        if (_session is null || _location is null)
         {
             return;
         }
 
-        if (_location is null)
-        {
-            return;
-        }
-
-        await new UserManagementWindow(_session, _location, _pauseWatcher).ShowDialog(this);
+        var autoLock = _getAutoLockSeconds?.Invoke() ?? AppSettings.DefaultAutoLockSeconds;
+        await new UserManagementWindow(
+            _session,
+            _location,
+            _pauseWatcher,
+            autoLock,
+            _setAutoLockSeconds).ShowDialog(this);
+        NotifyActivity();
     }
 
     private void OnNavItems(object? sender, RoutedEventArgs e)
