@@ -7,6 +7,7 @@ using KeepPassword.App.Platform;
 using KeepPassword.App.Views;
 using KeepPassword.Core.Autofill;
 using KeepPassword.Core.Messaging;
+using KeepPassword.Core.Paths;
 using KeepPassword.Core.Vault;
 
 namespace KeepPassword.App.Services;
@@ -16,16 +17,20 @@ public sealed class AppHost : IDisposable
     private readonly IClassicDesktopStyleApplicationLifetime _desktop;
     private readonly VaultStore _store = new();
     private readonly VaultLocation _location = new();
+    private readonly string _settingsFile = CacheDirectory.SettingsFile();
     private readonly IPasswordFieldDetector _detector;
     private readonly ICredentialFiller _filler;
     private readonly NativeMessagingServer _server;
     private readonly AutofillWatcher _watcher;
     private readonly Mutex _mutex;
+    private readonly DispatcherTimer _autoLockTimer;
     private VaultSession? _session;
     private MainWindow? _main;
     private bool _trayReady;
     private bool _locking;
     private bool _exiting;
+    private bool _autoLockPaused;
+    private int _autoLockSeconds = AppSettings.DefaultAutoLockSeconds;
 
     public AppHost(IClassicDesktopStyleApplicationLifetime desktop)
     {
@@ -34,6 +39,8 @@ public sealed class AppHost : IDisposable
         _filler = PlatformAutofill.CreateFiller();
         _server = new NativeMessagingServer(HandleMessageAsync);
         _watcher = new AutofillWatcher(_detector, OnWindowsFieldAsync);
+        _autoLockTimer = new DispatcherTimer();
+        _autoLockTimer.Tick += (_, _) => _ = LockAsync();
         _mutex = new Mutex(true, "KeepPassword.SingleInstance", out var created);
         if (!created)
         {
@@ -49,6 +56,7 @@ public sealed class AppHost : IDisposable
             return;
         }
 
+        _autoLockSeconds = AppSettings.GetAutoLockSeconds(_settingsFile);
         InstallTray();
         _server.Start();
         _ = RunAsync();
@@ -58,7 +66,7 @@ public sealed class AppHost : IDisposable
     {
         try
         {
-            await ShowUnlockAsync();
+            await ShowUnlockAsync(softSession: null);
         }
         catch (Exception ex)
         {
@@ -69,24 +77,37 @@ public sealed class AppHost : IDisposable
 
     public void Dispose()
     {
+        _autoLockTimer.Stop();
         _watcher.Stop();
         _server.Dispose();
         _session?.Dispose();
         _mutex.Dispose();
     }
 
-    private async Task ShowUnlockAsync()
+    private async Task ShowUnlockAsync(VaultSession? softSession)
     {
         if (_exiting)
         {
             return;
         }
 
-        var window = new UnlockWindow(_store, _location);
+        StopAutoLock();
+        UnlockWindow window = softSession is not null
+            ? new UnlockWindow(softSession)
+            : new UnlockWindow(_store, _location);
         _desktop.MainWindow = window;
         var session = await window.WaitAsync();
         if (session is null)
         {
+            if (softSession is not null)
+            {
+                softSession.Lock();
+                if (ReferenceEquals(_session, softSession))
+                {
+                    _session = null;
+                }
+            }
+
             Shutdown();
             return;
         }
@@ -97,12 +118,20 @@ public sealed class AppHost : IDisposable
     private void ShowMain(VaultSession session)
     {
         _session = session;
-        _main = new MainWindow(session, _detector.IsSupported, _location, PauseWatcher);
+        _main = new MainWindow(
+            session,
+            _detector.IsSupported,
+            _location,
+            PauseWatcher,
+            () => _autoLockSeconds,
+            ApplyAutoLockSeconds);
         _main.LockRequested += (_, _) => _ = LockAsync();
+        _main.UserActivity += (_, _) => ResetAutoLock();
         _main.Closing += OnMainClosing;
         _desktop.MainWindow = _main;
         _main.Show();
         _watcher.Start();
+        StartAutoLock();
     }
 
     private void OnMainClosing(object? sender, WindowClosingEventArgs e)
@@ -124,7 +153,7 @@ public sealed class AppHost : IDisposable
 
     private async Task LockAsync()
     {
-        if (_locking || _session is null)
+        if (_locking || _session is null || !_session.IsUnlocked)
         {
             return;
         }
@@ -132,9 +161,9 @@ public sealed class AppHost : IDisposable
         _locking = true;
         try
         {
+            StopAutoLock();
             _watcher.Stop();
-            _session.Lock();
-            _session = null;
+            _session.SoftLock();
             if (_main is not null)
             {
                 _main.PrepareClose();
@@ -142,7 +171,7 @@ public sealed class AppHost : IDisposable
                 _main = null;
             }
 
-            await ShowUnlockAsync();
+            await ShowUnlockAsync(_session);
         }
         finally
         {
@@ -152,17 +181,53 @@ public sealed class AppHost : IDisposable
 
     private void PauseWatcher(bool paused)
     {
+        _autoLockPaused = paused;
         if (paused)
         {
             _watcher.Stop();
+            StopAutoLock();
             return;
         }
 
         if (_session is { IsUnlocked: true })
         {
             _watcher.Start();
+            StartAutoLock();
         }
     }
+
+    private void StartAutoLock()
+    {
+        if (_autoLockPaused || _session is not { IsUnlocked: true })
+        {
+            return;
+        }
+
+        _autoLockTimer.Interval = TimeSpan.FromSeconds(Math.Max(AppSettings.MinAutoLockSeconds, _autoLockSeconds));
+        _autoLockTimer.Stop();
+        _autoLockTimer.Start();
+    }
+
+    private void StopAutoLock() => _autoLockTimer.Stop();
+
+    private void ResetAutoLock()
+    {
+        if (_autoLockPaused || _session is not { IsUnlocked: true })
+        {
+            return;
+        }
+
+        StartAutoLock();
+    }
+
+    public void ApplyAutoLockSeconds(int seconds)
+    {
+        _autoLockSeconds = AppSettings.NormalizeAutoLock(seconds);
+        AppSettings.SetAutoLockSeconds(_settingsFile, _autoLockSeconds);
+        ResetAutoLock();
+    }
+
+    public int AutoLockSeconds => _autoLockSeconds;
 
     private void InstallTray()
     {
@@ -209,6 +274,7 @@ public sealed class AppHost : IDisposable
         {
             main.Show();
             main.Activate();
+            ResetAutoLock();
             return;
         }
 
@@ -219,6 +285,7 @@ public sealed class AppHost : IDisposable
     private void Shutdown()
     {
         _exiting = true;
+        StopAutoLock();
         _watcher.Stop();
         _session?.Lock();
         _session = null;
@@ -254,6 +321,7 @@ public sealed class AppHost : IDisposable
             return;
         }
 
+        ResetAutoLock();
         var request = new AutofillRequest
         {
             Origin = AutofillOrigin.WindowsApplication,

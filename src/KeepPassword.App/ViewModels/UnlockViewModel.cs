@@ -4,7 +4,8 @@ namespace KeepPassword.App.ViewModels;
 
 public sealed class UnlockViewModel : ViewModelBase
 {
-    private readonly VaultStore _store;
+    private readonly VaultStore? _store;
+    private readonly VaultSession? _softSession;
     private string _path;
     private string _account = "";
     private string _accountLabel = "";
@@ -24,6 +25,16 @@ public sealed class UnlockViewModel : ViewModelBase
         RefreshAccount();
     }
 
+    public UnlockViewModel(VaultSession softSession)
+    {
+        _softSession = softSession;
+        _path = softSession.VaultPath;
+        AccountLabel = "账号 " + softSession.Account;
+        IsCreate = false;
+    }
+
+    public bool IsSoftUnlock => _softSession is not null;
+
     public bool IsCreate
     {
         get => _isCreate;
@@ -34,15 +45,27 @@ public sealed class UnlockViewModel : ViewModelBase
                 OnPropertyChanged(nameof(Title));
                 OnPropertyChanged(nameof(Hint));
                 OnPropertyChanged(nameof(SubmitText));
+                OnPropertyChanged(nameof(NeedsMasterPassword));
+                OnPropertyChanged(nameof(NeedsShortKey));
             }
         }
     }
 
-    public string Title => IsCreate ? "创建保险库" : "解锁保险库";
+    public bool NeedsMasterPassword => !IsSoftUnlock;
+
+    public bool NeedsShortKey => IsCreate || IsSoftUnlock;
+
+    public string Title => IsCreate
+        ? "创建保险库"
+        : IsSoftUnlock
+            ? "已锁定"
+            : "解锁保险库";
 
     public string Hint => IsCreate
         ? "第一次使用会在本机创建保险库。请设置账号、主密码和短密钥。主密码用来加密保险库，短密钥另外保存验证哈希，两者都不会明文落盘。"
-        : "再次打开只需输入主密码。短密钥只在自动填充和修改短密钥时使用。";
+        : IsSoftUnlock
+            ? "程序已锁定。输入短密钥即可继续，无需再输入主密码。"
+            : "启动后第一次解锁需要输入主密码。锁定后再次打开只需短密钥。";
 
     public string SubmitText => IsCreate ? "创建并解锁" : "解锁";
 
@@ -106,6 +129,11 @@ public sealed class UnlockViewModel : ViewModelBase
 
     public void UseVaultFile(string path)
     {
+        if (IsSoftUnlock || _store is null)
+        {
+            return;
+        }
+
         _path = path;
         IsCreate = !_store.Exists(path);
         RefreshAccount();
@@ -132,14 +160,23 @@ public sealed class UnlockViewModel : ViewModelBase
         IsBusy = true;
         try
         {
+            if (IsSoftUnlock)
+            {
+                var soft = _softSession!;
+                await Task.Run(() => soft.UnlockWithShortKey(shortKey));
+                Session = soft;
+                return true;
+            }
+
             Session = await Task.Run(() =>
             {
+                var store = _store!;
                 if (IsCreate)
                 {
-                    _store.Create(_path, account, master, shortKey);
+                    store.Create(_path, account, master, shortKey);
                 }
 
-                return _store.Unlock(_path, master);
+                return store.Unlock(_path, master);
             });
             return true;
         }
@@ -160,7 +197,7 @@ public sealed class UnlockViewModel : ViewModelBase
 
     private void RefreshAccount()
     {
-        if (IsCreate || !_store.Exists(_path))
+        if (IsCreate || _store is null || !_store.Exists(_path))
         {
             AccountLabel = "";
             return;
