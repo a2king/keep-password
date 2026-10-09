@@ -87,6 +87,15 @@ public class AutofillAndPathTests
         Assert.Equal(
             "/home/ada/.local/share/KeepPassword/vault.kpvault",
             AppDataPaths.VaultFileFor(PlatformKind.Linux, "/home/ada", null));
+        Assert.Equal(
+            @"C:\Users\ada\AppData\Roaming\KeepPassword\settings.json",
+            CacheDirectory.SettingsFileFor(PlatformKind.Windows, @"C:\Users\ada", @"C:\Users\ada\AppData\Roaming"));
+        Assert.Equal(
+            "/Users/ada/Library/Preferences/KeepPassword/settings.json",
+            CacheDirectory.SettingsFileFor(PlatformKind.MacOS, "/Users/ada", null));
+        Assert.Equal(
+            "/home/ada/.config/KeepPassword/settings.json",
+            CacheDirectory.SettingsFileFor(PlatformKind.Linux, "/home/ada", null));
     }
 
     [Fact]

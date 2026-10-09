@@ -62,7 +62,7 @@ public class CsvImportTests
             session.Save();
         }
 
-        using var unlocked = TestVault.Store().Unlock(path, "ada", "correct horse", "short-key");
+        using var unlocked = TestVault.Store().Unlock(path, "correct horse");
         var groups = DomainGrouping.Group(unlocked.Entries);
         Assert.Contains(groups, group => group.Domain == "github.com");
         Assert.Contains(groups, group => group.Domain == "mail.example.com");

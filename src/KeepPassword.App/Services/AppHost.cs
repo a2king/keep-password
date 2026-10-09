@@ -7,7 +7,6 @@ using KeepPassword.App.Platform;
 using KeepPassword.App.Views;
 using KeepPassword.Core.Autofill;
 using KeepPassword.Core.Messaging;
-using KeepPassword.Core.Paths;
 using KeepPassword.Core.Vault;
 
 namespace KeepPassword.App.Services;
@@ -16,7 +15,7 @@ public sealed class AppHost : IDisposable
 {
     private readonly IClassicDesktopStyleApplicationLifetime _desktop;
     private readonly VaultStore _store = new();
-    private readonly string _vaultPath = AppDataPaths.VaultFile();
+    private readonly VaultLocation _location = new();
     private readonly IPasswordFieldDetector _detector;
     private readonly ICredentialFiller _filler;
     private readonly NativeMessagingServer _server;
@@ -83,7 +82,7 @@ public sealed class AppHost : IDisposable
             return;
         }
 
-        var window = new UnlockWindow(_store, _vaultPath);
+        var window = new UnlockWindow(_store, _location);
         _desktop.MainWindow = window;
         var session = await window.WaitAsync();
         if (session is null)
@@ -98,7 +97,7 @@ public sealed class AppHost : IDisposable
     private void ShowMain(VaultSession session)
     {
         _session = session;
-        _main = new MainWindow(session, _detector.IsSupported);
+        _main = new MainWindow(session, _detector.IsSupported, _location, PauseWatcher);
         _main.LockRequested += (_, _) => _ = LockAsync();
         _main.Closing += OnMainClosing;
         _desktop.MainWindow = _main;
@@ -148,6 +147,20 @@ public sealed class AppHost : IDisposable
         finally
         {
             _locking = false;
+        }
+    }
+
+    private void PauseWatcher(bool paused)
+    {
+        if (paused)
+        {
+            _watcher.Stop();
+            return;
+        }
+
+        if (_session is { IsUnlocked: true })
+        {
+            _watcher.Start();
         }
     }
 

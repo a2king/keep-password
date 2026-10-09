@@ -14,8 +14,9 @@
       <TextBlock Text="{Binding Title}" FontSize="16" Margin="0,6,0,8" />
       <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" Foreground="#5C6B7A" />
 
-      <TextBlock Text="账号" Classes="label" />
-      <TextBox Text="{Binding Account}" Watermark="例如 ada" />
+      <TextBlock Text="{Binding AccountLabel}" Classes="label" IsVisible="{Binding !IsCreate}" />
+      <TextBlock Text="账号" Classes="label" IsVisible="{Binding IsCreate}" />
+      <TextBox Text="{Binding Account}" Watermark="例如 ada" IsVisible="{Binding IsCreate}" />
 
       <TextBlock Text="主密码" Classes="label" />
       <TextBox x:Name="MasterBox" PasswordChar="•" Watermark="主密码" />
@@ -23,15 +24,19 @@
       <StackPanel IsVisible="{Binding IsCreate}">
         <TextBlock Text="确认主密码" Classes="label" />
         <TextBox x:Name="ConfirmMasterBox" PasswordChar="•" />
-      </StackPanel>
-
-      <TextBlock Text="短密钥" Classes="label" />
-      <TextBox x:Name="ShortBox" PasswordChar="•" Watermark="固定短密钥" />
-
-      <StackPanel IsVisible="{Binding IsCreate}">
+        <TextBlock Text="短密钥" Classes="label" />
+        <TextBox x:Name="ShortBox" PasswordChar="•" Watermark="固定短密钥" />
         <TextBlock Text="确认短密钥" Classes="label" />
         <TextBox x:Name="ConfirmShortBox" PasswordChar="•" />
       </StackPanel>
+
+      <TextBlock Text="缓存目录" Classes="label" />
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBox x:Name="DirectoryBox" />
+        <Button Grid.Column="1" Classes="ghost" Content="浏览" Click="OnBrowseDirectory" />
+      </Grid>
+      <Button Classes="ghost" Content="切换到此目录" Margin="0,8,0,0" HorizontalAlignment="Left" Click="OnSwitchDirectory" />
+      <TextBlock x:Name="DirectoryStatus" Classes="muted" TextWrapping="Wrap" Margin="0,8,0,0" />
 
       <TextBlock Text="{Binding Error}" Foreground="#C0353A" TextWrapping="Wrap" Margin="0,12,0,0" IsVisible="{Binding HasError}" />
       <TextBlock Text="正在处理…" Foreground="#5C6B7A" Margin="0,12,0,0" IsVisible="{Binding IsBusy}" />

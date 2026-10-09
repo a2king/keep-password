@@ -17,9 +17,10 @@ public class ShortKeyChangeTests
 
         Assert.Contains("主密码", error.Message);
         session.Lock();
-        using var still = TestVault.Store().Unlock(path, "ada", "correct horse", "short-key");
+        using var still = TestVault.Store().Unlock(path, "correct horse");
         Assert.Equal("保留", Assert.Single(still.Entries).Name);
-        Assert.Throws<UnlockFailedException>(() => TestVault.Store().Unlock(path, "ada", "correct horse", "new-short"));
+        Assert.True(still.VerifyShortKey("short-key"));
+        Assert.False(still.VerifyShortKey("new-short"));
     }
 
     [Fact]
@@ -32,9 +33,10 @@ public class ShortKeyChangeTests
             session.ChangeShortKey("correct horse", "new-short");
         }
 
-        Assert.Throws<UnlockFailedException>(() => TestVault.Store().Unlock(path, "ada", "correct horse", "short-key"));
-        using var unlocked = TestVault.Store().Unlock(path, "ada", "correct horse", "new-short");
+        using var unlocked = TestVault.Store().Unlock(path, "correct horse");
         Assert.Equal("保留", Assert.Single(unlocked.Entries).Name);
+        Assert.True(unlocked.VerifyShortKey("new-short"));
+        Assert.False(unlocked.VerifyShortKey("short-key"));
         Assert.DoesNotContain("new-short", File.ReadAllText(path));
     }
 }

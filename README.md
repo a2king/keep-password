@@ -12,19 +12,29 @@
 - 主密码
 - 固定短密钥
 
-之后每次打开，解锁页都要这三项。主密码用 Argon2id 派生密钥，保险库用 AES-256-GCM 加密，主密码不明文落盘。短密钥只存 Argon2id 验证哈希，也不明文落盘。账号、主密码、短密钥任意一项错误都不能解锁。
+主密码用 Argon2id 派生密钥，保险库用 AES-256-GCM 加密，主密码不明文落盘。短密钥只存 Argon2id 验证哈希，也不明文落盘。
+
+再次打开时只输入主密码。账号已经写在保险库文件里，解锁页会显示，不用再填。短密钥不参与这次解锁；主密码错误仍然打不开。
 
 补全前会再弹一次短密钥确认，即使刚刚解锁过。用户管理里可以修改短密钥，提交前必须再输入主密码并且验证通过。
 
 ## 数据目录
 
-保险库文件名都是 `vault.kpvault`。
+保险库文件名都是 `vault.kpvault`。默认缓存目录：
 
 | 系统 | 目录 |
 | --- | --- |
 | Windows | `%LOCALAPPDATA%\KeepPassword` |
 | macOS | `~/Library/Application Support/KeepPassword` |
 | Linux | `~/.local/share/KeepPassword` |
+
+解锁页和用户管理里可以改缓存目录。选定新目录后，会把当前目录里的文件全部转过去，再删除原来的目录。目录记在单独的配置文件里，不跟缓存文件放在一起：
+
+| 系统 | 配置文件 |
+| --- | --- |
+| Windows | `%APPDATA%\KeepPassword\settings.json` |
+| macOS | `~/Library/Preferences/KeepPassword/settings.json` |
+| Linux | `~/.config/KeepPassword/settings.json` |
 
 ## 条目
 
@@ -35,7 +45,7 @@
 1. 安装 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)。
 2. 在仓库根目录运行客户端（见下方构建命令）。
 3. 在解锁页填写账号、主密码、确认主密码、短密钥、确认短密钥，然后创建。
-4. 之后每次打开都输入这三项解锁。主窗口可以锁定，或从托盘锁定。关闭主窗口时，如果托盘可用就缩到托盘，否则锁定。
+4. 之后每次打开只输入主密码。主窗口可以锁定，或从托盘锁定。关闭主窗口时，如果托盘可用就缩到托盘，否则锁定。
 
 ## CSV 导入
 

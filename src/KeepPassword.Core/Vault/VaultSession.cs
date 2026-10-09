@@ -6,7 +6,7 @@ namespace KeepPassword.Core.Vault;
 public sealed class VaultSession : IDisposable
 {
     private readonly object _gate = new();
-    private readonly string _path;
+    private string _path;
     private readonly VaultStore.KdfMaterial _kdf;
     private VaultStore.ShortKeyMaterial _shortKey;
     private readonly List<VaultEntry> _entries;
@@ -31,6 +31,31 @@ public sealed class VaultSession : IDisposable
     }
 
     public string Account { get; }
+
+    public string VaultPath
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _path;
+            }
+        }
+    }
+
+    public void Relocate(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("请填写保险库路径。", nameof(path));
+        }
+
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            _path = path;
+        }
+    }
 
     public bool IsUnlocked
     {

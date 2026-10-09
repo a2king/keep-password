@@ -5,31 +5,52 @@ namespace KeepPassword.App.ViewModels;
 public sealed class UnlockViewModel : ViewModelBase
 {
     private readonly VaultStore _store;
-    private readonly string _path;
+    private string _path;
     private string _account = "";
+    private string _accountLabel = "";
     private string _masterPassword = "";
     private string _confirmMaster = "";
     private string _shortKey = "";
     private string _confirmShort = "";
     private string _error = "";
     private bool _busy;
+    private bool _isCreate;
 
     public UnlockViewModel(VaultStore store, string path)
     {
         _store = store;
         _path = path;
         IsCreate = !store.Exists(path);
+        RefreshAccount();
     }
 
-    public bool IsCreate { get; }
+    public bool IsCreate
+    {
+        get => _isCreate;
+        private set
+        {
+            if (Set(ref _isCreate, value))
+            {
+                OnPropertyChanged(nameof(Title));
+                OnPropertyChanged(nameof(Hint));
+                OnPropertyChanged(nameof(SubmitText));
+            }
+        }
+    }
 
     public string Title => IsCreate ? "创建保险库" : "解锁保险库";
 
     public string Hint => IsCreate
         ? "第一次使用会在本机创建保险库。请设置账号、主密码和短密钥。主密码用来加密保险库，短密钥另外保存验证哈希，两者都不会明文落盘。"
-        : "每次打开都要填写账号、主密码和短密钥。任意一项错误都无法解锁。";
+        : "再次打开只需输入主密码。短密钥只在自动填充和修改短密钥时使用。";
 
     public string SubmitText => IsCreate ? "创建并解锁" : "解锁";
+
+    public string AccountLabel
+    {
+        get => _accountLabel;
+        private set => Set(ref _accountLabel, value);
+    }
 
     public string Account
     {
@@ -83,6 +104,13 @@ public sealed class UnlockViewModel : ViewModelBase
 
     public VaultSession? Session { get; private set; }
 
+    public void UseVaultFile(string path)
+    {
+        _path = path;
+        IsCreate = !_store.Exists(path);
+        RefreshAccount();
+    }
+
     public async Task<bool> SubmitAsync()
     {
         Error = "";
@@ -111,7 +139,7 @@ public sealed class UnlockViewModel : ViewModelBase
                     _store.Create(_path, account, master, shortKey);
                 }
 
-                return _store.Unlock(_path, account, master, shortKey);
+                return _store.Unlock(_path, master);
             });
             return true;
         }
@@ -127,6 +155,25 @@ public sealed class UnlockViewModel : ViewModelBase
             ConfirmMaster = "";
             ShortKey = "";
             ConfirmShort = "";
+        }
+    }
+
+    private void RefreshAccount()
+    {
+        if (IsCreate || !_store.Exists(_path))
+        {
+            AccountLabel = "";
+            return;
+        }
+
+        try
+        {
+            AccountLabel = "账号 " + _store.ReadAccount(_path);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException)
+        {
+            AccountLabel = "";
+            Error = ex.Message;
         }
     }
 }

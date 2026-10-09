@@ -22,6 +22,6 @@ internal static class TestVault
     {
         var store = Store();
         store.Create(path, account, masterPassword, shortKey);
-        return store.Unlock(path, account, masterPassword, shortKey);
+        return store.Unlock(path, masterPassword);
     }
 }

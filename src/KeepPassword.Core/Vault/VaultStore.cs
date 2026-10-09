@@ -55,30 +55,25 @@ public sealed class VaultStore
         }
     }
 
-    public VaultSession Unlock(string path, string account, string masterPassword, string shortKey)
+    public string ReadAccount(string path) => ReadEnvelope(path).Account;
+
+    public VaultSession Unlock(string path, string masterPassword)
     {
-        RequireSecrets(account, masterPassword, shortKey);
-        var envelope = ReadEnvelope(path);
-        if (!string.Equals(envelope.Account, account.Trim(), StringComparison.Ordinal))
+        if (string.IsNullOrEmpty(masterPassword))
         {
-            throw new UnlockFailedException();
+            throw new ArgumentException("请填写主密码。", nameof(masterPassword));
         }
 
+        var envelope = ReadEnvelope(path);
         var shortKeyDto = envelope.ShortKey ?? throw new InvalidDataException("保险库文件无法读取。");
         var kdfDto = envelope.Kdf ?? throw new InvalidDataException("保险库文件无法读取。");
         var cipher = envelope.Cipher ?? throw new InvalidDataException("保险库文件无法读取。");
-        var shortKeyMaterial = shortKeyDto.ToMaterial();
-        if (!Argon2Id.Verify(shortKey, shortKeyMaterial.Profile, shortKeyMaterial.Salt, shortKeyMaterial.Hash))
-        {
-            throw new UnlockFailedException();
-        }
-
         var kdf = kdfDto.ToMaterial();
         var masterKey = Argon2Id.Derive(masterPassword, kdf.Profile, kdf.Salt);
         try
         {
             var entries = DecryptEntries(envelope.Account, masterKey, cipher);
-            return new VaultSession(path, envelope.Account, kdf, shortKeyMaterial, masterKey, entries);
+            return new VaultSession(path, envelope.Account, kdf, shortKeyDto.ToMaterial(), masterKey, entries);
         }
         catch (CryptographicException)
         {

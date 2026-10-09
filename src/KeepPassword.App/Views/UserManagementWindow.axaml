@@ -2,12 +2,22 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="KeepPassword.App.Views.UserManagementWindow"
         Title="用户管理"
-        Width="440"
+        Width="520"
         SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
   <Border Classes="card" Margin="20">
     <StackPanel>
+      <TextBlock Text="缓存目录" Classes="h1" />
+      <TextBlock Text="切换后会把当前目录里的文件全部转移到新目录，然后删除原来的目录。"
+                 TextWrapping="Wrap" Foreground="#5C6B7A" Margin="0,8,0,0" />
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,8,0,0">
+        <TextBox x:Name="DirectoryBox" />
+        <Button Grid.Column="1" Classes="ghost" Content="浏览" Click="OnBrowseDirectory" />
+      </Grid>
+      <Button Classes="ghost" Content="切换到此目录" Margin="0,8,0,0" HorizontalAlignment="Left" Click="OnSwitchDirectory" />
+      <TextBlock x:Name="DirectoryStatus" Classes="muted" TextWrapping="Wrap" Margin="0,8,0,16" />
+
       <TextBlock Text="修改短密钥" Classes="h1" />
       <TextBlock Text="提交前必须再次输入主密码，并且验证通过。短密钥只更新验证哈希，主密码和保险库内容不变。"
                  TextWrapping="Wrap" Foreground="#5C6B7A" Margin="0,8,0,0" />

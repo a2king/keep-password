@@ -12,29 +12,22 @@ public class VaultUnlockTests
         var store = TestVault.Store();
         store.Create(path, "ada", "correct horse", "short-key");
 
-        var error = Assert.Throws<UnlockFailedException>(() => store.Unlock(path, "ada", "wrong horse", "short-key"));
+        var error = Assert.Throws<UnlockFailedException>(() => store.Unlock(path, "wrong horse"));
 
         Assert.Contains("不正确", error.Message);
     }
 
     [Fact]
-    public void Unlock_WrongShortKey_Fails()
+    public void Unlock_DoesNotAskForShortKey()
     {
         var path = TestVault.NewPath();
         var store = TestVault.Store();
         store.Create(path, "ada", "correct horse", "short-key");
 
-        Assert.Throws<UnlockFailedException>(() => store.Unlock(path, "ada", "correct horse", "other-key"));
-    }
-
-    [Fact]
-    public void Unlock_WrongAccount_Fails()
-    {
-        var path = TestVault.NewPath();
-        var store = TestVault.Store();
-        store.Create(path, "ada", "correct horse", "short-key");
-
-        Assert.Throws<UnlockFailedException>(() => store.Unlock(path, "bob", "correct horse", "short-key"));
+        using var session = store.Unlock(path, "correct horse");
+        Assert.Equal("ada", session.Account);
+        Assert.True(session.VerifyShortKey("short-key"));
+        Assert.False(session.VerifyShortKey("other-key"));
     }
 
     [Fact]
@@ -54,7 +47,7 @@ public class VaultUnlockTests
             created.Save();
         }
 
-        using var session = TestVault.Store().Unlock(path, "ada", "correct horse", "short-key");
+        using var session = TestVault.Store().Unlock(path, "correct horse");
         var entry = Assert.Single(session.Entries);
         Assert.Equal("GitHub", entry.Name);
         Assert.Equal("ada", entry.Username);

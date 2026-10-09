@@ -3,7 +3,7 @@ namespace KeepPassword.Core.Vault;
 public sealed class UnlockFailedException : Exception
 {
     public UnlockFailedException()
-        : base("账号、主密码或短密钥不正确。")
+        : base("主密码不正确。")
     {
     }
 }

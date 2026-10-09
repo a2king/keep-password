@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
 using KeepPassword.Core.Vault;
 
@@ -11,6 +12,8 @@ public partial class MainWindow : Window
 {
     private readonly DispatcherTimer _totpTimer;
     private readonly VaultSession? _session;
+    private readonly VaultLocation? _location;
+    private readonly Action<bool>? _pauseWatcher;
 
     public bool AllowClose { get; set; }
 
@@ -23,10 +26,12 @@ public partial class MainWindow : Window
         _totpTimer.Tick += (_, _) => View?.RefreshTotp();
     }
 
-    public MainWindow(VaultSession session, bool platformAutofillSupported)
+    public MainWindow(VaultSession session, bool platformAutofillSupported, VaultLocation location, Action<bool>? pauseWatcher = null)
         : this()
     {
         _session = session;
+        _location = location;
+        _pauseWatcher = pauseWatcher;
         DataContext = new MainViewModel(session, platformAutofillSupported);
         _totpTimer.Start();
     }
@@ -150,7 +155,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        await new UserManagementWindow(_session).ShowDialog(this);
+        if (_location is null)
+        {
+            return;
+        }
+
+        await new UserManagementWindow(_session, _location, _pauseWatcher).ShowDialog(this);
     }
 
     private void OnLock(object? sender, RoutedEventArgs e) => LockRequested?.Invoke(this, EventArgs.Empty);
