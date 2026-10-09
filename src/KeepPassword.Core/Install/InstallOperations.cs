@@ -126,6 +126,33 @@ public static class InstallOperations
             RemoveWindowsUninstallInfo();
         }
 
+        if (deleteCache)
+        {
+            var settings = CacheDirectory.SettingsFile();
+            var cache = CacheDirectory.Resolve(settings, AppDataPaths.VaultDirectory());
+            if (Directory.Exists(cache))
+            {
+                TryDeleteDirectory(cache);
+            }
+
+            if (File.Exists(settings))
+            {
+                TryDeleteFile(settings);
+                var settingsDir = Path.GetDirectoryName(settings);
+                if (!string.IsNullOrEmpty(settingsDir) && IsEmpty(settingsDir))
+                {
+                    TryDeleteDirectory(settingsDir);
+                }
+            }
+        }
+
+        // 安装目录里可能正运行着 Uninstall.exe；Windows 用延后脚本删除，避免必须再打一份单文件运行时。
+        if (OperatingSystem.IsWindows())
+        {
+            ScheduleDeleteDirectory(installRoot);
+            return;
+        }
+
         if (Directory.Exists(installRoot))
         {
             foreach (var file in Directory.EnumerateFiles(installRoot, "*", SearchOption.AllDirectories))
@@ -135,28 +162,37 @@ public static class InstallOperations
 
             TryDeleteDirectory(installRoot);
         }
+    }
 
-        if (!deleteCache)
+    public static void ScheduleDeleteDirectory(string directory)
+    {
+        if (!Directory.Exists(directory))
         {
             return;
         }
 
-        var settings = CacheDirectory.SettingsFile();
-        var cache = CacheDirectory.Resolve(settings, AppDataPaths.VaultDirectory());
-        if (Directory.Exists(cache))
+        if (!OperatingSystem.IsWindows())
         {
-            TryDeleteDirectory(cache);
+            TryDeleteDirectory(directory);
+            return;
         }
 
-        if (File.Exists(settings))
+        var bat = Path.Combine(Path.GetTempPath(), "keep-password-remove-" + Guid.NewGuid().ToString("n") + ".cmd");
+        var script = new StringBuilder();
+        script.AppendLine("@echo off");
+        script.AppendLine("set TARGET=" + directory.TrimEnd('\\'));
+        script.AppendLine(":retry");
+        script.AppendLine("ping 127.0.0.1 -n 2 >nul");
+        script.AppendLine("rmdir /s /q \"%TARGET%\"");
+        script.AppendLine("if exist \"%TARGET%\" goto retry");
+        script.AppendLine("del \"%~f0\"");
+        File.WriteAllText(bat, script.ToString(), Encoding.ASCII);
+        Process.Start(new ProcessStartInfo
         {
-            TryDeleteFile(settings);
-            var settingsDir = Path.GetDirectoryName(settings);
-            if (!string.IsNullOrEmpty(settingsDir) && IsEmpty(settingsDir))
-            {
-                TryDeleteDirectory(settingsDir);
-            }
-        }
+            FileName = bat,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
     }
 
     public static IEnumerable<string> EnumerateRelativeFiles(string root)

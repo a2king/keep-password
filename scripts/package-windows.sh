@@ -38,15 +38,16 @@ cp -f "$NH_OUT/KeepPassword.NativeHost.dll" "$STAGING/"
 cp -f "$NH_OUT/KeepPassword.NativeHost.deps.json" "$STAGING/"
 cp -f "$NH_OUT/KeepPassword.NativeHost.runtimeconfig.json" "$STAGING/"
 
-echo "== 发布卸载程序（单文件压缩，便于自我删除） =="
+echo "== 发布卸载程序（并入同一运行时，不再单独打单文件） =="
 dotnet publish "$ROOT/src/KeepPassword.Uninstall/KeepPassword.Uninstall.csproj" \
   -c Release -r "$RID" --self-contained true \
-  -p:PublishSingleFile=true \
-  -p:IncludeNativeLibrariesForSelfExtract=true \
-  -p:EnableCompressionInSingleFile=true \
+  -p:PublishSingleFile=false \
   -p:DebugType=none -p:DebugSymbols=false \
   -o "$UNINSTALL_OUT"
-cp -f "$UNINSTALL_OUT/Uninstall.exe" "$STAGING/Uninstall.exe"
+cp -f "$UNINSTALL_OUT/Uninstall.exe" "$STAGING/"
+cp -f "$UNINSTALL_OUT/Uninstall.dll" "$STAGING/"
+cp -f "$UNINSTALL_OUT/Uninstall.deps.json" "$STAGING/"
+cp -f "$UNINSTALL_OUT/Uninstall.runtimeconfig.json" "$STAGING/"
 
 # 清理调试残留
 find "$STAGING" -name '*.pdb' -delete
