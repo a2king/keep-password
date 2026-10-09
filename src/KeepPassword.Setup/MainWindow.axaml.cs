@@ -1,23 +1,27 @@
 using System.Diagnostics;
-using System.IO.Compression;
 using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using KeepPassword.Core.Install;
 
 namespace KeepPassword.Setup;
 
 public partial class MainWindow : Window
 {
+    private string? _installRoot;
+
     public MainWindow()
     {
         InitializeComponent();
         PathBox.Text = InstallConstants.DefaultInstallDirectory();
-        StatusText.Text = "准备安装 " + InstallConstants.ProductName + " " + InstallConstants.Version + "。";
+        StepTitle.Text = "第 1 步 / 共 3 步 · 选项";
     }
 
     private void OnCancel(object? sender, RoutedEventArgs e) => Close();
+
+    private void OnFinish(object? sender, RoutedEventArgs e) => Close();
 
     private async void OnBrowse(object? sender, RoutedEventArgs e)
     {
@@ -38,20 +42,36 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnInstall(object? sender, RoutedEventArgs e)
+    private async void OnStartInstall(object? sender, RoutedEventArgs e)
     {
-        ErrorText.IsVisible = false;
+        WelcomeError.IsVisible = false;
         var target = (PathBox.Text ?? "").Trim();
         if (target.Length == 0)
         {
-            ShowError("请填写安装目录。");
+            WelcomeError.Text = "请填写安装目录。";
+            WelcomeError.IsVisible = true;
             return;
         }
 
-        InstallButton.IsEnabled = false;
-        StatusText.Text = "正在安装…";
+        _installRoot = target;
+        var options = new InstallOptions
+        {
+            CreateStartMenuShortcut = StartMenuBox.IsChecked == true,
+            CreateDesktopShortcut = DesktopBox.IsChecked == true,
+            LaunchAfterInstall = LaunchBox.IsChecked == true
+        };
+
+        ShowPage(progress: true);
+        StepTitle.Text = "第 2 步 / 共 3 步 · 安装";
+        SetProgress(1, "正在读取安装包…");
+
         try
         {
+            var progress = new Progress<InstallProgress>(item =>
+            {
+                Dispatcher.UIThread.Post(() => SetProgress(item.Percent, item.Message));
+            });
+
             await Task.Run(() =>
             {
                 using var payload = OpenPayload();
@@ -59,8 +79,8 @@ public partial class MainWindow : Window
                 Directory.CreateDirectory(extract);
                 try
                 {
-                    ZipFile.ExtractToDirectory(payload, extract);
-                    InstallOperations.InstallFromDirectory(extract, target);
+                    InstallOperations.ExtractZip(payload, extract, progress);
+                    InstallOperations.InstallFromDirectory(extract, target, options, progress);
                 }
                 finally
                 {
@@ -74,29 +94,52 @@ public partial class MainWindow : Window
                 }
             });
 
-            StatusText.Text = "安装完成。";
-            var exe = Path.Combine(target, InstallConstants.AppExecutableName());
-            if (File.Exists(exe))
+            if (options.LaunchAfterInstall)
             {
-                Process.Start(new ProcessStartInfo
+                var exe = Path.Combine(target, InstallConstants.AppExecutableName());
+                if (File.Exists(exe))
                 {
-                    FileName = exe,
-                    WorkingDirectory = target,
-                    UseShellExecute = true
-                });
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = exe,
+                        WorkingDirectory = target,
+                        UseShellExecute = true
+                    });
+                }
             }
 
-            Close();
+            FinishTitle.Text = "安装完成";
+            FinishText.Text = "Keep Password 已安装到：" + target +
+                              (options.LaunchAfterInstall ? "\n程序正在启动。" : "\n可从开始菜单或桌面快捷方式打开。");
+            FinishError.IsVisible = false;
+            FinishButton.Content = "完成";
+            ShowPage(finish: true);
+            StepTitle.Text = "第 3 步 / 共 3 步 · 完成";
         }
         catch (Exception ex)
         {
-            ShowError(ex.Message);
-            StatusText.Text = "安装失败。";
+            FinishTitle.Text = "安装失败";
+            FinishText.Text = "安装未能完成。请关闭占用程序后重试，或更换安装目录。";
+            FinishError.Text = ex.Message;
+            FinishError.IsVisible = true;
+            FinishButton.Content = "关闭";
+            ShowPage(finish: true);
+            StepTitle.Text = "安装失败";
         }
-        finally
-        {
-            InstallButton.IsEnabled = true;
-        }
+    }
+
+    private void ShowPage(bool progress = false, bool finish = false)
+    {
+        WelcomePage.IsVisible = !progress && !finish;
+        ProgressPage.IsVisible = progress;
+        FinishPage.IsVisible = finish;
+    }
+
+    private void SetProgress(double percent, string message)
+    {
+        ProgressBar.Value = percent;
+        PercentText.Text = ((int)percent) + "%";
+        ProgressText.Text = message;
     }
 
     private static Stream OpenPayload()
@@ -115,11 +158,5 @@ public partial class MainWindow : Window
         }
 
         throw new FileNotFoundException("安装包缺少 payload.zip。请使用官方发布的安装程序。");
-    }
-
-    private void ShowError(string message)
-    {
-        ErrorText.Text = message;
-        ErrorText.IsVisible = true;
     }
 }

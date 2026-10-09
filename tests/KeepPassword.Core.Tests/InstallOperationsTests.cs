@@ -20,7 +20,12 @@ public class InstallOperationsTests
         File.WriteAllText(Path.Combine(target, "lib", "a.dll"), "old-a");
         File.WriteAllText(Path.Combine(target, "lib", "gone.dll"), "stale-lib");
 
-        InstallOperations.InstallFromDirectory(source, target);
+        InstallOperations.InstallFromDirectory(source, target, new InstallOptions
+        {
+            CreateStartMenuShortcut = false,
+            CreateDesktopShortcut = false,
+            LaunchAfterInstall = false
+        });
 
         Assert.Equal("new-exe", File.ReadAllText(Path.Combine(target, "KeepPassword.exe")));
         Assert.Equal("new-a", File.ReadAllText(Path.Combine(target, "lib", "a.dll")));

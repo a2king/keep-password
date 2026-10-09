@@ -11,7 +11,7 @@ public static class InstallConstants
     public const string NativeHostFolderName = "native-host";
     public const string ExtensionFolderName = "extension";
     public const string UninstallRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\KeepPassword";
-    public const string Version = "0.2.0";
+    public const string Version = "0.2.1";
 
     public static string DefaultInstallDirectory()
     {

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Runtime.Versioning;
 using System.Text;
 using KeepPassword.Core.Paths;
@@ -8,8 +9,37 @@ namespace KeepPassword.Core.Install;
 
 public static class InstallOperations
 {
-    public static void InstallFromDirectory(string sourceRoot, string targetRoot)
+    public static void ExtractZip(
+        Stream zipStream,
+        string destinationRoot,
+        IProgress<InstallProgress>? progress = null)
     {
+        Directory.CreateDirectory(destinationRoot);
+        using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
+        var entries = archive.Entries.Where(entry => !string.IsNullOrEmpty(entry.Name)).ToList();
+        var total = Math.Max(entries.Count, 1);
+        for (var i = 0; i < entries.Count; i++)
+        {
+            var entry = entries[i];
+            var target = Path.Combine(destinationRoot, entry.FullName.Replace('/', Path.DirectorySeparatorChar));
+            var folder = Path.GetDirectoryName(target);
+            if (!string.IsNullOrEmpty(folder))
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            entry.ExtractToFile(target, overwrite: true);
+            progress?.Report(new InstallProgress((i + 1) * 50.0 / total, "正在解压 " + entry.Name));
+        }
+    }
+
+    public static void InstallFromDirectory(
+        string sourceRoot,
+        string targetRoot,
+        InstallOptions? options = null,
+        IProgress<InstallProgress>? progress = null)
+    {
+        options ??= new InstallOptions();
         if (!Directory.Exists(sourceRoot))
         {
             throw new DirectoryNotFoundException("找不到安装包内容：" + sourceRoot);
@@ -17,6 +47,7 @@ public static class InstallOperations
 
         Directory.CreateDirectory(targetRoot);
         var desired = EnumerateRelativeFiles(sourceRoot).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        progress?.Report(new InstallProgress(52, "正在清理旧版本…"));
 
         if (Directory.Exists(targetRoot))
         {
@@ -27,8 +58,7 @@ public static class InstallOperations
                     continue;
                 }
 
-                var path = Path.Combine(targetRoot, existing);
-                TryDeleteFile(path);
+                TryDeleteFile(Path.Combine(targetRoot, existing));
             }
 
             foreach (var directory in Directory.EnumerateDirectories(targetRoot, "*", SearchOption.AllDirectories)
@@ -42,8 +72,11 @@ public static class InstallOperations
             }
         }
 
-        foreach (var relative in desired.OrderBy(item => item, StringComparer.OrdinalIgnoreCase))
+        var files = desired.OrderBy(item => item, StringComparer.OrdinalIgnoreCase).ToList();
+        var total = Math.Max(files.Count, 1);
+        for (var i = 0; i < files.Count; i++)
         {
+            var relative = files[i];
             var from = Path.Combine(sourceRoot, relative);
             var to = Path.Combine(targetRoot, relative);
             var folder = Path.GetDirectoryName(to);
@@ -53,20 +86,43 @@ public static class InstallOperations
             }
 
             File.Copy(from, to, overwrite: true);
+            progress?.Report(new InstallProgress(55 + (i + 1) * 35.0 / total, "正在复制 " + Path.GetFileName(relative)));
         }
 
         if (OperatingSystem.IsWindows())
         {
+            progress?.Report(new InstallProgress(93, "正在写入卸载信息…"));
             WriteWindowsUninstallInfo(targetRoot);
-            CreateWindowsShortcut(targetRoot);
+            if (options.CreateStartMenuShortcut)
+            {
+                progress?.Report(new InstallProgress(96, "正在创建开始菜单快捷方式…"));
+                CreateWindowsShortcut(StartMenuShortcutPath(), targetRoot);
+            }
+            else
+            {
+                TryDeleteFile(StartMenuShortcutPath());
+            }
+
+            if (options.CreateDesktopShortcut)
+            {
+                progress?.Report(new InstallProgress(98, "正在创建桌面快捷方式…"));
+                CreateWindowsShortcut(DesktopShortcutPath(), targetRoot);
+            }
+            else
+            {
+                TryDeleteFile(DesktopShortcutPath());
+            }
         }
+
+        progress?.Report(new InstallProgress(100, "安装完成"));
     }
 
     public static void Uninstall(string installRoot, bool deleteCache)
     {
         if (OperatingSystem.IsWindows())
         {
-            RemoveWindowsShortcut();
+            TryDeleteFile(StartMenuShortcutPath());
+            TryDeleteFile(DesktopShortcutPath());
             RemoveWindowsUninstallInfo();
         }
 
@@ -112,6 +168,18 @@ public static class InstallOperations
         }
     }
 
+    private static string StartMenuShortcutPath()
+    {
+        var programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
+        Directory.CreateDirectory(programs);
+        return Path.Combine(programs, InstallConstants.ProductName + ".lnk");
+    }
+
+    private static string DesktopShortcutPath() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            InstallConstants.ProductName + ".lnk");
+
     [SupportedOSPlatform("windows")]
     private static void WriteWindowsUninstallInfo(string installRoot)
     {
@@ -130,7 +198,7 @@ public static class InstallOperations
         var size = Directory.EnumerateFiles(installRoot, "*", SearchOption.AllDirectories)
             .Select(path => new FileInfo(path).Length)
             .Sum() / 1024;
-        key.SetValue("EstimatedSize", checked((int)size), RegistryValueKind.DWord);
+        key.SetValue("EstimatedSize", checked((int)Math.Min(size, int.MaxValue)), RegistryValueKind.DWord);
     }
 
     [SupportedOSPlatform("windows")]
@@ -140,20 +208,10 @@ public static class InstallOperations
     }
 
     [SupportedOSPlatform("windows")]
-    private static void CreateWindowsShortcut(string installRoot)
+    private static void CreateWindowsShortcut(string shortcutPath, string installRoot)
     {
-        var programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
-        Directory.CreateDirectory(programs);
-        var shortcut = Path.Combine(programs, InstallConstants.ProductName + ".lnk");
         var target = Path.Combine(installRoot, InstallConstants.AppExecutableName());
-        WriteShortcutViaPowerShell(shortcut, target, installRoot);
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static void RemoveWindowsShortcut()
-    {
-        var programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
-        TryDeleteFile(Path.Combine(programs, InstallConstants.ProductName + ".lnk"));
+        WriteShortcutViaPowerShell(shortcutPath, target, installRoot);
     }
 
     private static void WriteShortcutViaPowerShell(string shortcutPath, string targetPath, string workingDirectory)

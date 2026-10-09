@@ -44,12 +44,14 @@
 推荐使用安装程序：
 
 1. 运行 `KeepPassword-Setup-win-x64.exe`。
-2. 默认安装到 `%LOCALAPPDATA%\Programs\KeepPassword`。
-3. 若目录里已有旧版本，会覆盖安装，并删除本次安装包里已经不存在的历史程序文件。不会动缓存目录里的保险库。
-4. 安装目录外层主要是 `KeepPassword.exe`、`Uninstall.exe`、`使用说明.txt`，以及 `native-host\`、`extension\`。运行时已打进主程序，不必再装 .NET。
-5. 卸载运行安装目录里的 `Uninstall.exe`。可勾选「同时删除缓存目录」，**默认不勾选**。
+2. 选择安装目录，可勾选：开始菜单快捷方式、桌面快捷方式、安装完成后立即运行。
+3. 安装过程有进度条：先解压压缩包，再复制到目标目录。
+4. 完成后点「完成」关闭安装窗口。若勾选了立即运行，主程序会自动启动。
+5. 默认安装到 `%LOCALAPPDATA%\Programs\KeepPassword`。覆盖安装会清理旧版本残留程序文件，不会动缓存里的保险库。
+6. 安装包是压缩后的自包含运行时（主程序与 Native Host 共用一份），**不需要安装 .NET**。
+7. 卸载运行安装目录里的 `Uninstall.exe`。可勾选「同时删除缓存目录」，**默认不勾选**。
 
-也可以解压便携包 `KeepPassword-win-x64.zip` 直接使用，结构相同。
+也可以解压便携包 `KeepPassword-win-x64.zip` 直接使用。
 
 打 Windows 安装包（仅打包机器需要 .NET 8 SDK）：
 
