@@ -38,17 +38,20 @@
 
 ## Windows 安装与卸载
 
+**正式安装包是自包含的，不需要安装 .NET，也不需要其它运行库。**  
+（开发者在本机编译时才需要 .NET 8 SDK。）
+
 推荐使用安装程序：
 
 1. 运行 `KeepPassword-Setup-win-x64.exe`。
 2. 默认安装到 `%LOCALAPPDATA%\Programs\KeepPassword`。
 3. 若目录里已有旧版本，会覆盖安装，并删除本次安装包里已经不存在的历史程序文件。不会动缓存目录里的保险库。
-4. 安装目录外层只保留可执行文件和说明；依赖 DLL 在 `lib\`。
+4. 安装目录外层主要是 `KeepPassword.exe`、`Uninstall.exe`、`使用说明.txt`，以及 `native-host\`、`extension\`。运行时已打进主程序，不必再装 .NET。
 5. 卸载运行安装目录里的 `Uninstall.exe`。可勾选「同时删除缓存目录」，**默认不勾选**。
 
 也可以解压便携包 `KeepPassword-win-x64.zip` 直接使用，结构相同。
 
-打 Windows 安装包（在仓库根目录，需 .NET 8 SDK）：
+打 Windows 安装包（仅打包机器需要 .NET 8 SDK）：
 
 ```bash
 ./scripts/package-windows.sh /tmp/kp-windows-package
@@ -100,12 +103,15 @@ dotnet test
 dotnet run --project src/KeepPassword.App
 ```
 
-发布三个目标后，可用 `scripts/arrange-lib-layout.sh` 把依赖收进 `lib/`：
+Windows 用户请直接用上面的安装包或便携包，**不要**再单独安装 .NET。
+
+若自己发布，请使用自包含（或单文件）模式，例如：
 
 ```bash
-dotnet publish src/KeepPassword.App -c Release -r linux-x64 --self-contained true -o /tmp/kp-linux
-./scripts/arrange-lib-layout.sh /tmp/kp-linux KeepPassword
+dotnet publish src/KeepPassword.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o /tmp/kp-win
 ```
+
+非单文件发布时，可用 `scripts/arrange-lib-layout.sh` 整理目录；脚本会把 `hostfxr` / `coreclr` 留在 exe 旁，避免误报需要安装 .NET。
 
 Windows 安装包请用上面的 `package-windows.sh`。
 
