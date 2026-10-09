@@ -1,6 +1,6 @@
 # Keep Password
 
-单机密码管理器。界面用 Avalonia，同一套代码可以发布到 Windows、macOS 和 Linux。保险库文件与系统无关，换电脑时可以直接拷贝打开。
+单机密码管理器。界面用 Avalonia，风格接近 1Password：深色侧栏、分组列表、卡片式详情。同一套代码可以发布到 Windows、macOS 和 Linux。保险库文件与系统无关，换电脑时可以直接拷贝打开。
 
 没有云同步，也不扫描二维码。
 
@@ -16,7 +16,7 @@
 
 再次打开时只输入主密码。账号已经写在保险库文件里，解锁页会显示，不用再填。短密钥不参与这次解锁；主密码错误仍然打不开。
 
-补全前会再弹一次短密钥确认，即使刚刚解锁过。用户管理里可以修改短密钥，提交前必须再输入主密码并且验证通过。
+补全前会再弹一次短密钥确认，即使刚刚解锁过。设置里可以修改短密钥，提交前必须再输入主密码并且验证通过。
 
 ## 数据目录
 
@@ -28,7 +28,7 @@
 | macOS | `~/Library/Application Support/KeepPassword` |
 | Linux | `~/.local/share/KeepPassword` |
 
-解锁页和用户管理里可以改缓存目录。选定新目录后，会把当前目录里的文件全部转过去，再删除原来的目录。目录记在单独的配置文件里，不跟缓存文件放在一起：
+解锁页和设置里可以改缓存目录。选定新目录后，会把当前目录里的文件全部转过去，再删除原来的目录。目录记在单独的配置文件里，不跟缓存文件放在一起：
 
 | 系统 | 配置文件 |
 | --- | --- |
@@ -36,16 +36,35 @@
 | macOS | `~/Library/Preferences/KeepPassword/settings.json` |
 | Linux | `~/.config/KeepPassword/settings.json` |
 
+## Windows 安装与卸载
+
+推荐使用安装程序：
+
+1. 运行 `KeepPassword-Setup-win-x64.exe`。
+2. 默认安装到 `%LOCALAPPDATA%\Programs\KeepPassword`。
+3. 若目录里已有旧版本，会覆盖安装，并删除本次安装包里已经不存在的历史程序文件。不会动缓存目录里的保险库。
+4. 安装目录外层只保留可执行文件和说明；依赖 DLL 在 `lib\`。
+5. 卸载运行安装目录里的 `Uninstall.exe`。可勾选「同时删除缓存目录」，**默认不勾选**。
+
+也可以解压便携包 `KeepPassword-win-x64.zip` 直接使用，结构相同。
+
+打 Windows 安装包（在仓库根目录，需 .NET 8 SDK）：
+
+```bash
+./scripts/package-windows.sh /tmp/kp-windows-package
+```
+
+产物在输出目录：`KeepPassword-Setup-win-x64.exe`、`KeepPassword-win-x64.zip`。
+
 ## 条目
 
 字段：名称、网址、用户名、密码、备注，以及可选的验证码密钥。列表按网址的主机名分组。搜索范围是名称、网址、用户名、备注。详情里可以切换密码明文。
 
 ## 首次使用
 
-1. 安装 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)。
-2. 在仓库根目录运行客户端（见下方构建命令）。
-3. 在解锁页填写账号、主密码、确认主密码、短密钥、确认短密钥，然后创建。
-4. 之后每次打开只输入主密码。主窗口可以锁定，或从托盘锁定。关闭主窗口时，如果托盘可用就缩到托盘，否则锁定。
+1. Windows 可用安装程序；开发时也可安装 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) 后直接运行。
+2. 在解锁页创建保险库：账号、主密码、确认主密码、短密钥、确认短密钥。
+3. 之后每次打开只输入主密码。主窗口可以锁定，或从托盘锁定。关闭主窗口时，如果托盘可用就缩到托盘，否则锁定。
 
 ## CSV 导入
 
@@ -59,13 +78,6 @@ GitHub,https://github.com,ada,"p,ass",工作账号
 
 逗号和 Tab 都可以。密码里如果有逗号，用双引号包起来。导入后按主机名归类，也能被搜索。
 
-Tab 示例：
-
-```text
-name	url	username	password	note
-银行	https://bank.example	ada	secret	备注
-```
-
 ## 验证码
 
 TOTP，RFC 6238，SHA-1，6 位，30 秒。密钥用 Base32 手填。可以写在某条登录记录上，也可以单独新建一条（只填名称和密钥）。验证码页面会列出当前码和剩余秒数。
@@ -77,31 +89,7 @@ TOTP，RFC 6238，SHA-1，6 位，30 秒。密钥用 Base32 手填。可以写�
 - Windows：普通程序用 UI Automation 查找 `IsPassword` 的输入框；浏览器走 Chrome / Edge 扩展和 Native Messaging。填入前都要再输入短密钥。
 - macOS、Linux：程序补全只留了接口和空实现（辅助功能 / AT-SPI 以后再接）。浏览器扩展和本机消息协议是同一份，客户端在这三个系统上都会听本机端口。
 
-扩展在 `extension/`，Manifest V3。它只检测登录页的账号框和密码框，把页面地址发给客户端；客户端弹出匹配条目和短密钥，通过后再把用户名和密码填回去。
-
-### 安装扩展
-
-1. 用对应系统发布 Native Host（见下方命令），得到可执行文件。
-2. Chrome 或 Edge 打开扩展管理，开启开发者模式，加载 `extension/` 目录，复制扩展 ID。
-3. 注册本机消息宿主：
-
-Windows（PowerShell）：
-
-```powershell
-.\extension\register-windows.ps1 -HostExe C:\path\to\KeepPassword.NativeHost.exe -ExtensionId <扩展ID>
-```
-
-macOS 或 Linux：
-
-```bash
-./extension/register-unix.sh /path/to/KeepPassword.NativeHost <扩展ID>
-```
-
-脚本会写入 `com.keeppassword.host`。Windows 写注册表；macOS 写 `~/Library/Application Support/Google/Chrome/NativeMessagingHosts` 和 Edge 的对应目录；Linux 写 `~/.config/google-chrome`、`chromium`、`microsoft-edge` 下的 `NativeMessagingHosts`。
-
-4. 先打开并解锁 Keep Password，再打开登录页。
-
-宿主和客户端之间用 `127.0.0.1:50731` 转发一条 Native Messaging 消息。模板见 `extension/com.keeppassword.host.json`。
+扩展在 `extension/`，Manifest V3。安装目录里的 `extension\` 与 `native-host\KeepPassword.NativeHost.exe` 可按 `register-windows.ps1` 注册。
 
 ## 构建和运行
 
@@ -112,29 +100,20 @@ dotnet test
 dotnet run --project src/KeepPassword.App
 ```
 
-发布三个目标（需要对应平台的 .NET 8 运行时，这里是框架依赖发布）：
+发布三个目标后，可用 `scripts/arrange-lib-layout.sh` 把依赖收进 `lib/`：
 
 ```bash
-dotnet publish src/KeepPassword.App -c Release -r win-x64 --self-contained false
-dotnet publish src/KeepPassword.App -c Release -r osx-arm64 --self-contained false
-dotnet publish src/KeepPassword.App -c Release -r linux-x64 --self-contained false
+dotnet publish src/KeepPassword.App -c Release -r linux-x64 --self-contained true -o /tmp/kp-linux
+./scripts/arrange-lib-layout.sh /tmp/kp-linux KeepPassword
 ```
 
-Native Host 同样按系统发布，例如：
-
-```bash
-dotnet publish src/KeepPassword.NativeHost -c Release -r win-x64 --self-contained false
-dotnet publish src/KeepPassword.NativeHost -c Release -r osx-arm64 --self-contained false
-dotnet publish src/KeepPassword.NativeHost -c Release -r linux-x64 --self-contained false
-```
-
-Windows 上运行发布结果里的 `KeepPassword.exe`。macOS 运行 `KeepPassword`。Linux 运行 `KeepPassword`。
+Windows 安装包请用上面的 `package-windows.sh`。
 
 ## 本环境验证
 
 当前环境是 Linux。
 
 - `dotnet test` 已通过。
-- `dotnet publish` 已打出 `win-x64`、`osx-arm64`、`linux-x64` 三个界面包。
-- 在 Linux 上打开过客户端：创建保险库、解锁、新建条目、保存、按域名显示、搜索框和密码掩码都看过。
-- 没有在 Windows 上跑过 UI Automation 填入，也没有在浏览器里加载扩展。macOS 的包只做了编译，没有在 Mac 上打开。
+- 已重新设计界面与 Logo，并在 Linux 上打开过解锁页与主窗口。
+- 已能打出 Windows 安装程序与带 `lib\` 布局的发布目录。
+- 没有在 Windows 上跑过实际安装向导、UI Automation 填入和浏览器扩展。macOS 未做图形验收。

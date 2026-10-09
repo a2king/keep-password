@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using KeepPassword.Core.Messaging;
+using KeepPassword.Core.Runtime;
+
+LibProbe.Attach();
 
 var stdin = Console.OpenStandardInput();
 var stdout = Console.OpenStandardOutput();

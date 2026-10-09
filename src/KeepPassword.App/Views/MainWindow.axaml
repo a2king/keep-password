@@ -4,41 +4,70 @@
         x:Class="KeepPassword.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="Keep Password"
-        Width="1120"
-        Height="740"
-        MinWidth="860"
-        MinHeight="560"
-        WindowStartupLocation="CenterScreen">
-  <DockPanel Margin="16">
-    <Border DockPanel.Dock="Top" Background="White" CornerRadius="12" Padding="16,12" Margin="0,0,0,12">
-      <Grid ColumnDefinitions="*,Auto">
-        <StackPanel>
-          <TextBlock Text="Keep Password" FontSize="18" FontWeight="SemiBold" Foreground="#142033" />
-          <TextBlock Text="{Binding Account, StringFormat=已解锁 · {0}}" Classes="muted" />
+        Width="1180"
+        Height="760"
+        MinWidth="920"
+        MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource Kp.Bg}"
+        Icon="/Assets/logo.png">
+  <Grid ColumnDefinitions="88,320,*">
+    <!-- 左侧导航，风格接近 1Password 的深色侧栏 -->
+    <Border Background="{DynamicResource Kp.Sidebar}">
+      <DockPanel Margin="0,16,0,16">
+        <StackPanel DockPanel.Dock="Top" Spacing="10">
+          <Image Source="/Assets/logo.png" Width="44" Height="44" HorizontalAlignment="Center" Margin="0,4,0,10" />
+          <Button Classes="nav active" Click="OnNavItems">
+            <StackPanel Spacing="2">
+              <TextBlock Text="条目" FontWeight="SemiBold" />
+              <TextBlock Text="全部" FontSize="11" Opacity="0.7" />
+            </StackPanel>
+          </Button>
+          <Button Classes="nav" Click="OnTotp">
+            <StackPanel Spacing="2">
+              <TextBlock Text="验证码" FontWeight="SemiBold" />
+              <TextBlock Text="TOTP" FontSize="11" Opacity="0.7" />
+            </StackPanel>
+          </Button>
+          <Button Classes="nav" Click="OnUsers">
+            <StackPanel Spacing="2">
+              <TextBlock Text="设置" FontWeight="SemiBold" />
+              <TextBlock Text="账户" FontSize="11" Opacity="0.7" />
+            </StackPanel>
+          </Button>
         </StackPanel>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-          <Button Classes="ghost" Content="验证码" Click="OnTotp" />
-          <Button Classes="ghost" Content="用户管理" Click="OnUsers" />
-          <Button Classes="accent" Content="锁定" Click="OnLock" />
-        </StackPanel>
-      </Grid>
+        <Button Classes="nav" DockPanel.Dock="Bottom" Click="OnLock" VerticalAlignment="Bottom">
+          <StackPanel Spacing="2">
+            <TextBlock Text="锁定" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding Account}" FontSize="11" Opacity="0.7" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </Button>
+        <Border />
+      </DockPanel>
     </Border>
 
-    <Border DockPanel.Dock="Bottom" Padding="4,8,4,0">
-      <TextBlock Text="{Binding AutofillHint}" Classes="muted" TextWrapping="Wrap" />
-    </Border>
-
-    <Grid ColumnDefinitions="360,*" ColumnSpacing="12">
-      <Border Background="White" CornerRadius="12" Padding="12">
-        <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="8">
-          <TextBox Grid.Row="0" Text="{Binding Search}" Watermark="搜索名称、网址、用户名、备注" />
-          <WrapPanel Grid.Row="1">
-            <Button Classes="ghost" Content="导入 CSV" Click="OnImport" />
-            <Button Classes="ghost" Content="新建登录" Click="OnNewLogin" />
-            <Button Classes="ghost" Content="新建验证码" Click="OnNewTotp" />
-          </WrapPanel>
-          <TextBlock Grid.Row="2" Text="还没有条目" IsVisible="{Binding ShowEmpty}" Classes="muted" Margin="4,0,0,0" />
-          <ScrollViewer Grid.Row="3">
+    <!-- 中间列表 -->
+    <Border Grid.Column="1" Classes="panel" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="0,0,1,0">
+      <Grid RowDefinitions="Auto,Auto,*" Margin="14,16,10,14">
+        <StackPanel Grid.Row="0" Margin="4,0,4,12">
+          <TextBlock Text="保险库" Classes="h2" />
+          <TextBlock Text="{Binding Account, StringFormat=已解锁 · {0}}" Classes="muted" Margin="0,4,0,0" />
+        </StackPanel>
+        <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,10">
+          <TextBox Text="{Binding Search}" Watermark="搜索名称、网址、用户名、备注" />
+          <UniformGrid Columns="3" Margin="0,2,0,0">
+            <Button Classes="soft" Content="导入" Margin="0,0,4,0" Click="OnImport" />
+            <Button Classes="soft" Content="新建登录" Margin="2,0" Click="OnNewLogin" />
+            <Button Classes="soft" Content="新建验证码" Margin="4,0,0,0" Click="OnNewTotp" />
+          </UniformGrid>
+        </StackPanel>
+        <Grid Grid.Row="2">
+          <TextBlock Text="还没有条目。新建一条登录，或导入 CSV。"
+                     IsVisible="{Binding ShowEmpty}"
+                     Classes="muted"
+                     TextWrapping="Wrap"
+                     Margin="10,18" />
+          <ScrollViewer>
             <ItemsControl ItemsSource="{Binding Groups}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:DomainGroupView">
@@ -48,10 +77,20 @@
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:EntryItemView">
                           <Button Classes="entry" Classes.selected="{Binding IsSelected}" Tag="{Binding Id}" Click="OnEntry">
-                            <StackPanel>
-                              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                              <TextBlock Text="{Binding Username}" Classes="muted" />
-                            </StackPanel>
+                            <Grid ColumnDefinitions="36,*">
+                              <Border Width="28" Height="28" CornerRadius="8" Background="#DCE8F8" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Initial}"
+                                           FontSize="12"
+                                           FontWeight="Bold"
+                                           Foreground="#0572EC"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                              </Border>
+                              <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding Username}" Classes="muted" TextTrimming="CharacterEllipsis" />
+                              </StackPanel>
+                            </Grid>
                           </Button>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
@@ -62,43 +101,90 @@
             </ItemsControl>
           </ScrollViewer>
         </Grid>
-      </Border>
+      </Grid>
+    </Border>
 
-      <Border Grid.Column="1" Background="White" CornerRadius="12" Padding="20">
-        <Grid RowDefinitions="*,Auto">
-          <TextBlock Text="从左侧选择一条记录，或新建登录、新建验证码。"
-                     IsVisible="{Binding !HasDetail}"
-                     Foreground="#5C6B7A"
-                     TextWrapping="Wrap"
-                     VerticalAlignment="Center"
-                     HorizontalAlignment="Center" />
+    <!-- 右侧详情 -->
+    <Border Grid.Column="2" Classes="panel" Background="{DynamicResource Kp.Surface}">
+      <Grid RowDefinitions="*,Auto" Margin="28,22,28,18">
+        <Panel>
+          <StackPanel IsVisible="{Binding !HasDetail}"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Spacing="10"
+                      MaxWidth="360">
+            <Image Source="/Assets/logo.png" Width="56" Height="56" Opacity="0.9" HorizontalAlignment="Center" />
+            <TextBlock Text="选择一条记录" Classes="h2" HorizontalAlignment="Center" />
+            <TextBlock Text="从左侧打开登录项，或新建登录、新建验证码。密码默认隐藏，需要时可显示明文。"
+                       Classes="muted"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center" />
+          </StackPanel>
+
           <ScrollViewer IsVisible="{Binding HasDetail}">
-            <StackPanel Spacing="0">
-              <TextBlock Text="名称" Classes="label" Margin="0,0,0,4" />
-              <TextBox Text="{Binding Name}" />
-              <TextBlock Text="网址" Classes="label" />
-              <TextBox Text="{Binding Url}" Watermark="https://example.com" />
-              <TextBlock Text="用户名" Classes="label" />
-              <TextBox Text="{Binding Username}" />
-              <TextBlock Text="密码" Classes="label" />
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <TextBox x:Name="PasswordBox" Text="{Binding Password}" PasswordChar="•" />
-                <Button Grid.Column="1" Classes="ghost" Content="{Binding PasswordToggleText}" Click="OnTogglePassword" />
-              </Grid>
-              <TextBlock Text="备注" Classes="label" />
-              <TextBox Text="{Binding Note}" AcceptsReturn="True" MinHeight="72" TextWrapping="Wrap" />
-              <TextBlock Text="验证码密钥（Base32，可留空）" Classes="label" />
-              <TextBox Text="{Binding TotpSecret}" Watermark="手填 Base32 密钥" />
-              <TextBlock Text="{Binding TotpPreview}" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
+            <StackPanel>
+              <TextBlock Text="{Binding Name}" Classes="h1" Margin="0,0,0,6" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding Url}" Classes="muted" Margin="0,0,0,18" TextWrapping="Wrap" />
+
+              <Border Classes="field">
+                <StackPanel>
+                  <TextBlock Text="名称" Classes="muted" FontWeight="SemiBold" />
+                  <TextBox Text="{Binding Name}" Margin="0,6,0,0" Background="Transparent" BorderThickness="0" Padding="0" MinHeight="28" />
+                </StackPanel>
+              </Border>
+              <Border Classes="field">
+                <StackPanel>
+                  <TextBlock Text="网址" Classes="muted" FontWeight="SemiBold" />
+                  <TextBox Text="{Binding Url}" Watermark="https://example.com" Margin="0,6,0,0" Background="Transparent" BorderThickness="0" Padding="0" MinHeight="28" />
+                </StackPanel>
+              </Border>
+              <Border Classes="field">
+                <StackPanel>
+                  <TextBlock Text="用户名" Classes="muted" FontWeight="SemiBold" />
+                  <TextBox Text="{Binding Username}" Margin="0,6,0,0" Background="Transparent" BorderThickness="0" Padding="0" MinHeight="28" />
+                </StackPanel>
+              </Border>
+              <Border Classes="field">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel>
+                    <TextBlock Text="密码" Classes="muted" FontWeight="SemiBold" />
+                    <TextBox x:Name="PasswordBox" Text="{Binding Password}" PasswordChar="•" Margin="0,6,0,0" Background="Transparent" BorderThickness="0" Padding="0" MinHeight="28" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="ghost" Content="{Binding PasswordToggleText}" Click="OnTogglePassword" VerticalAlignment="Center" />
+                </Grid>
+              </Border>
+              <Border Classes="field">
+                <StackPanel>
+                  <TextBlock Text="备注" Classes="muted" FontWeight="SemiBold" />
+                  <TextBox Text="{Binding Note}" AcceptsReturn="True" MinHeight="72" TextWrapping="Wrap" Margin="0,6,0,0" Background="Transparent" BorderThickness="0" Padding="0" />
+                </StackPanel>
+              </Border>
+              <Border Classes="field">
+                <StackPanel>
+                  <TextBlock Text="验证码密钥（Base32，可留空）" Classes="muted" FontWeight="SemiBold" />
+                  <TextBox Text="{Binding TotpSecret}" Watermark="手填 Base32 密钥" Margin="0,6,0,0" Background="Transparent" BorderThickness="0" Padding="0" MinHeight="28" />
+                  <TextBlock Text="{Binding TotpPreview}" FontSize="22" FontWeight="SemiBold" Foreground="#0572EC" Margin="0,10,0,0" />
+                </StackPanel>
+              </Border>
             </StackPanel>
           </ScrollViewer>
-          <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" Margin="0,12,0,0">
-            <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Foreground="#3D4A59" TextWrapping="Wrap" />
-            <Button Grid.Column="1" Classes="danger" Content="删除" Click="OnDelete" IsVisible="{Binding HasDetail}" />
-            <Button Grid.Column="2" Classes="accent" Content="保存" Click="OnSave" IsVisible="{Binding HasDetail}" />
-          </Grid>
-        </Grid>
-      </Border>
-    </Grid>
-  </DockPanel>
+        </Panel>
+
+        <DockPanel Grid.Row="1" Margin="0,12,0,0">
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasDetail}">
+            <Button Classes="danger" Content="删除" Click="OnDelete" />
+            <Button Classes="accent" Content="保存" Click="OnSave" />
+          </StackPanel>
+          <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" Margin="0,0,12,0" />
+        </DockPanel>
+        <TextBlock Grid.Row="1"
+                   Text="{Binding AutofillHint}"
+                   Classes="muted"
+                   TextWrapping="Wrap"
+                   VerticalAlignment="Bottom"
+                   Margin="0,48,0,0"
+                   IsVisible="{Binding !HasDetail}" />
+      </Grid>
+    </Border>
+  </Grid>
 </Window>

@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="KeepPassword.Setup.MainWindow"
+        Title="安装 Keep Password"
+        Width="520"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Icon="/Assets/logo.png">
+  <Panel>
+    <Border>
+      <Border.Background>
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+          <GradientStop Color="#151B2B" Offset="0" />
+          <GradientStop Color="#1F2A44" Offset="0.55" />
+          <GradientStop Color="#0B4F9C" Offset="1" />
+        </LinearGradientBrush>
+      </Border.Background>
+    </Border>
+    <Border Background="White" CornerRadius="18" Margin="28" Padding="28" BoxShadow="0 18 48 0 #1A152033">
+      <StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,16">
+          <Image Source="/Assets/logo.png" Width="44" Height="44" />
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="Keep Password" FontSize="24" FontWeight="SemiBold" />
+            <TextBlock Text="安装程序" Foreground="#6B778C" FontSize="12" />
+          </StackPanel>
+        </StackPanel>
+        <TextBlock Text="会覆盖已有安装目录，删除旧版本残留的程序文件。保险库和缓存不会被删除。"
+                   TextWrapping="Wrap" Foreground="#6B778C" Margin="0,0,0,12" />
+        <TextBlock Text="安装目录" FontSize="12" FontWeight="SemiBold" Foreground="#6B778C" Margin="0,0,0,6" />
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+          <TextBox x:Name="PathBox" />
+          <Button Grid.Column="1" Content="浏览" Click="OnBrowse" Padding="12,8" CornerRadius="10" />
+        </Grid>
+        <TextBlock x:Name="StatusText" TextWrapping="Wrap" Foreground="#6B778C" Margin="0,12,0,0" />
+        <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Foreground="#D14343" Margin="0,8,0,0" IsVisible="False" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,18,0,0">
+          <Button Classes="ghost" Content="取消" Click="OnCancel" />
+          <Button x:Name="InstallButton" Classes="accent" Content="安装" Click="OnInstall" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+  </Panel>
+</Window>

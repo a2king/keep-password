@@ -21,6 +21,15 @@ public sealed class EntryItemView : ViewModelBase
 
     public required string Username { get; init; }
 
+    public string Initial
+    {
+        get
+        {
+            var text = Name.Trim();
+            return text.Length == 0 ? "?" : text[..1].ToUpperInvariant();
+        }
+    }
+
     public bool IsSelected
     {
         get => _isSelected;
@@ -271,12 +280,16 @@ public sealed class MainViewModel : ViewModelBase
             .Select(group => new DomainGroupView
             {
                 Domain = group.Domain,
-                Entries = group.Entries.Select(entry => new EntryItemView
+                Entries = group.Entries.Select(entry =>
                 {
-                    Id = entry.Id,
-                    Name = string.IsNullOrWhiteSpace(entry.Name) ? "未命名" : entry.Name,
-                    Username = entry.Username,
-                    IsSelected = entry.Id == selected && HasDetail
+                    var name = string.IsNullOrWhiteSpace(entry.Name) ? "未命名" : entry.Name;
+                    return new EntryItemView
+                    {
+                        Id = entry.Id,
+                        Name = name,
+                        Username = entry.Username,
+                        IsSelected = entry.Id == selected && HasDetail
+                    };
                 }).ToList()
             })
             .ToList();

@@ -1,26 +1,33 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="KeepPassword.App.Views.UserManagementWindow"
-        Title="用户管理"
-        Width="520"
+        Title="设置"
+        Width="540"
         SizeToContent="Height"
         CanResize="False"
-        WindowStartupLocation="CenterOwner">
-  <Border Classes="card" Margin="20">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Kp.Bg}"
+        Icon="/Assets/logo.png">
+  <Border Classes="card" Margin="22">
     <StackPanel>
-      <TextBlock Text="缓存目录" Classes="h1" />
+      <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,8">
+        <Image Source="/Assets/logo.png" Width="36" Height="36" />
+        <TextBlock Text="设置" Classes="h1" VerticalAlignment="Center" FontSize="24" />
+      </StackPanel>
+
+      <TextBlock Text="缓存目录" Classes="h2" Margin="0,10,0,0" />
       <TextBlock Text="切换后会把当前目录里的文件全部转移到新目录，然后删除原来的目录。"
-                 TextWrapping="Wrap" Foreground="#5C6B7A" Margin="0,8,0,0" />
+                 TextWrapping="Wrap" Classes="muted" Margin="0,8,0,0" />
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,8,0,0">
         <TextBox x:Name="DirectoryBox" />
-        <Button Grid.Column="1" Classes="ghost" Content="浏览" Click="OnBrowseDirectory" />
+        <Button Grid.Column="1" Classes="soft" Content="浏览" Click="OnBrowseDirectory" />
       </Grid>
       <Button Classes="ghost" Content="切换到此目录" Margin="0,8,0,0" HorizontalAlignment="Left" Click="OnSwitchDirectory" />
-      <TextBlock x:Name="DirectoryStatus" Classes="muted" TextWrapping="Wrap" Margin="0,8,0,16" />
+      <TextBlock x:Name="DirectoryStatus" Classes="muted" TextWrapping="Wrap" Margin="0,8,0,18" />
 
-      <TextBlock Text="修改短密钥" Classes="h1" />
+      <TextBlock Text="修改短密钥" Classes="h2" />
       <TextBlock Text="提交前必须再次输入主密码，并且验证通过。短密钥只更新验证哈希，主密码和保险库内容不变。"
-                 TextWrapping="Wrap" Foreground="#5C6B7A" Margin="0,8,0,0" />
+                 TextWrapping="Wrap" Classes="muted" Margin="0,8,0,0" />
       <TextBlock x:Name="AccountText" Classes="muted" Margin="0,8,0,0" />
       <TextBlock Text="新短密钥" Classes="label" />
       <TextBox x:Name="NewKeyBox" PasswordChar="•" />
@@ -28,9 +35,9 @@
       <TextBox x:Name="ConfirmBox" PasswordChar="•" />
       <TextBlock Text="主密码" Classes="label" />
       <TextBox x:Name="MasterBox" PasswordChar="•" />
-      <TextBlock x:Name="ErrorText" Foreground="#C0353A" TextWrapping="Wrap" Margin="0,12,0,0" IsVisible="False" />
-      <TextBlock x:Name="BusyText" Text="正在验证主密码…" Foreground="#5C6B7A" Margin="0,12,0,0" IsVisible="False" />
-      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+      <TextBlock x:Name="ErrorText" Foreground="#D14343" TextWrapping="Wrap" Margin="0,12,0,0" IsVisible="False" />
+      <TextBlock x:Name="BusyText" Text="正在验证主密码…" Classes="muted" Margin="0,12,0,0" IsVisible="False" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,18,0,0">
         <Button Classes="ghost" Content="取消" Click="OnCancel" />
         <Button x:Name="SaveButton" Classes="accent" Content="保存短密钥" Click="OnSave" />
       </StackPanel>

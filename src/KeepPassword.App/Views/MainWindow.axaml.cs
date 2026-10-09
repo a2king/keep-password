@@ -163,6 +163,11 @@ public partial class MainWindow : Window
         await new UserManagementWindow(_session, _location, _pauseWatcher).ShowDialog(this);
     }
 
+    private void OnNavItems(object? sender, RoutedEventArgs e)
+    {
+        // 主界面本身就是条目页，侧栏按钮只保留选中感。
+    }
+
     private void OnLock(object? sender, RoutedEventArgs e) => LockRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnTogglePassword(object? sender, RoutedEventArgs e)

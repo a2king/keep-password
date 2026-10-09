@@ -145,7 +145,7 @@ public sealed class UnlockViewModel : ViewModelBase
         }
         catch (Exception ex) when (ex is UnlockFailedException or ArgumentException or InvalidOperationException or IOException or InvalidDataException)
         {
-            Error = ex.Message;
+            Error = Friendly(ex);
             return false;
         }
         finally
@@ -173,7 +173,14 @@ public sealed class UnlockViewModel : ViewModelBase
         catch (Exception ex) when (ex is InvalidDataException or IOException)
         {
             AccountLabel = "";
-            Error = ex.Message;
+            Error = Friendly(ex);
         }
+    }
+
+    private static string Friendly(Exception ex)
+    {
+        var message = ex.Message;
+        var cut = message.IndexOf(" (Parameter ", StringComparison.Ordinal);
+        return cut > 0 ? message[..cut] : message;
     }
 }
