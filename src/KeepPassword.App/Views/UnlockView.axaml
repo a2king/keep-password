@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:KeepPassword.App.ViewModels"
+             xmlns:views="using:KeepPassword.App.Views"
              x:Class="KeepPassword.App.Views.UnlockView"
              x:DataType="vm:UnlockViewModel"
              KeyDown="OnKeyDown"
@@ -24,18 +25,18 @@
 
             <TextBlock Text="{Binding AccountLabel}" Classes="label" IsVisible="{Binding !IsCreate}" />
             <TextBlock Text="账号" Classes="label" IsVisible="{Binding IsCreate}" />
-            <TextBox Text="{Binding Account}" InputMethod.IsInputMethodEnabled="False" Watermark="例如 ada" IsVisible="{Binding IsCreate}" Classes="mono" />
+            <TextBox Text="{Binding Account}" views:AsciiInput.IsEnabled="True" Watermark="例如 ada" IsVisible="{Binding IsCreate}" Classes="mono" />
 
             <TextBlock Text="主密码" Classes="label" />
-            <TextBox x:Name="MasterBox" InputMethod.IsInputMethodEnabled="False" PasswordChar="•" Watermark="请输入主密码" Classes="mono" FontSize="15" />
+            <TextBox x:Name="MasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Watermark="请输入主密码" Classes="mono" FontSize="15" />
 
             <StackPanel IsVisible="{Binding IsCreate}">
               <TextBlock Text="确认主密码" Classes="label" />
-              <TextBox x:Name="ConfirmMasterBox" InputMethod.IsInputMethodEnabled="False" PasswordChar="•" Classes="mono" FontSize="15" />
+              <TextBox x:Name="ConfirmMasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
               <TextBlock Text="短密钥" Classes="label" />
-              <TextBox x:Name="ShortBox" InputMethod.IsInputMethodEnabled="False" PasswordChar="•" Watermark="固定短密钥" Classes="mono" FontSize="15" />
+              <TextBox x:Name="ShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Watermark="固定短密钥" Classes="mono" FontSize="15" />
               <TextBlock Text="确认短密钥" Classes="label" />
-              <TextBox x:Name="ConfirmShortBox" InputMethod.IsInputMethodEnabled="False" PasswordChar="•" Classes="mono" FontSize="15" />
+              <TextBox x:Name="ConfirmShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
               <CheckBox Content="启用安全问题恢复（安全性显著降低）" IsChecked="{Binding EnableRecovery}" Margin="0,12,0,0" />
               <StackPanel IsVisible="{Binding EnableRecovery}" Margin="0,8,0,0">
                 <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8">
@@ -69,7 +70,7 @@
                 <TextBlock Text="{Binding RecoveryQuestion3}" Classes="label" TextWrapping="Wrap" />
                 <TextBox x:Name="RecoverAnswer3Box" PasswordChar="•" />
                 <TextBlock Text="确认新主密码" Classes="label" />
-                <TextBox x:Name="RecoverConfirmBox" InputMethod.IsInputMethodEnabled="False" PasswordChar="•" Classes="mono" FontSize="15" />
+                <TextBox x:Name="RecoverConfirmBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
                 <Button Classes="ghost" Content="取消重置" Click="OnCancelRecovery" HorizontalAlignment="Left" Margin="0,10,0,0" />
               </StackPanel>
             </StackPanel>

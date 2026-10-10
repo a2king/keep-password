@@ -34,6 +34,10 @@ public partial class MainWindow : Window
         _totpTimer.Tick += (_, _) => View?.RefreshTotp();
         UnlockRoot.Unlocked += session => Unlocked?.Invoke(session);
         SettingsRoot.VaultChanged += (_, _) => View?.Reload();
+        SpacePicker.Toggled += name => View?.ChooseSpace(name);
+        SpacePicker.Created += async name => await AddLabelAsync(name, isSpace: true);
+        TagPicker.Toggled += name => View?.ToggleTag(name);
+        TagPicker.Created += async name => await AddLabelAsync(name, isSpace: false);
         AuditRoot.Rerun = () =>
         {
             if (View is not null)
@@ -209,14 +213,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnCopyConnection(object? sender, RoutedEventArgs e)
-    {
-        if (View is not null)
-        {
-            await CopyAsync(View.ConnectionString, "连接字符串", sensitive: true);
-        }
-    }
-
     private async void OnCopyFingerprint(object? sender, RoutedEventArgs e)
     {
         if (View is { SshFingerprint: var fingerprint } && fingerprint.StartsWith("SHA256:", StringComparison.Ordinal))
@@ -250,28 +246,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (await Dialogs.ConfirmAsync(this, "删除字段", $"删除自定义字段「{field.Name}」？保存后生效。"))
+        if (await Dialogs.ConfirmAsync(this, "删除字段", $"删除字段「{field.Name}」？保存后生效。"))
         {
             View.RemoveCustomField(field);
-        }
-    }
-
-    private async void OnAddCustomField(object? sender, RoutedEventArgs e) => await AddCustomFieldAsync();
-
-    private async void OnNewFieldKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            e.Handled = true;
-            await AddCustomFieldAsync();
-        }
-    }
-
-    private async Task AddCustomFieldAsync()
-    {
-        if (View?.AddCustomField() is { } error)
-        {
-            await Dialogs.AlertAsync(this, "无法添加字段", error);
         }
     }
 
@@ -299,52 +276,14 @@ public partial class MainWindow : Window
         await SecretClipboard.CopyAsync(clipboard, value);
     }
 
-    private void OnChooseSpace(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: string name })
-        {
-            View?.ChooseSpace(name);
-        }
-    }
-
-    private void OnToggleTag(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: string name })
-        {
-            View?.ToggleTag(name);
-        }
-    }
-
-    private async void OnAddSpace(object? sender, RoutedEventArgs e) => await AddLabelAsync(isSpace: true);
-
-    private async void OnAddTag(object? sender, RoutedEventArgs e) => await AddLabelAsync(isSpace: false);
-
-    private async void OnNewSpaceKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            e.Handled = true;
-            await AddLabelAsync(isSpace: true);
-        }
-    }
-
-    private async void OnNewTagKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            e.Handled = true;
-            await AddLabelAsync(isSpace: false);
-        }
-    }
-
-    private async Task AddLabelAsync(bool isSpace)
+    private async Task AddLabelAsync(string name, bool isSpace)
     {
         if (View is null)
         {
             return;
         }
 
-        var error = isSpace ? View.AddSpaceChoice() : View.AddTagChoice();
+        var error = isSpace ? View.AddSpaceChoice(name) : View.AddTagChoice(name);
         if (error is not null)
         {
             await Dialogs.AlertAsync(this, "无法新增", error);

@@ -80,13 +80,12 @@ public static class VaultItemRules
     private static string? ValidateDatabase(VaultEntry entry)
     {
         var driver = ItemTemplates.Driver(entry.Field(FieldKeys.Driver)).Code;
-        var hasCustom = entry.Field(FieldKeys.Connection).Trim().Length > 0;
         if (driver == "sqlite")
         {
-            return hasCustom || entry.Field(FieldKeys.Database).Trim().Length > 0 ? null : "请填写数据库文件路径。";
+            return entry.Field(FieldKeys.Database).Trim().Length > 0 ? null : "请填写数据库文件路径。";
         }
 
-        if (!hasCustom && entry.Field(FieldKeys.Host).Trim().Length == 0)
+        if (entry.Field(FieldKeys.Host).Trim().Length == 0)
         {
             return driver == "oss" ? "请填写 Endpoint。" : "请填写数据库主机或 IP。";
         }

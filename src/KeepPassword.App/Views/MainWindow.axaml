@@ -136,7 +136,10 @@
               <DataTemplate x:DataType="vm:FilterItemView">
                 <Button Classes="filter-card" Classes.selected="{Binding IsSelected}" Tag="{Binding Key}" Click="OnKindFilter" Width="132" Margin="0,0,8,8">
                   <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <PathIcon Data="{StaticResource Icon.Star}" Width="14" Height="14" Foreground="{DynamicResource Kp.Star}" IsVisible="{Binding IsFavorite}" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
                     <Border Grid.Column="1" Classes="count-badge" Margin="8,0,0,0">
                       <TextBlock Text="{Binding Count}" />
                     </Border>
@@ -212,7 +215,7 @@
                               <StackPanel Grid.Column="1" Margin="4,0,0,0" VerticalAlignment="Center" Spacing="3">
                                 <Grid ColumnDefinitions="*,Auto">
                                   <TextBlock Text="{Binding Address}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" />
-                                  <TextBlock Grid.Column="1" Text="★" Foreground="{DynamicResource Kp.Accent}" Margin="6,0,0,0" IsVisible="{Binding Favorite}" />
+                                  <PathIcon Grid.Column="1" Data="{StaticResource Icon.Star}" Width="14" Height="14" Foreground="{DynamicResource Kp.Star}" Margin="6,0,0,0" VerticalAlignment="Center" IsVisible="{Binding Favorite}" />
                                 </Grid>
                                 <TextBlock Text="{Binding Username}" Classes="muted mono" FontSize="12" TextTrimming="CharacterEllipsis" />
                                 <TextBlock Text="{Binding Labels}" Classes="muted" FontSize="11.5" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasLabels}" />
@@ -248,7 +251,12 @@
                       <TextBlock Text="{Binding KindName}" />
                     </Border>
                     <TextBlock Grid.Column="1" Text="{Binding Name}" Classes="h1" TextWrapping="Wrap" Margin="10,0,8,0" VerticalAlignment="Center" />
-                    <Button Grid.Column="2" Classes="ghost" Content="{Binding FavoriteText}" VerticalAlignment="Top" Click="OnToggleFavorite" />
+                    <Button Grid.Column="2" Classes="icon" Width="32" Height="32" ToolTip.Tip="{Binding FavoriteText}" VerticalAlignment="Top" Click="OnToggleFavorite">
+                      <Panel>
+                        <PathIcon Data="{StaticResource Icon.StarOutline}" Width="19" Height="19" IsVisible="{Binding !Favorite}" />
+                        <PathIcon Data="{StaticResource Icon.Star}" Width="19" Height="19" Foreground="{DynamicResource Kp.Star}" IsVisible="{Binding Favorite}" />
+                      </Panel>
+                    </Button>
                     <Button Grid.Column="3" Classes="ghost" Content="关闭" VerticalAlignment="Top" Click="OnCloseDetail" />
                   </Grid>
 
@@ -256,6 +264,30 @@
                     <StackPanel>
                       <TextBlock Text="条目名称" Classes="muted" FontWeight="SemiBold" />
                       <TextBox Text="{Binding Name}" Classes="inline" />
+                    </StackPanel>
+                  </Border>
+
+                  <Border Classes="field">
+                    <StackPanel>
+                      <TextBlock Text="空间分类" Classes="muted" FontWeight="SemiBold" />
+                      <views:LabelPicker x:Name="SpacePicker"
+                                         Items="{Binding SpaceChoices}"
+                                         Icon="{StaticResource Icon.Folder}"
+                                         Watermark="选择或输入空间分类"
+                                         CreateText="创建空间"
+                                         Margin="0,8,0,0" />
+                    </StackPanel>
+                  </Border>
+
+                  <Border Classes="field">
+                    <StackPanel>
+                      <TextBlock Text="账号标签" Classes="muted" FontWeight="SemiBold" />
+                      <views:LabelPicker x:Name="TagPicker"
+                                         Items="{Binding TagChoices}"
+                                         Multiple="True"
+                                         Watermark="选择或输入标签"
+                                         CreateText="创建标签"
+                                         Margin="0,8,0,0" />
                     </StackPanel>
                   </Border>
 
@@ -321,16 +353,25 @@
                             <Grid ColumnDefinitions="*,Auto">
                               <TextBlock Text="{Binding Label}" Classes="muted" FontWeight="SemiBold" VerticalAlignment="Center" />
                               <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
-                                <Button Classes="ghost" Padding="8,3" FontSize="12" Content="生成" IsVisible="{Binding CanGenerate}" Tag="{Binding}" Click="OnGenerateField" />
-                                <Button Classes="ghost" Padding="8,3" FontSize="12" Content="{Binding RevealText}" IsVisible="{Binding CanReveal}" Tag="{Binding}" Click="OnRevealField" />
-                                <Button Classes="ghost" Padding="8,3" FontSize="12" Content="复制" Tag="{Binding}" Click="OnCopyField" />
+                                <Button Classes="icon" ToolTip.Tip="生成密码" IsVisible="{Binding CanGenerate}" Tag="{Binding}" Click="OnGenerateField">
+                                  <PathIcon Data="{StaticResource Icon.Generator}" />
+                                </Button>
+                                <Button Classes="icon" ToolTip.Tip="{Binding RevealText}" IsVisible="{Binding CanReveal}" Tag="{Binding}" Click="OnRevealField">
+                                  <Panel>
+                                    <PathIcon Data="{StaticResource Icon.Eye}" IsVisible="{Binding !Revealed}" />
+                                    <PathIcon Data="{StaticResource Icon.EyeOff}" IsVisible="{Binding Revealed}" />
+                                  </Panel>
+                                </Button>
+                                <Button Classes="icon" ToolTip.Tip="复制" Tag="{Binding}" Click="OnCopyField">
+                                  <PathIcon Data="{StaticResource Icon.Copy}" />
+                                </Button>
                               </StackPanel>
                             </Grid>
                             <TextBox Text="{Binding Value}"
                                      PasswordChar="{Binding MaskChar}"
                                      Watermark="{Binding Placeholder}"
                                      AcceptsReturn="{Binding Multiline}"
-                                     TextWrapping="Wrap"
+                                     TextWrapping="{Binding Wrapping}"
                                      IsVisible="{Binding ShowEditor}"
                                      Classes="mono inline"
                                      MaxHeight="220" />
@@ -343,16 +384,6 @@
 
                   <TextBlock Text="{Binding TotpPreview}" IsVisible="{Binding ShowTotp}" Classes="mono" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource Kp.Accent}" Margin="4,0,0,10" LetterSpacing="2.5" />
 
-                  <Border Classes="field" IsVisible="{Binding ShowConnection}">
-                    <StackPanel>
-                      <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Text="连接字符串（预览中隐藏密码，复制为完整内容）" Classes="muted" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" />
-                        <Button Grid.Column="1" Classes="ghost" Padding="8,3" FontSize="12" Content="复制" Click="OnCopyConnection" />
-                      </Grid>
-                      <TextBlock Text="{Binding ConnectionPreview}" Classes="mono" TextWrapping="Wrap" Margin="0,6,0,0" />
-                    </StackPanel>
-                  </Border>
-
                   <Border Classes="field" IsVisible="{Binding ShowSshInfo}">
                     <StackPanel Spacing="6">
                       <TextBlock Text="密钥信息" Classes="muted" FontWeight="SemiBold" />
@@ -361,7 +392,9 @@
                         <TextBlock Grid.Column="1" Text="{Binding SshKeyType}" Classes="mono" VerticalAlignment="Center" />
                         <TextBlock Grid.Row="1" Text="指纹" Classes="muted" VerticalAlignment="Center" />
                         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SshFingerprint}" Classes="mono" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
-                        <Button Grid.Row="1" Grid.Column="2" Classes="ghost" Padding="8,3" FontSize="12" Content="复制" Click="OnCopyFingerprint" />
+                        <Button Grid.Row="1" Grid.Column="2" Classes="icon" ToolTip.Tip="复制指纹" Click="OnCopyFingerprint">
+                          <PathIcon Data="{StaticResource Icon.Copy}" />
+                        </Button>
                       </Grid>
                       <TextBlock Text="{Binding SshWarning}" IsVisible="{Binding HasSshWarning}" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
                       <TextBlock Text="{Binding SshReferences}" Classes="muted" TextWrapping="Wrap" />
@@ -381,7 +414,9 @@
                               <StackPanel Spacing="6">
                                 <Grid ColumnDefinitions="*,Auto,Auto">
                                   <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                  <Button Grid.Column="1" Classes="ghost" Padding="8,3" FontSize="12" Content="复制地址" Tag="{Binding}" Click="OnCopyNode" />
+                                  <Button Grid.Column="1" Classes="icon" ToolTip.Tip="复制地址" Tag="{Binding}" Click="OnCopyNode">
+                                    <PathIcon Data="{StaticResource Icon.Copy}" />
+                                  </Button>
                                   <Button Grid.Column="2" Classes="ghost" Padding="8,3" FontSize="12" Content="移除" Tag="{Binding}" Click="OnRemoveNode" />
                                 </Grid>
                                 <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,6,Auto,6,Auto">
@@ -399,10 +434,10 @@
                     </StackPanel>
                   </Border>
 
-                  <Border Classes="field">
+                  <Border Classes="field" IsVisible="{Binding HasCustomFields}">
                     <StackPanel>
-                      <TextBlock Text="自定义字段" Classes="muted" FontWeight="SemiBold" />
-                      <ItemsControl ItemsSource="{Binding CustomFields}" Margin="0,6,0,0" IsVisible="{Binding HasCustomFields}">
+                      <TextBlock Text="其他字段（旧版本保留的数据）" Classes="muted" FontWeight="SemiBold" />
+                      <ItemsControl ItemsSource="{Binding CustomFields}" Margin="0,6,0,0">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:CustomFieldEditorView">
                             <StackPanel Margin="0,0,0,10">
@@ -412,9 +447,18 @@
                                   <TextBlock Text="{Binding TypeText}" FontSize="11" />
                                 </Border>
                                 <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2">
-                                  <Button Classes="ghost" Padding="8,3" FontSize="12" Content="{Binding RevealText}" IsVisible="{Binding Sensitive}" Tag="{Binding}" Click="OnRevealField" />
-                                  <Button Classes="ghost" Padding="8,3" FontSize="12" Content="复制" Tag="{Binding}" Click="OnCopyField" />
-                                  <Button Classes="ghost" Padding="8,3" FontSize="12" Content="删除" Tag="{Binding}" Click="OnRemoveCustomField" />
+                                  <Button Classes="icon" ToolTip.Tip="{Binding RevealText}" IsVisible="{Binding Sensitive}" Tag="{Binding}" Click="OnRevealField">
+                                    <Panel>
+                                      <PathIcon Data="{StaticResource Icon.Eye}" IsVisible="{Binding !Revealed}" />
+                                      <PathIcon Data="{StaticResource Icon.EyeOff}" IsVisible="{Binding Revealed}" />
+                                    </Panel>
+                                  </Button>
+                                  <Button Classes="icon" ToolTip.Tip="复制" Tag="{Binding}" Click="OnCopyField">
+                                    <PathIcon Data="{StaticResource Icon.Copy}" />
+                                  </Button>
+                                  <Button Classes="icon icon-danger" ToolTip.Tip="删除" Tag="{Binding}" Click="OnRemoveCustomField">
+                                    <PathIcon Data="{StaticResource Icon.Trash}" />
+                                  </Button>
                                 </StackPanel>
                               </Grid>
                               <TextBox Text="{Binding Value}" PasswordChar="{Binding MaskChar}" Classes="mono" Margin="0,6,0,0" />
@@ -422,58 +466,6 @@
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
-                      <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,6,0,0">
-                        <TextBox Text="{Binding NewFieldName}" Watermark="字段名称，回车添加" KeyDown="OnNewFieldKeyDown" />
-                        <CheckBox Grid.Column="1" IsChecked="{Binding NewFieldSensitive}" Content="敏感" Margin="10,0,0,0" />
-                        <Button Grid.Column="2" Classes="soft" Content="添加" Margin="8,0,0,0" Click="OnAddCustomField" />
-                      </Grid>
-                      <TextBlock Text="字段添加后名称和类型不能修改，需要时删除后重新添加。" Classes="muted" FontSize="11.5" Margin="0,6,0,0" TextWrapping="Wrap" />
-                    </StackPanel>
-                  </Border>
-
-                  <Border Classes="field">
-                    <StackPanel>
-                      <TextBlock Text="空间分类（单选，再次点击取消）" Classes="muted" FontWeight="SemiBold" />
-                      <ItemsControl ItemsSource="{Binding SpaceChoices}" Margin="0,8,0,0">
-                        <ItemsControl.ItemsPanel>
-                          <ItemsPanelTemplate>
-                            <WrapPanel />
-                          </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="vm:LabelChipView">
-                            <Button Classes="chip" Classes.selected="{Binding IsSelected}" Content="{Binding Name}" Tag="{Binding Name}" Click="OnChooseSpace" />
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <TextBlock Text="还没有空间分类，可在下方新增。" Classes="muted" Margin="0,4,0,6" IsVisible="{Binding !HasSpaceChoices}" />
-                      <Grid ColumnDefinitions="*,Auto">
-                        <TextBox Text="{Binding NewSpaceText}" Watermark="新增空间分类，回车确认" KeyDown="OnNewSpaceKeyDown" />
-                        <Button Grid.Column="1" Classes="soft" Content="新增" Margin="8,0,0,0" Click="OnAddSpace" />
-                      </Grid>
-                    </StackPanel>
-                  </Border>
-
-                  <Border Classes="field">
-                    <StackPanel>
-                      <TextBlock Text="账号标签（可多选）" Classes="muted" FontWeight="SemiBold" />
-                      <ItemsControl ItemsSource="{Binding TagChoices}" Margin="0,8,0,0">
-                        <ItemsControl.ItemsPanel>
-                          <ItemsPanelTemplate>
-                            <WrapPanel />
-                          </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="vm:LabelChipView">
-                            <Button Classes="chip" Classes.selected="{Binding IsSelected}" Content="{Binding Name}" Tag="{Binding Name}" Click="OnToggleTag" />
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                      <TextBlock Text="还没有账号标签，可在下方新增。" Classes="muted" Margin="0,4,0,6" IsVisible="{Binding !HasTagChoices}" />
-                      <Grid ColumnDefinitions="*,Auto">
-                        <TextBox Text="{Binding NewTagText}" Watermark="新增账号标签，回车确认" KeyDown="OnNewTagKeyDown" />
-                        <Button Grid.Column="1" Classes="soft" Content="新增" Margin="8,0,0,0" Click="OnAddTag" />
-                      </Grid>
                     </StackPanel>
                   </Border>
 

@@ -36,11 +36,8 @@
                                      Foreground="{DynamicResource Kp.Accent}"
                                      VerticalAlignment="Center"
                                      Margin="20,0" />
-                <Button Grid.Column="2" Classes="soft" Click="OnCopy" Tag="{Binding Code}" VerticalAlignment="Center">
-                  <StackPanel Orientation="Horizontal" Spacing="6">
-                    <PathIcon Data="{StaticResource Icon.Copy}" Width="13" Height="13" />
-                    <TextBlock Text="复制" VerticalAlignment="Center" />
-                  </StackPanel>
+                <Button Grid.Column="2" Classes="icon" Width="34" Height="34" ToolTip.Tip="复制验证码" Click="OnCopy" Tag="{Binding Code}" VerticalAlignment="Center">
+                  <PathIcon Data="{StaticResource Icon.Copy}" Width="17" Height="17" />
                 </Button>
               </Grid>
             </Border>

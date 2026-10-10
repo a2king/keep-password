@@ -206,42 +206,71 @@ public sealed class ItemTypeTests
     }
 
     [Theory]
-    [InlineData("mysql", "mysql://app:p%40ss%3Aw@db.local:3306/shop")]
-    [InlineData("postgresql", "postgresql://app:p%40ss%3Aw@db.local:5432/shop")]
-    [InlineData("sqlserver", "Server=db.local,1433;Database=shop;User Id=app;Password=p@ss:w;TrustServerCertificate=True")]
-    [InlineData("mongodb", "mongodb://app:p%40ss%3Aw@db.local:27017/shop")]
-    [InlineData("redis", "redis://app:p%40ss%3Aw@db.local:6379/shop")]
-    [InlineData("clickhouse", "clickhouse://app:p%40ss%3Aw@db.local:9000/shop")]
-    [InlineData("doris", "mysql://app:p%40ss%3Aw@db.local:9030/shop")]
-    [InlineData("elasticsearch", "https://app:p%40ss%3Aw@db.local:9200")]
-    [InlineData("oss", "https://shop.db.local")]
-    public void ConnectionString_FollowsDriverTemplate(string driver, string expected)
+    [InlineData("mysql")]
+    [InlineData("postgresql")]
+    [InlineData("sqlserver")]
+    [InlineData("mongodb")]
+    [InlineData("redis")]
+    [InlineData("clickhouse")]
+    [InlineData("doris")]
+    [InlineData("elasticsearch")]
+    [InlineData("oss")]
+    public void Database_RequiresHostAndHasNoConnectionField(string driver)
     {
         var entry = new VaultEntry { Kind = VaultItemKind.Database, Username = "app", Password = "p@ss:w" };
         entry.SetField(FieldKeys.Driver, driver);
+        Assert.NotNull(VaultItemRules.Validate(entry));
         entry.SetField(FieldKeys.Host, "db.local");
         entry.SetField(FieldKeys.Database, "shop");
-        Assert.Equal(expected, ItemTemplates.ConnectionString(entry));
         Assert.Null(VaultItemRules.Validate(entry));
+        Assert.DoesNotContain(ItemTemplates.Fields(entry), spec => spec.Key == FieldKeys.Connection);
     }
 
     [Fact]
-    public void ConnectionString_SqliteAndOverride()
+    public void Database_SqliteRequiresFile()
     {
         var sqlite = new VaultEntry { Kind = VaultItemKind.Database };
         sqlite.SetField(FieldKeys.Driver, "sqlite");
-        Assert.Equal("", ItemTemplates.ConnectionString(sqlite));
         Assert.NotNull(VaultItemRules.Validate(sqlite));
         sqlite.SetField(FieldKeys.Database, @"C:\data\app.db");
-        Assert.Equal(@"Data Source=C:\data\app.db", ItemTemplates.ConnectionString(sqlite));
+        Assert.Null(VaultItemRules.Validate(sqlite));
         Assert.DoesNotContain(ItemTemplates.Fields(sqlite), spec => spec.Key == FieldKeys.Host);
+    }
 
-        var custom = new VaultEntry { Kind = VaultItemKind.Database };
-        custom.SetField(FieldKeys.Driver, "mysql");
-        custom.SetField(FieldKeys.Connection, "  jdbc:mysql://x/y  ");
-        Assert.Null(VaultItemRules.Validate(custom));
-        Assert.Equal("jdbc:mysql://x/y", ItemTemplates.ConnectionString(custom));
-        Assert.Equal("", ItemTemplates.ConnectionString(new VaultEntry()));
+    [Fact]
+    public void LegacyConnectionString_BecomesSensitiveCustomField()
+    {
+        var entry = new VaultEntry { Kind = VaultItemKind.Database };
+        entry.SetField(FieldKeys.Connection, "  jdbc:mysql://x/y  ");
+        entry.CustomFields.Add(new VaultCustomField { Name = "连接字符串", Value = "old" });
+        ItemTemplates.MigrateLegacyFields(entry);
+        Assert.Equal("", entry.Field(FieldKeys.Connection));
+        var migrated = Assert.Single(entry.CustomFields, field => field.Name == "连接字符串 2");
+        Assert.Equal("jdbc:mysql://x/y", migrated.Value);
+        Assert.True(migrated.Sensitive);
+    }
+
+    [Fact]
+    public void LegacyConnectionString_MigratesWhenVaultReopens()
+    {
+        var path = TestVault.NewPath();
+        var store = TestVault.Store();
+        store.Create(path, "ada", "correct horse", "short-key");
+        using (var session = store.Unlock(path, "correct horse"))
+        {
+            var entry = new VaultEntry { Name = "db", Kind = VaultItemKind.Database };
+            entry.SetField(FieldKeys.Driver, "mysql");
+            entry.SetField(FieldKeys.Host, "db.local");
+            entry.SetField(FieldKeys.Connection, "mysql://x/y");
+            session.Upsert(entry);
+            session.Save();
+        }
+
+        using var reopened = store.Unlock(path, "correct horse");
+        var stored = Assert.Single(reopened.Entries);
+        Assert.Equal("", stored.Field(FieldKeys.Connection));
+        var field = Assert.Single(stored.CustomFields);
+        Assert.Equal(("连接字符串", "mysql://x/y", true), (field.Name, field.Value, field.Sensitive));
     }
 
     [Fact]
@@ -342,12 +371,14 @@ public sealed class ItemTypeTests
         string[] headers = ["名称", "主机", "端口", "用户名", "密码", "协议", "机房", "Host", ""];
         var targets = CsvMapper.GuessAll(headers, VaultItemKind.Server);
         Assert.Equal(
-            [CsvMapper.Name, "field:host", "field:port", "field:username", "field:password", "field:protocol", CsvMapper.CustomText, CsvMapper.CustomText, CsvMapper.Ignore],
+            [CsvMapper.Name, "field:host", "field:port", "field:username", "field:password", "field:protocol", CsvMapper.Ignore, CsvMapper.Ignore, CsvMapper.Ignore],
             targets);
-        Assert.Null(CsvMapper.ValidateMapping(headers, ["name", "field:host", "field:port", "field:username", "field:password", "field:protocol", "custom", "ignore", "ignore"]));
+        Assert.Null(CsvMapper.ValidateMapping(headers, targets));
 
         Assert.Equal("field:driver", CsvMapper.Guess("数据库类型", VaultItemKind.Database));
-        Assert.Equal(CsvMapper.CustomText, CsvMapper.Guess("数据库类型", VaultItemKind.Login));
+        Assert.Equal(CsvMapper.Ignore, CsvMapper.Guess("数据库类型", VaultItemKind.Login));
+        Assert.Equal(CsvMapper.Ignore, CsvMapper.Guess("连接字符串", VaultItemKind.Database));
+        Assert.DoesNotContain(CsvMapper.Targets(VaultItemKind.Database), target => target.Code.StartsWith("custom", StringComparison.Ordinal));
         Assert.Equal(CsvMapper.Nodes, CsvMapper.Guess("节点", VaultItemKind.Cluster));
         Assert.Equal("field:token", CsvMapper.Guess("access_token", VaultItemKind.ApiCredential));
         Assert.DoesNotContain(VaultItemKind.SshKey, CsvMapper.ImportableKinds);
@@ -359,8 +390,6 @@ public sealed class ItemTypeTests
     {
         string[] headers = ["a", "b"];
         Assert.Contains("同一个字段", CsvMapper.ValidateMapping(headers, ["name", "name"]));
-        Assert.Contains("重复", CsvMapper.ValidateMapping(["备注", " 备注 "], ["custom", "customSecret"]));
-        Assert.Contains("没有列名", CsvMapper.ValidateMapping(["", "b"], ["custom", "name"]));
         Assert.NotNull(CsvMapper.ValidateMapping(headers, ["ignore", "ignore"]));
         Assert.NotNull(CsvMapper.ValidateMapping(headers, ["name"]));
 
@@ -396,13 +425,12 @@ public sealed class ItemTypeTests
         Assert.Equal("pw1", first.Password);
         Assert.Equal(["运维", "生产"], first.Tags);
         Assert.True(first.Favorite);
-        Assert.Equal("杭州", Assert.Single(first.CustomFields).Value);
+        Assert.Empty(first.CustomFields);
 
         var second = plan.Entries[1];
         Assert.Equal("win.local", second.Name);
         Assert.Equal("rdp", second.Field(FieldKeys.Protocol));
         Assert.Equal("3389", second.Field(FieldKeys.Port));
-        Assert.Empty(plan.Entries.Where(entry => entry.CustomFields.Any(field => field.Value.Length == 0)));
     }
 
     [Fact]
@@ -430,10 +458,10 @@ public sealed class ItemTypeTests
         Assert.Equal("生产", api.Field(FieldKeys.Environment));
 
         var logins = CsvImporter.ReadTable("url,username,password,PIN\nhttps://github.com/login,ada,pw,1234\n,,,5678\n");
-        var loginPlan = CsvMapper.Build(logins, VaultItemKind.Login, ["field:url", "field:username", "field:password", "customSecret"], new HashSet<int>());
+        var loginPlan = CsvMapper.Build(logins, VaultItemKind.Login, CsvMapper.GuessAll(logins.Headers, VaultItemKind.Login), new HashSet<int>());
         var login = Assert.Single(loginPlan.Entries);
         Assert.Equal("github.com", login.Name);
-        Assert.True(Assert.Single(login.CustomFields).Sensitive);
+        Assert.Empty(login.CustomFields);
         Assert.Equal(1, loginPlan.Invalid);
     }
 

@@ -22,7 +22,12 @@
       <StreamGeometry x:Key="Icon.Refresh">M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z</StreamGeometry>
       <StreamGeometry x:Key="Icon.Trash">M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z</StreamGeometry>
       <StreamGeometry x:Key="Icon.Eye">M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z</StreamGeometry>
-      <StreamGeometry x:Key="Icon.Check">M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z</StreamGeometry>
+      <StreamGeometry x:Key="Icon.Tag">M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z</StreamGeometry>
+      <StreamGeometry x:Key="Icon.Folder">M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z</StreamGeometry>
+      <StreamGeometry x:Key="Icon.EyeOff">M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z</StreamGeometry>
+      <StreamGeometry x:Key="Icon.Star">M12 17.27l4.15 2.51c.76.46 1.69-.22 1.49-1.08l-1.1-4.72 3.67-3.18c.67-.58.31-1.68-.57-1.75l-4.83-.41-1.89-4.46c-.34-.81-1.5-.81-1.84 0L9.19 8.63l-4.83.41c-.88.07-1.24 1.17-.57 1.75l3.67 3.18-1.1 4.72c-.2.86.73 1.54 1.49 1.08l4.15-2.5z</StreamGeometry>
+    <StreamGeometry x:Key="Icon.StarOutline">M19.65 9.04l-4.84-.42-1.89-4.45c-.34-.81-1.5-.81-1.84 0L9.19 8.63l-4.83.41c-.88.07-1.24 1.17-.57 1.75l3.67 3.18-1.1 4.72c-.2.86.73 1.54 1.49 1.08l4.15-2.5 4.15 2.51c.76.46 1.69-.22 1.49-1.08l-1.1-4.73 3.67-3.18c.67-.58.32-1.68-.56-1.75zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z</StreamGeometry>
+    <StreamGeometry x:Key="Icon.Check">M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z</StreamGeometry>
 
       <!-- 主题资源字典（支持明暗无缝切换） -->
       <ResourceDictionary.ThemeDictionaries>
@@ -46,6 +51,7 @@
           <SolidColorBrush x:Key="Kp.Text" Color="#0F172A" />
           <SolidColorBrush x:Key="Kp.TextMuted" Color="#64748B" />
           <SolidColorBrush x:Key="Kp.Danger" Color="#DC2626" />
+        <SolidColorBrush x:Key="Kp.Star" Color="#F5A524" />
           <SolidColorBrush x:Key="Kp.DangerHover" Color="#B91C1C" />
           <SolidColorBrush x:Key="Kp.DangerSoft" Color="#FEF2F2" />
           <SolidColorBrush x:Key="Kp.Warning" Color="#D97706" />
@@ -77,6 +83,7 @@
           <SolidColorBrush x:Key="Kp.Text" Color="#F1F5F9" />
           <SolidColorBrush x:Key="Kp.TextMuted" Color="#94A3B8" />
           <SolidColorBrush x:Key="Kp.Danger" Color="#EF4444" />
+        <SolidColorBrush x:Key="Kp.Star" Color="#FBBF24" />
           <SolidColorBrush x:Key="Kp.DangerHover" Color="#F87171" />
           <SolidColorBrush x:Key="Kp.DangerSoft" Color="#3F1517" />
           <SolidColorBrush x:Key="Kp.Warning" Color="#F59E0B" />
@@ -149,6 +156,39 @@
     </Style>
     <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+    </Style>
+
+    <!-- 字段行内的图标按钮（复制 / 显示 / 生成 / 删除） -->
+    <Style Selector="Button.icon">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.TextMuted}" />
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.icon PathIcon">
+      <Setter Property="Width" Value="15" />
+      <Setter Property="Height" Value="15" />
+    </Style>
+    <Style Selector="Button.icon /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.icon:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Accent}" />
+    </Style>
+    <Style Selector="Button.icon:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Selection}" />
+    </Style>
+    <Style Selector="Button.icon.icon-danger:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.DangerSoft}" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Danger}" />
     </Style>
 
     <!-- 柔和浅底按钮 (Soft Button) -->

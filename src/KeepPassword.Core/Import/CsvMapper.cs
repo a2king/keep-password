@@ -28,8 +28,6 @@ public static class CsvMapper
     public const string Tags = "tags";
     public const string Favorite = "favorite";
     public const string Nodes = "nodes";
-    public const string CustomText = "custom";
-    public const string CustomSecret = "customSecret";
     public const string FieldPrefix = "field:";
 
     public static IReadOnlyList<VaultItemKind> ImportableKinds { get; } =
@@ -58,7 +56,6 @@ public static class CsvMapper
         [FieldPrefix + FieldKeys.Protocol] = ["protocol", "协议"],
         [FieldPrefix + FieldKeys.Driver] = ["driver", "type", "database type", "数据库类型"],
         [FieldPrefix + FieldKeys.Database] = ["database", "db", "dbname", "bucket", "数据库", "数据库名"],
-        [FieldPrefix + FieldKeys.Connection] = ["connection", "connection string", "connectionstring", "连接字符串"],
         [FieldPrefix + FieldKeys.ApiKey] = ["api key", "apikey", "api_key", "key"],
         [FieldPrefix + FieldKeys.Secret] = ["secret", "client secret", "secret key"],
         [FieldPrefix + FieldKeys.Token] = ["token", "access token", "bearer"],
@@ -103,8 +100,6 @@ public static class CsvMapper
         targets.Add(new ImportTarget(Space, "空间分类"));
         targets.Add(new ImportTarget(Tags, "账号标签（逗号或分号分隔）"));
         targets.Add(new ImportTarget(Favorite, "收藏（是/否）"));
-        targets.Add(new ImportTarget(CustomText, "自定义文本字段（以列名为字段名）"));
-        targets.Add(new ImportTarget(CustomSecret, "自定义敏感字段（以列名为字段名）"));
         return targets;
     }
 
@@ -120,7 +115,7 @@ public static class CsvMapper
             }
         }
 
-        return normalized.Length == 0 ? Ignore : CustomText;
+        return Ignore;
     }
 
     public static IReadOnlyList<string> GuessAll(IReadOnlyList<string> headers, VaultItemKind kind)
@@ -132,7 +127,7 @@ public static class CsvMapper
             var guess = Guess(header, kind);
             if (!IsRepeatable(guess) && !used.Add(guess))
             {
-                guess = CustomText;
+                guess = Ignore;
             }
 
             result.Add(guess);
@@ -156,20 +151,9 @@ public static class CsvMapper
             {
                 return $"第 {i + 1} 列与其他列映射到了同一个字段。";
             }
-
-            if (target is CustomText or CustomSecret && headers[i].Trim().Length == 0)
-            {
-                return $"第 {i + 1} 列没有列名，无法作为自定义字段。";
-            }
         }
 
-        var customNames = headers.Where((_, i) => targets[i] is CustomText or CustomSecret).Select(name => name.Trim());
-        if (customNames.GroupBy(name => name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1) is { } duplicate)
-        {
-            return $"自定义字段「{duplicate.Key}」重复。";
-        }
-
-        return used.Count == 0 && !targets.Any(target => target is CustomText or CustomSecret) ? "请至少映射一列。" : null;
+        return used.Count == 0 ? "请至少映射一列。" : null;
     }
 
     public static ImportPlan Build(CsvTable table, VaultItemKind kind, IReadOnlyList<string> targets, IReadOnlySet<int> ignoredRows)
@@ -209,18 +193,17 @@ public static class CsvMapper
         {
             var value = column < row.Count ? row[column] : "";
             var target = targets[column];
-            if (target == Ignore || (value.Length == 0 && target is not (CustomText or CustomSecret)))
+            if (target == Ignore || value.Length == 0)
             {
                 continue;
             }
 
-            if (Apply(entry, target, table.Headers[column].Trim(), value) is { } fieldError)
+            if (Apply(entry, target, value) is { } fieldError)
             {
                 return new ImportRowResult(index + 2, null, fieldError);
             }
         }
 
-        entry.CustomFields.RemoveAll(field => field.Value.Length == 0);
         ItemTemplates.ApplyDefaults(entry);
         if (entry.Name.Trim().Length == 0)
         {
@@ -241,7 +224,7 @@ public static class CsvMapper
         return error is null ? new ImportRowResult(index + 2, entry, null) : new ImportRowResult(index + 2, null, error);
     }
 
-    private static string? Apply(VaultEntry entry, string target, string header, string value)
+    private static string? Apply(VaultEntry entry, string target, string value)
     {
         switch (target)
         {
@@ -264,9 +247,6 @@ public static class CsvMapper
                 entry.Nodes = value.Split([',', ';', '，', '；', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Select(ParseNode)
                     .ToList();
-                return null;
-            case CustomText or CustomSecret:
-                entry.CustomFields.Add(new VaultCustomField { Name = header, Value = value, Sensitive = target == CustomSecret });
                 return null;
         }
 
@@ -368,7 +348,7 @@ public static class CsvMapper
         return entry;
     }
 
-    private static bool IsRepeatable(string target) => target is Ignore or CustomText or CustomSecret;
+    private static bool IsRepeatable(string target) => target == Ignore;
 
     private static bool Same(string left, string right) =>
         string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);

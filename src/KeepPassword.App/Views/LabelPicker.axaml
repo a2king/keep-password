@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="KeepPassword.App.Views.LabelPicker">
+  <UserControl.Styles>
+    <Style Selector="Border.picker-box">
+      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="Cursor" Value="IBeam" />
+    </Style>
+    <Style Selector="Border.picker-box:pointerover">
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.SelectionBorder}" />
+    </Style>
+    <Style Selector="Border.picker-box:focus-within">
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />
+    </Style>
+
+    <Style Selector="TextBox.picker-input">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Padding" Value="4,4" />
+    </Style>
+    <Style Selector="TextBox.picker-input:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="TextBox.picker-input:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <Style Selector="Border.picker-chip">
+      <Setter Property="Background" Value="{DynamicResource Kp.AccentSoft}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.SelectionBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="10,2,4,2" />
+      <Setter Property="Margin" Value="0,2,6,2" />
+    </Style>
+    <Style Selector="Button.picker-chip-remove">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Accent}" />
+      <Setter Property="Padding" Value="5,0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="Button.picker-chip-remove /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.picker-chip-remove:pointerover /template/ ContentPresenter">
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Danger}" />
+    </Style>
+
+    <Style Selector="Button.picker-option">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="Button.picker-option /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.picker-option:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+    </Style>
+    <Style Selector="Button.picker-option.highlight /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+    </Style>
+    <Style Selector="Button.picker-option.selected">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+  </UserControl.Styles>
+
+  <Panel>
+    <Border x:Name="Box" Classes="picker-box">
+      <DockPanel>
+        <WrapPanel x:Name="Chips" DockPanel.Dock="Top" IsVisible="False" Margin="0,2,0,0" />
+        <Grid ColumnDefinitions="Auto,*">
+          <PathIcon x:Name="Glyph" Data="{StaticResource Icon.Tag}" Width="13" Height="13" Margin="4,0,2,0" Foreground="{DynamicResource Kp.TextMuted}" VerticalAlignment="Center" />
+          <TextBox x:Name="Input" Grid.Column="1" Classes="picker-input" />
+        </Grid>
+      </DockPanel>
+    </Border>
+
+    <Popup x:Name="Dropdown"
+           PlacementTarget="{Binding #Box}"
+           Placement="BottomEdgeAlignedLeft"
+           VerticalOffset="4"
+           IsLightDismissEnabled="True"
+           OverlayInputPassThroughElement="{Binding #Box}">
+      <Border Background="{DynamicResource Kp.Surface}"
+              BorderBrush="{DynamicResource Kp.Border}"
+              BorderThickness="1"
+              CornerRadius="8"
+              Padding="4"
+              BoxShadow="0 6 16 0 #26000000">
+        <ScrollViewer MaxHeight="240">
+          <StackPanel x:Name="Options" Spacing="1" />
+        </ScrollViewer>
+      </Border>
+    </Popup>
+  </Panel>
+</UserControl>

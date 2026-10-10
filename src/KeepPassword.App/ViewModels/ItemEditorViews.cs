@@ -1,3 +1,4 @@
+using Avalonia.Media;
 using KeepPassword.Core.Vault;
 
 namespace KeepPassword.App.ViewModels;
@@ -20,6 +21,8 @@ public abstract class SecretFieldView : ViewModelBase
     public bool Sensitive { get; }
 
     public bool Multiline { get; }
+
+    public TextWrapping Wrapping => Multiline ? TextWrapping.Wrap : TextWrapping.NoWrap;
 
     public string Value
     {
@@ -55,7 +58,7 @@ public abstract class SecretFieldView : ViewModelBase
 
     public bool ShowMasked => !ShowEditor;
 
-    public string MaskedText => $"已隐藏（{Value.Length} 个字符），点「显示」后可查看或编辑";
+    public string MaskedText => $"已隐藏（{Value.Length} 个字符），点眼睛图标后可查看或编辑";
 
     public string RevealText => Revealed ? "隐藏" : "显示";
 

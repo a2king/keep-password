@@ -643,7 +643,14 @@ public sealed class VaultStore
                 : entry.Nodes.Select(node => new NodeDto { Name = node.Name, Role = node.Role, Host = node.Host, Port = node.Port, Service = node.Service }).ToList()
         };
 
-        public VaultEntry ToEntry() => new()
+        public VaultEntry ToEntry()
+        {
+            var entry = Build();
+            ItemTemplates.MigrateLegacyFields(entry);
+            return entry;
+        }
+
+        private VaultEntry Build() => new()
         {
             Id = Id == Guid.Empty ? Guid.NewGuid() : Id,
             Kind = VaultItemKinds.Parse(Kind),

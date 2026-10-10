@@ -18,9 +18,7 @@ public sealed class ImportWizardWindow : Window
         CsvMapper.FieldPrefix + FieldKeys.Totp,
         CsvMapper.FieldPrefix + FieldKeys.ApiKey,
         CsvMapper.FieldPrefix + FieldKeys.Secret,
-        CsvMapper.FieldPrefix + FieldKeys.Token,
-        CsvMapper.FieldPrefix + FieldKeys.Connection,
-        CsvMapper.CustomSecret
+        CsvMapper.FieldPrefix + FieldKeys.Token
     ];
 
     private readonly CsvTable _table;

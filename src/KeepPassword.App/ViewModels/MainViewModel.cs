@@ -14,6 +14,8 @@ public sealed class FilterItemView : ViewModelBase
 
     public required string Name { get; init; }
 
+    public bool IsFavorite => Key == MainViewModel.FavoriteKey;
+
     public int Count
     {
         get => _count;
@@ -100,10 +102,6 @@ public sealed class MainViewModel : ViewModelBase
     private string _kindFilter = AllKey;
     private string _editSpace = "";
     private List<string> _editTags = [];
-    private string _newSpaceText = "";
-    private string _newTagText = "";
-    private string _newFieldName = "";
-    private bool _newFieldSensitive;
     private string _search = "";
     private VaultEntry _draft = new();
     private string _name = "";
@@ -169,23 +167,7 @@ public sealed class MainViewModel : ViewModelBase
 
     public IReadOnlyList<LabelChipView> TagChoices { get; private set; } = [];
 
-    public bool HasSpaceChoices => SpaceChoices.Count > 0;
-
-    public bool HasTagChoices => TagChoices.Count > 0;
-
     public string EntryCountText => $"{Entries.Count} 个条目";
-
-    public string NewSpaceText
-    {
-        get => _newSpaceText;
-        set => Set(ref _newSpaceText, value);
-    }
-
-    public string NewTagText
-    {
-        get => _newTagText;
-        set => Set(ref _newTagText, value);
-    }
 
     public bool HasDetail
     {
@@ -229,25 +211,13 @@ public sealed class MainViewModel : ViewModelBase
 
     public bool Favorite => _draft.Favorite;
 
-    public string FavoriteText => _draft.Favorite ? "★ 已收藏" : "☆ 收藏";
+    public string FavoriteText => _draft.Favorite ? "取消收藏" : "收藏";
 
     public IReadOnlyList<FieldEditorView> PresetFields { get; private set; } = [];
 
     public ObservableCollection<CustomFieldEditorView> CustomFields { get; } = [];
 
     public ObservableCollection<NodeEditorView> Nodes { get; } = [];
-
-    public string NewFieldName
-    {
-        get => _newFieldName;
-        set => Set(ref _newFieldName, value);
-    }
-
-    public bool NewFieldSensitive
-    {
-        get => _newFieldSensitive;
-        set => Set(ref _newFieldSensitive, value);
-    }
 
     public bool HasCustomFields => CustomFields.Count > 0;
 
@@ -346,30 +316,6 @@ public sealed class MainViewModel : ViewModelBase
             OnPropertyChanged();
         }
     }
-
-    public bool ShowConnection => _draft.Kind == VaultItemKind.Database;
-
-    public string ConnectionPreview
-    {
-        get
-        {
-            if (_draft.Field(FieldKeys.Connection).Trim().Length > 0)
-            {
-                return "使用上方填写的自定义连接字符串";
-            }
-
-            var masked = _draft.Clone();
-            if (masked.Password.Length > 0)
-            {
-                masked.Password = "******";
-            }
-
-            var text = ItemTemplates.ConnectionString(masked);
-            return text.Length == 0 ? "填写主机等字段后自动生成" : text;
-        }
-    }
-
-    public string ConnectionString => ItemTemplates.ConnectionString(_draft);
 
     public bool ShowSshInfo => _draft.Kind == VaultItemKind.SshKey;
 
@@ -508,36 +454,6 @@ public sealed class MainViewModel : ViewModelBase
 
         Refresh();
         MarkSelected(_draft.Id);
-        return null;
-    }
-
-    public string? AddCustomField()
-    {
-        var name = NewFieldName.Trim();
-        if (name.Length == 0)
-        {
-            return "请填写字段名称。";
-        }
-
-        if (name.Length > VaultCustomField.MaxNameLength)
-        {
-            return $"字段名称最多 {VaultCustomField.MaxNameLength} 个字符。";
-        }
-
-        if (CustomFields.Any(field => string.Equals(field.Name, name, StringComparison.OrdinalIgnoreCase)))
-        {
-            return $"字段「{name}」已存在。";
-        }
-
-        if (CustomFields.Count >= VaultItemRules.MaxCustomFields)
-        {
-            return $"自定义字段最多 {VaultItemRules.MaxCustomFields} 个。";
-        }
-
-        CustomFields.Add(new CustomFieldEditorView(name, "", NewFieldSensitive, OnFieldChanged));
-        NewFieldName = "";
-        NewFieldSensitive = false;
-        OnPropertyChanged(nameof(HasCustomFields));
         return null;
     }
 
@@ -776,24 +692,22 @@ public sealed class MainViewModel : ViewModelBase
         BuildChoices();
     }
 
-    public string? AddSpaceChoice()
+    public string? AddSpaceChoice(string text)
     {
-        var name = LabelName.Normalize(NewSpaceText);
+        var name = LabelName.Normalize(text);
         if (name.Length == 0)
         {
             return "请填写空间分类名称。";
         }
 
-        name = Known(_session.Spaces, _pendingSpaces, name);
-        _editSpace = name;
-        NewSpaceText = "";
+        _editSpace = Known(_session.Spaces, _pendingSpaces, name);
         BuildChoices();
         return null;
     }
 
-    public string? AddTagChoice()
+    public string? AddTagChoice(string text)
     {
-        var name = LabelName.Normalize(NewTagText);
+        var name = LabelName.Normalize(text);
         if (name.Length == 0)
         {
             return "请填写账号标签名称。";
@@ -805,7 +719,6 @@ public sealed class MainViewModel : ViewModelBase
             _editTags.Add(name);
         }
 
-        NewTagText = "";
         BuildChoices();
         return null;
     }
@@ -936,7 +849,7 @@ public sealed class MainViewModel : ViewModelBase
         var kindRows = new List<(string Key, string Name, int Count)>
         {
             (AllKey, "全部类型", inSpaceTag),
-            (FavoriteKey, "★ 收藏", favorites)
+            (FavoriteKey, "收藏", favorites)
         };
         kindRows.AddRange(VaultItemKinds.All.Select(kind => (VaultItemKinds.Code(kind), VaultItemKinds.DisplayName(kind), kindCounts.GetValueOrDefault(kind))));
 
@@ -1104,8 +1017,6 @@ public sealed class MainViewModel : ViewModelBase
             .ToList();
         OnPropertyChanged(nameof(SpaceChoices));
         OnPropertyChanged(nameof(TagChoices));
-        OnPropertyChanged(nameof(HasSpaceChoices));
-        OnPropertyChanged(nameof(HasTagChoices));
     }
 
     private void Apply(VaultEntry entry)
@@ -1117,10 +1028,6 @@ public sealed class MainViewModel : ViewModelBase
         _editTags = entry.Tags.ToList();
         _pendingSpaces.Clear();
         _pendingTags.Clear();
-        NewSpaceText = "";
-        NewTagText = "";
-        NewFieldName = "";
-        NewFieldSensitive = false;
         CustomFields.Clear();
         foreach (var field in entry.CustomFields)
         {
@@ -1166,8 +1073,6 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(UsePasswordAuth));
         OnPropertyChanged(nameof(ShowKeyPicker));
         OnPropertyChanged(nameof(SelectedSshKey));
-        OnPropertyChanged(nameof(ShowConnection));
-        OnPropertyChanged(nameof(ConnectionPreview));
         OnPropertyChanged(nameof(ShowSshInfo));
         OnPropertyChanged(nameof(SshReferences));
         OnPropertyChanged(nameof(ShowNodes));
@@ -1192,11 +1097,6 @@ public sealed class MainViewModel : ViewModelBase
             case FieldKeys.Totp:
                 RefreshTotp();
                 break;
-        }
-
-        if (ShowConnection)
-        {
-            OnPropertyChanged(nameof(ConnectionPreview));
         }
     }
 
@@ -1233,9 +1133,6 @@ public sealed class MainViewModel : ViewModelBase
         _editTags = [];
         _pendingSpaces.Clear();
         _pendingTags.Clear();
-        NewSpaceText = "";
-        NewTagText = "";
-        NewFieldName = "";
         CustomFields.Clear();
         Nodes.Clear();
         RebuildPresetFields();

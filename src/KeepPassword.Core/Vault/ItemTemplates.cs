@@ -203,14 +203,12 @@ public static class ItemTemplates
 
     private static IReadOnlyList<FieldSpec> DatabaseFields(string driver)
     {
-        var connection = new FieldSpec(FieldKeys.Connection, "自定义连接字符串", Sensitive: true, Placeholder: "留空则按上方字段自动生成");
         return driver switch
         {
             "sqlite" =>
             [
                 new(FieldKeys.Database, "数据库文件", Placeholder: @"C:\data\app.db"),
-                new(FieldKeys.Password, "密码（可选）", Sensitive: true),
-                connection
+                new(FieldKeys.Password, "密码（可选）", Sensitive: true)
             ],
             "redis" =>
             [
@@ -218,24 +216,21 @@ public static class ItemTemplates
                 new(FieldKeys.Port, "端口"),
                 new(FieldKeys.Database, "DB 编号", Placeholder: "0"),
                 new(FieldKeys.Username, "用户名（可选）"),
-                new(FieldKeys.Password, "密码", Sensitive: true),
-                connection
+                new(FieldKeys.Password, "密码", Sensitive: true)
             ],
             "elasticsearch" =>
             [
                 new(FieldKeys.Host, "主机 / IP"),
                 new(FieldKeys.Port, "端口"),
                 new(FieldKeys.Username, "用户名"),
-                new(FieldKeys.Password, "密码", Sensitive: true),
-                connection
+                new(FieldKeys.Password, "密码", Sensitive: true)
             ],
             "oss" =>
             [
                 new(FieldKeys.Host, "Endpoint", Placeholder: "oss-cn-hangzhou.aliyuncs.com"),
                 new(FieldKeys.Database, "Bucket"),
                 new(FieldKeys.Username, "AccessKey ID"),
-                new(FieldKeys.Password, "AccessKey Secret", Sensitive: true),
-                connection
+                new(FieldKeys.Password, "AccessKey Secret", Sensitive: true)
             ],
             _ =>
             [
@@ -243,74 +238,34 @@ public static class ItemTemplates
                 new(FieldKeys.Port, "端口"),
                 new(FieldKeys.Database, "数据库名"),
                 new(FieldKeys.Username, "用户名"),
-                new(FieldKeys.Password, "密码", Sensitive: true),
-                connection
+                new(FieldKeys.Password, "密码", Sensitive: true)
             ]
         };
     }
 
-    public static string ConnectionString(VaultEntry entry)
+    public const string LegacyConnectionFieldName = "连接字符串";
+
+    public static void MigrateLegacyFields(VaultEntry entry)
     {
-        if (entry.Kind != VaultItemKind.Database)
+        var legacy = entry.Field(FieldKeys.Connection);
+        if (legacy.Length == 0)
         {
-            return "";
+            return;
         }
 
-        var custom = entry.Field(FieldKeys.Connection).Trim();
-        if (custom.Length > 0)
+        entry.Fields.Remove(FieldKeys.Connection);
+        if (legacy.Trim().Length == 0)
         {
-            return custom;
+            return;
         }
 
-        var driver = Driver(entry.Field(FieldKeys.Driver));
-        var host = entry.Field(FieldKeys.Host).Trim();
-        var port = entry.Field(FieldKeys.Port).Trim();
-        if (port.Length == 0)
+        var name = LegacyConnectionFieldName;
+        for (var i = 2; entry.CustomFields.Any(field => string.Equals(field.Name, name, StringComparison.OrdinalIgnoreCase)); i++)
         {
-            port = driver.DefaultPort;
+            name = $"{LegacyConnectionFieldName} {i}";
         }
 
-        var database = entry.Field(FieldKeys.Database).Trim();
-        var user = entry.Username;
-        var password = entry.Password;
-        if (driver.Code == "sqlite")
-        {
-            if (database.Length == 0)
-            {
-                return "";
-            }
-
-            return password.Length == 0 ? $"Data Source={database}" : $"Data Source={database};Password={password}";
-        }
-
-        if (host.Length == 0)
-        {
-            return "";
-        }
-
-        var address = port.Length == 0 ? host : $"{host}:{port}";
-        return driver.Code switch
-        {
-            "sqlserver" => $"Server={host}{(port.Length == 0 ? "" : "," + port)};Database={database};User Id={user};Password={password};TrustServerCertificate=True",
-            "oss" => database.Length == 0 ? $"https://{host}" : $"https://{database}.{host}",
-            "elasticsearch" => $"https://{Credentials(user, password)}{address}",
-            "postgresql" => $"postgresql://{Credentials(user, password)}{address}/{database}",
-            "redis" => $"redis://{Credentials(user, password)}{address}/{database}",
-            "mongodb" => $"mongodb://{Credentials(user, password)}{address}/{database}",
-            "clickhouse" => $"clickhouse://{Credentials(user, password)}{address}/{database}",
-            _ => $"mysql://{Credentials(user, password)}{address}/{database}"
-        };
-    }
-
-    private static string Credentials(string user, string password)
-    {
-        if (user.Length == 0 && password.Length == 0)
-        {
-            return "";
-        }
-
-        var encodedUser = Uri.EscapeDataString(user);
-        return password.Length == 0 ? encodedUser + "@" : $"{encodedUser}:{Uri.EscapeDataString(password)}@";
+        entry.CustomFields.Add(new VaultCustomField { Name = name, Value = legacy.Trim(), Sensitive = true });
     }
 
     public static string Summary(VaultEntry entry)

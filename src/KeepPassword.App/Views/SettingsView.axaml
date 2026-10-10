@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:KeepPassword.App.Views"
              x:Class="KeepPassword.App.Views.SettingsView"
              Background="Transparent">
   <UserControl.Styles>
@@ -24,109 +25,147 @@
       <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
       <Setter Property="BoxShadow" Value="0 2 6 0 #18000000" />
     </Style>
+    <Style Selector="Border.section">
+      <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="20,18" />
+    </Style>
+    <Style Selector="Border.section TextBlock.h2">
+      <Setter Property="FontSize" Value="15" />
+    </Style>
   </UserControl.Styles>
 
-  <ScrollViewer x:Name="Scroller">
-    <Border Classes="card" Margin="28,24" MaxWidth="760">
-      <StackPanel Spacing="0">
-        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,16">
-          <Border Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1">
-            <Image Source="/Assets/logo.png" Width="28" Height="28" HorizontalAlignment="Center" VerticalAlignment="Center" />
-          </Border>
-          <TextBlock Text="系统与偏好设置" Classes="h1" VerticalAlignment="Center" FontSize="22" />
-        </StackPanel>
+  <DockPanel Margin="28,24" MaxWidth="760">
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,18">
+      <Border Width="36" Height="36" CornerRadius="10" Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1">
+        <PathIcon Data="{StaticResource Icon.Settings}" Width="18" Height="18" Foreground="{DynamicResource Kp.Accent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+      <StackPanel VerticalAlignment="Center" Spacing="2">
+        <TextBlock Text="设置" Classes="h1" FontSize="20" />
+        <TextBlock Text="外观、分类标签、存储位置、密钥与备份。" Classes="muted" />
+      </StackPanel>
+    </StackPanel>
+
+    <ScrollViewer x:Name="Scroller">
+      <StackPanel Spacing="14" Margin="0,0,14,8">
 
         <!-- 外观与主题设置 -->
-        <TextBlock Text="外观与色彩主题" Classes="h2" Margin="0,6,0,4" />
-        <TextBlock Text="选择您偏好的界面风格，支持深色极客模式与浅色现代模式。" Classes="muted" Margin="0,0,0,10" />
-        <Border Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1" CornerRadius="10" Padding="4" Margin="0,0,0,20">
-          <Grid ColumnDefinitions="*,*,*">
-            <Button x:Name="ThemeLightBtn" Classes="theme-segment" Content="☀️ 浅色模式" Click="OnThemeLight" />
-            <Button x:Name="ThemeDarkBtn" Grid.Column="1" Classes="theme-segment" Content="🌙 深色极客" Click="OnThemeDark" Margin="4,0" />
-            <Button x:Name="ThemeSystemBtn" Grid.Column="2" Classes="theme-segment" Content="💻 跟随系统" Click="OnThemeSystem" />
-          </Grid>
+        <Border Classes="section">
+          <StackPanel>
+            <TextBlock Text="外观与色彩主题" Classes="h2" Margin="0,0,0,4" />
+            <TextBlock Text="选择偏好的界面风格。" Classes="muted" Margin="0,0,0,12" />
+            <Border Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1" CornerRadius="10" Padding="4">
+              <Grid ColumnDefinitions="*,*,*">
+                <Button x:Name="ThemeLightBtn" Classes="theme-segment" Content="浅色" Click="OnThemeLight" />
+                <Button x:Name="ThemeDarkBtn" Grid.Column="1" Classes="theme-segment" Content="深色" Click="OnThemeDark" Margin="4,0" />
+                <Button x:Name="ThemeSystemBtn" Grid.Column="2" Classes="theme-segment" Content="跟随系统" Click="OnThemeSystem" />
+              </Grid>
+            </Border>
+          </StackPanel>
         </Border>
 
         <!-- 空间分类与账号标签 -->
-        <TextBlock Text="空间分类与账号标签" Classes="h2" Margin="0,8,0,4" />
-        <TextBlock Text="可以新增、删除或统一修改名称。改名会同步到所有使用它的账号；改成已有名称会合并。删除空间后账号变为未分类，删除标签后账号去掉该标签。"
-                   TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
-        <TextBlock Text="空间分类" Classes="label" />
-        <StackPanel x:Name="SpaceList" Spacing="6" />
-        <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
-          <TextBox x:Name="NewSpaceBox" Watermark="新增空间分类" />
-          <Button Grid.Column="1" Classes="soft" Content="新增" Margin="8,0,0,0" Click="OnAddSpace" />
-        </Grid>
-        <TextBlock Text="账号标签" Classes="label" Margin="0,16,0,6" />
-        <StackPanel x:Name="TagList" Spacing="6" />
-        <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
-          <TextBox x:Name="NewTagBox" Watermark="新增账号标签" />
-          <Button Grid.Column="1" Classes="soft" Content="新增" Margin="8,0,0,0" Click="OnAddTag" />
-        </Grid>
-        <TextBlock x:Name="LabelStatus" Classes="muted" TextWrapping="Wrap" Margin="0,6,0,20" />
+        <Border Classes="section">
+          <StackPanel>
+            <TextBlock Text="空间分类与账号标签" Classes="h2" Margin="0,0,0,4" />
+            <TextBlock Text="可以新增、删除或统一修改名称。改名会同步到所有使用它的账号；改成已有名称会合并。删除空间后账号变为未分类，删除标签后账号去掉该标签。"
+                       TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
+            <TextBlock Text="空间分类" Classes="label" />
+            <StackPanel x:Name="SpaceList" Spacing="6" />
+            <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+              <TextBox x:Name="NewSpaceBox" Watermark="新增空间分类" />
+              <Button Grid.Column="1" Classes="soft" Content="新增" Margin="8,0,0,0" Click="OnAddSpace" />
+            </Grid>
+            <TextBlock Text="账号标签" Classes="label" Margin="0,16,0,6" />
+            <StackPanel x:Name="TagList" Spacing="6" />
+            <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+              <TextBox x:Name="NewTagBox" Watermark="新增账号标签" />
+              <Button Grid.Column="1" Classes="soft" Content="新增" Margin="8,0,0,0" Click="OnAddTag" />
+            </Grid>
+            <TextBlock x:Name="LabelStatus" Classes="muted" TextWrapping="Wrap" Margin="0,6,0,0" />
+          </StackPanel>
+        </Border>
 
         <!-- 缓存目录 -->
-        <TextBlock Text="缓存目录" Classes="h2" Margin="0,8,0,4" />
-        <TextBlock Text="切换后会把当前目录里的所有保险库文件迁移到新目录，然后清理原目录。"
-                   TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
-        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,0,0,0">
-          <TextBox x:Name="DirectoryBox" Classes="mono" />
-          <Button Grid.Column="1" Classes="soft" Content="浏览…" Click="OnBrowseDirectory" />
-        </Grid>
-        <Button Classes="ghost" Content="迁移并切换到此目录" Margin="0,6,0,0" HorizontalAlignment="Left" Click="OnSwitchDirectory" />
-        <TextBlock x:Name="DirectoryStatus" Classes="muted" TextWrapping="Wrap" Margin="0,4,0,20" />
+        <Border Classes="section">
+          <StackPanel>
+            <TextBlock Text="缓存目录" Classes="h2" Margin="0,0,0,4" />
+            <TextBlock Text="切换后会把当前目录里的所有保险库文件迁移到新目录，然后清理原目录。"
+                       TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <TextBox x:Name="DirectoryBox" Classes="mono" />
+              <Button Grid.Column="1" Classes="soft" Content="浏览…" Click="OnBrowseDirectory" />
+            </Grid>
+            <Button Classes="ghost" Content="迁移并切换到此目录" Margin="0,6,0,0" HorizontalAlignment="Left" Click="OnSwitchDirectory" />
+            <TextBlock x:Name="DirectoryStatus" Classes="muted" TextWrapping="Wrap" Margin="0,4,0,0" />
+          </StackPanel>
+        </Border>
 
         <!-- 修改短密钥 -->
-        <TextBlock Text="修改短密钥" Classes="h2" Margin="0,0,0,4" />
-        <TextBlock Text="提交前必须验证当前主密码。短密钥仅用于自动填入确认，更新后主密码和条目不变。"
-                   TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
-        <TextBlock x:Name="AccountText" Classes="muted" Margin="0,0,0,4" FontWeight="SemiBold" />
-        <TextBlock Text="新短密钥" Classes="label" />
-        <TextBox x:Name="NewKeyBox" PasswordChar="•" Classes="mono" FontSize="15" />
-        <TextBlock Text="确认新短密钥" Classes="label" />
-        <TextBox x:Name="ConfirmBox" PasswordChar="•" Classes="mono" FontSize="15" />
-        <TextBlock Text="当前主密码" Classes="label" />
-        <TextBox x:Name="MasterBox" PasswordChar="•" Classes="mono" FontSize="15" />
-        <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,10,0,0" IsVisible="False" x:Name="ErrorBox">
-          <TextBlock x:Name="ErrorText" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
+        <Border Classes="section">
+          <StackPanel>
+            <TextBlock Text="修改短密钥" Classes="h2" Margin="0,0,0,4" />
+            <TextBlock Text="提交前必须验证当前主密码。短密钥仅用于自动填入确认，更新后主密码和条目不变。"
+                       TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
+            <TextBlock x:Name="AccountText" Classes="muted" Margin="0,0,0,4" FontWeight="SemiBold" />
+            <TextBlock Text="新短密钥" Classes="label" />
+            <TextBox x:Name="NewKeyBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
+            <TextBlock Text="确认新短密钥" Classes="label" />
+            <TextBox x:Name="ConfirmBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
+            <TextBlock Text="当前主密码" Classes="label" />
+            <TextBox x:Name="MasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
+            <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,10,0,0" IsVisible="False" x:Name="ErrorBox">
+              <TextBlock x:Name="ErrorText" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
+            </Border>
+            <TextBlock x:Name="BusyText" Text="正在验证主密码…" Classes="muted" Margin="0,8,0,0" IsVisible="False" />
+            <TextBlock x:Name="KeyStatus" Classes="muted" Margin="0,8,0,0" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
+              <Button Classes="ghost" Content="清空" Click="OnCancel" />
+              <Button x:Name="SaveButton" Classes="accent" Content="保存短密钥" Click="OnSave" />
+            </StackPanel>
+          </StackPanel>
         </Border>
-        <TextBlock x:Name="BusyText" Text="正在验证主密码…" Classes="muted" Margin="0,8,0,0" IsVisible="False" />
-        <TextBlock x:Name="KeyStatus" Classes="muted" Margin="0,8,0,0" TextWrapping="Wrap" />
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,14,0,20">
-          <Button Classes="ghost" Content="清空" Click="OnCancel" />
-          <Button x:Name="SaveButton" Classes="accent" Content="保存短密钥" Click="OnSave" />
-        </StackPanel>
 
         <!-- 更换主密码 -->
-        <TextBlock Text="更换主密码" Classes="h2" Margin="0,0,0,4" />
-        <TextBlock Text="将使用新生成的强随机盐重新加密整个保险库。请务必牢记新密码。" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
-        <TextBlock Text="当前主密码" Classes="label" />
-        <TextBox x:Name="CurrentMasterBox" PasswordChar="•" Classes="mono" FontSize="15" />
-        <TextBlock Text="新主密码" Classes="label" />
-        <TextBox x:Name="NewMasterBox" PasswordChar="•" Classes="mono" FontSize="15" />
-        <TextBlock Text="确认新主密码" Classes="label" />
-        <TextBox x:Name="ConfirmMasterBox" PasswordChar="•" Classes="mono" FontSize="15" />
-        <Button Classes="accent" Content="更换主密码" HorizontalAlignment="Left" Margin="0,12,0,20" Click="OnChangeMaster" />
+        <Border Classes="section">
+          <StackPanel>
+            <TextBlock Text="更换主密码" Classes="h2" Margin="0,0,0,4" />
+            <TextBlock Text="将使用新生成的强随机盐重新加密整个保险库。请务必牢记新密码。" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
+            <TextBlock Text="当前主密码" Classes="label" />
+            <TextBox x:Name="CurrentMasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
+            <TextBlock Text="新主密码" Classes="label" />
+            <TextBox x:Name="NewMasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
+            <TextBlock Text="确认新主密码" Classes="label" />
+            <TextBox x:Name="ConfirmMasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
+            <Button Classes="accent" Content="更换主密码" HorizontalAlignment="Right" Margin="0,12,0,0" Click="OnChangeMaster" />
+          </StackPanel>
+        </Border>
 
         <!-- 加密备份 -->
-        <TextBlock Text="加密备份与还原" Classes="h2" Margin="0,0,0,4" />
-        <TextBlock Text="只导出经过强加密的保险库备份文件，不包含任何明文。还原时需要备份当时的主密码。"
-                   TextWrapping="Wrap" Classes="muted" Margin="0,0,0,10" />
-        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,6">
-          <Button Classes="soft" Click="OnExport">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <PathIcon Data="{StaticResource Icon.Vault}" Width="14" Height="14" />
-              <TextBlock Text="导出加密备份" VerticalAlignment="Center" />
+        <Border Classes="section">
+          <StackPanel>
+            <TextBlock Text="加密备份与还原" Classes="h2" Margin="0,0,0,4" />
+            <TextBlock Text="只导出经过强加密的保险库备份文件，不包含任何明文。还原时需要备份当时的主密码。"
+                       TextWrapping="Wrap" Classes="muted" Margin="0,0,0,10" />
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Button Classes="soft" Click="OnExport">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <PathIcon Data="{StaticResource Icon.Vault}" Width="14" Height="14" />
+                  <TextBlock Text="导出加密备份" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+              <Button Classes="soft" Click="OnImport">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <PathIcon Data="{StaticResource Icon.Refresh}" Width="14" Height="14" />
+                  <TextBlock Text="从备份还原…" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
             </StackPanel>
-          </Button>
-          <Button Classes="soft" Click="OnImport">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <PathIcon Data="{StaticResource Icon.Refresh}" Width="14" Height="14" />
-              <TextBlock Text="从备份还原…" VerticalAlignment="Center" />
-            </StackPanel>
-          </Button>
-        </StackPanel>
+          </StackPanel>
+        </Border>
       </StackPanel>
-    </Border>
-  </ScrollViewer>
+    </ScrollViewer>
+  </DockPanel>
 </UserControl>
