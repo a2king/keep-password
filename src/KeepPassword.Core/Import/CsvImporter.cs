@@ -5,11 +5,27 @@ namespace KeepPassword.Core.Import;
 
 public static class CsvImporter
 {
-    private static readonly string[] RequiredHeaders = ["name", "url", "username", "password", "note"];
+    public const int MaxCharacters = 8_000_000;
+    public const int MaxRows = 10_000;
+
+    private static readonly (string Key, string[] Aliases, bool Required)[] Columns =
+    [
+        ("name", ["name", "title"], true),
+        ("url", ["url", "website"], true),
+        ("username", ["username"], true),
+        ("password", ["password"], true),
+        ("note", ["note", "notes"], false),
+        ("otp", ["otpauth", "otp", "onetimepassword"], false)
+    ];
 
     public static IReadOnlyList<VaultEntry> Import(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
+        if (text.Length > MaxCharacters)
+        {
+            throw new FormatException("CSV 文件过大。");
+        }
+
         if (text.Length > 0 && text[0] == '\uFEFF')
         {
             text = text[1..];
@@ -25,6 +41,11 @@ public static class CsvImporter
         if (rows.Count == 0)
         {
             return [];
+        }
+
+        if (rows.Count > MaxRows)
+        {
+            throw new FormatException("CSV 行数超过上限。");
         }
 
         var columns = MapHeader(rows[0]);
@@ -44,7 +65,8 @@ public static class CsvImporter
                 Url = Field(row, columns, "url"),
                 Username = Field(row, columns, "username"),
                 Password = Field(row, columns, "password"),
-                Note = Field(row, columns, "note")
+                Note = Field(row, columns, "note"),
+                TotpSecret = TotpSecret(Field(row, columns, "otp"))
             });
         }
 
@@ -106,19 +128,63 @@ public static class CsvImporter
             }
         }
 
-        var missing = RequiredHeaders.Where(name => !map.ContainsKey(name)).ToList();
+        var resolved = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var missing = new List<string>();
+        foreach (var (key, aliases, required) in Columns)
+        {
+            var found = aliases.FirstOrDefault(map.ContainsKey);
+            if (found is null)
+            {
+                if (required)
+                {
+                    missing.Add(key);
+                }
+
+                continue;
+            }
+
+            resolved[key] = map[found];
+        }
+
         if (missing.Count > 0)
         {
             throw new FormatException("CSV 表头缺少列：" + string.Join("、", missing));
         }
 
-        return map;
+        return resolved;
+    }
+
+    private static string? TotpSecret(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var secretIndex = value.IndexOf("secret=", StringComparison.OrdinalIgnoreCase);
+        if (secretIndex < 0)
+        {
+            return value.Trim();
+        }
+
+        var secret = value[(secretIndex + "secret=".Length)..];
+        var end = secret.IndexOfAny(['&', ' ', '\t']);
+        if (end >= 0)
+        {
+            secret = secret[..end];
+        }
+
+        return string.IsNullOrWhiteSpace(secret) ? null : Uri.UnescapeDataString(secret);
     }
 
     private static string Field(IReadOnlyList<string> row, IReadOnlyDictionary<string, int> columns, string name)
     {
-        var index = columns[name];
-        return index < row.Count ? row[index] : "";
+        if (!columns.TryGetValue(name, out var index) || index >= row.Count)
+        {
+            return "";
+        }
+
+        return row[index];
     }
 
     private static List<List<string>> Parse(string text, char delimiter)

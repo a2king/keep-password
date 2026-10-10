@@ -7,7 +7,7 @@ namespace KeepPassword.Core.Messaging;
 public static class NativeMessagingDefaults
 {
     public const string HostName = "com.keeppassword.host";
-    public const int Port = 50731;
+    public const string SessionFileName = "autofill-session.json";
 }
 
 public sealed class AutofillResponse
@@ -62,7 +62,8 @@ public static class AutofillProtocol
         {
             Origin = AutofillOrigin.Browser,
             Url = dto.Url,
-            WindowTitle = dto.Title
+            WindowTitle = dto.Title,
+            ClientToken = dto.Token
         };
         return true;
     }
@@ -77,5 +78,7 @@ public static class AutofillProtocol
         public string? Url { get; set; }
 
         public string? Title { get; set; }
+
+        public string? Token { get; set; }
     }
 }

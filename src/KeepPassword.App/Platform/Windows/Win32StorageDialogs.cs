@@ -39,6 +39,39 @@ internal static class Win32StorageDialogs
         }
     }
 
+    public static string? PickSaveFile(nint owner, string title, string filter, string defaultName)
+    {
+        const int maxChars = 1024;
+        var fileBuffer = Marshal.AllocHGlobal(maxChars * 2);
+        var filterBuffer = AllocDoubleNullString(filter);
+        try
+        {
+            ZeroMemory(fileBuffer, maxChars * 2);
+            if (!string.IsNullOrWhiteSpace(defaultName))
+            {
+                var bytes = Encoding.Unicode.GetBytes(defaultName + "\0");
+                Marshal.Copy(bytes, 0, fileBuffer, Math.Min(bytes.Length, maxChars * 2));
+            }
+
+            var ofn = new OpenFileName
+            {
+                lStructSize = Marshal.SizeOf<OpenFileName>(),
+                hwndOwner = owner,
+                lpstrFilter = filterBuffer,
+                lpstrFile = fileBuffer,
+                nMaxFile = maxChars,
+                lpstrTitle = title,
+                Flags = OfnExplorer | OfnPathMustExist | OfnOverwritePrompt | OfnNoChangeDir | OfnEnableSizing
+            };
+            return GetSaveFileNameW(ref ofn) ? Marshal.PtrToStringUni(fileBuffer) : null;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(fileBuffer);
+            Marshal.FreeHGlobal(filterBuffer);
+        }
+    }
+
     public static string? PickFolder(nint owner, string title)
     {
         var displayName = Marshal.AllocHGlobal(260 * 2);
@@ -102,11 +135,15 @@ internal static class Win32StorageDialogs
     private const int OfnPathMustExist = 0x00000800;
     private const int OfnNoChangeDir = 0x00000008;
     private const int OfnEnableSizing = 0x00800000;
+    private const int OfnOverwritePrompt = 0x00000002;
     private const uint BifReturnOnlyFsDirs = 0x00000001;
     private const uint BifNewDialogStyle = 0x00000040;
 
     [DllImport("comdlg32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool GetOpenFileNameW(ref OpenFileName ofn);
+
+    [DllImport("comdlg32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool GetSaveFileNameW(ref OpenFileName ofn);
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr SHBrowseForFolderW(ref BrowseInfo lpbi);

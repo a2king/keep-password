@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
 using KeepPassword.Core.Vault;
 
@@ -32,6 +33,6 @@ public partial class TotpWindow : Window
             return;
         }
 
-        await clipboard.SetTextAsync(code);
+        await SecretClipboard.CopyAsync(clipboard, code);
     }
 }

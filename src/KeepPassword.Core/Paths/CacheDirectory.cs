@@ -176,6 +176,51 @@ public static class CacheDirectory
         }
     }
 
+    public static string GetTheme(string settingsFile)
+    {
+        if (!File.Exists(settingsFile))
+        {
+            return "System";
+        }
+
+        try
+        {
+            var settings = JsonSerializer.Deserialize<SettingsDto>(File.ReadAllText(settingsFile), Options);
+            return settings?.Theme is "Light" or "Dark" ? settings.Theme : "System";
+        }
+        catch (JsonException)
+        {
+            return "System";
+        }
+    }
+
+    public static void SetTheme(string settingsFile, string theme)
+    {
+        var folder = Path.GetDirectoryName(settingsFile);
+        if (!string.IsNullOrEmpty(folder))
+        {
+            Directory.CreateDirectory(folder);
+        }
+
+        SettingsDto dto;
+        try
+        {
+            dto = File.Exists(settingsFile)
+                ? JsonSerializer.Deserialize<SettingsDto>(File.ReadAllText(settingsFile), Options) ?? new SettingsDto()
+                : new SettingsDto();
+        }
+        catch
+        {
+            dto = new SettingsDto();
+        }
+
+        dto.Theme = theme is "Light" or "Dark" ? theme : "System";
+        var json = JsonSerializer.Serialize(dto, Options);
+        var temp = settingsFile + ".tmp";
+        File.WriteAllText(temp, json);
+        File.Move(temp, settingsFile, overwrite: true);
+    }
+
     private static void Write(string settingsFile, string directory)
     {
         var folder = Path.GetDirectoryName(settingsFile);
@@ -184,7 +229,20 @@ public static class CacheDirectory
             Directory.CreateDirectory(folder);
         }
 
-        var json = JsonSerializer.Serialize(new SettingsDto { Directory = directory }, Options);
+        SettingsDto dto;
+        try
+        {
+            dto = File.Exists(settingsFile)
+                ? JsonSerializer.Deserialize<SettingsDto>(File.ReadAllText(settingsFile), Options) ?? new SettingsDto()
+                : new SettingsDto();
+        }
+        catch
+        {
+            dto = new SettingsDto();
+        }
+
+        dto.Directory = directory;
+        var json = JsonSerializer.Serialize(dto, Options);
         var temp = settingsFile + ".tmp";
         File.WriteAllText(temp, json);
         File.Move(temp, settingsFile, overwrite: true);
@@ -226,5 +284,6 @@ public static class CacheDirectory
     private sealed class SettingsDto
     {
         public string? Directory { get; set; }
+        public string? Theme { get; set; }
     }
 }

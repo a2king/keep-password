@@ -14,7 +14,9 @@ public static class EntrySearch
                 Contains(entry.Name, needle)
                 || Contains(entry.Url, needle)
                 || Contains(entry.Username, needle)
-                || Contains(entry.Note, needle))
+                || Contains(entry.Note, needle)
+                || Contains(entry.Space, needle)
+                || entry.Tags.Any(tag => Contains(tag, needle)))
             .ToList();
     }
 

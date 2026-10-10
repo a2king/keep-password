@@ -2,39 +2,47 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:autofill="using:KeepPassword.Core.Autofill"
         x:Class="KeepPassword.App.Views.AutofillPromptWindow"
-        Title="填入账号"
-        Width="460"
-        Height="540"
+        Title="自动填入"
+        Width="480"
+        Height="560"
         CanResize="False"
         WindowStartupLocation="CenterScreen"
         Topmost="True"
-        Background="#151B2B"
+        Background="{DynamicResource Kp.Bg}"
         Icon="/Assets/logo.png">
   <Border Classes="card" Margin="20">
     <DockPanel>
       <StackPanel DockPanel.Dock="Top">
-        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,12">
-          <Image Source="/Assets/logo.png" Width="32" Height="32" />
-          <TextBlock Text="选择要填入的条目" Classes="h2" VerticalAlignment="Center" />
+        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,12">
+          <Border Width="36" Height="36" CornerRadius="8" Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1">
+            <Image Source="/Assets/logo.png" Width="26" Height="26" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <TextBlock Text="选择要填入的账号条目" Classes="h2" VerticalAlignment="Center" />
         </StackPanel>
         <TextBlock x:Name="ContextText" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,4" />
-        <TextBlock Text="即使刚刚解锁过，填入前也要再输入一次短密钥。" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,8" />
+        <TextBlock x:Name="TargetText" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,4" />
+        <TextBlock x:Name="EntryText" TextWrapping="Wrap" Margin="0,0,0,8" FontWeight="SemiBold" />
+        <TextBlock Text="确认目标与条目来源一致后输入短密钥以授权填入。" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,8" />
       </StackPanel>
+
       <StackPanel DockPanel.Dock="Bottom">
         <TextBlock Text="短密钥" Classes="label" />
-        <TextBox x:Name="ShortKeyBox" PasswordChar="•" />
-        <TextBlock x:Name="ErrorText" Foreground="#D14343" Margin="0,8,0,0" IsVisible="False" />
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,14,0,0">
+        <TextBox x:Name="ShortKeyBox" PasswordChar="•" Classes="mono" FontSize="15" />
+        <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,8,0,0" x:Name="ErrorBox" IsVisible="False">
+          <TextBlock x:Name="ErrorText" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
+        </Border>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,16,0,0">
           <Button Classes="ghost" Content="取消" Click="OnCancel" />
-          <Button Classes="accent" Content="填入" Click="OnFill" />
+          <Button Classes="accent" Content="授权填入" Click="OnFill" />
         </StackPanel>
       </StackPanel>
+
       <ListBox x:Name="MatchList" Margin="0,8">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="autofill:AutofillCandidate">
             <StackPanel Margin="2">
               <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-              <TextBlock Classes="muted">
+              <TextBlock Classes="muted mono" FontSize="12">
                 <Run Text="{Binding Username}" />
                 <Run Text=" · " />
                 <Run Text="{Binding Domain}" />

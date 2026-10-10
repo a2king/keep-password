@@ -16,6 +16,10 @@ public sealed class VaultEntry
 
     public string? TotpSecret { get; set; }
 
+    public string Space { get; set; } = "";
+
+    public List<string> Tags { get; set; } = [];
+
     public VaultEntry Clone() => new()
     {
         Id = Id,
@@ -24,6 +28,8 @@ public sealed class VaultEntry
         Username = Username,
         Password = Password,
         Note = Note,
-        TotpSecret = TotpSecret
+        TotpSecret = TotpSecret,
+        Space = Space,
+        Tags = Tags.ToList()
     };
 }

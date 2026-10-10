@@ -15,6 +15,10 @@ public sealed class AutofillRequest
     public string? Url { get; init; }
 
     public string? WindowTitle { get; init; }
+
+    public string? TargetProcess { get; init; }
+
+    public string? ClientToken { get; init; }
 }
 
 public sealed class AutofillCandidate
@@ -39,6 +43,10 @@ public sealed class DetectedPasswordField
     public nint PasswordHandle { get; init; }
 
     public nint UsernameHandle { get; init; }
+
+    public string ProcessName { get; init; } = "";
+
+    public bool IsElevated { get; init; }
 }
 
 public sealed class AutofillDecision

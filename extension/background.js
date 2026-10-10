@@ -37,3 +37,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   });
   return true;
 });
+
+function requestFill(tabId) {
+  if (!tabId) {
+    return;
+  }
+  chrome.tabs.sendMessage(tabId, { type: "fill-request" }, () => {
+    chrome.runtime.lastError;
+  });
+}
+
+chrome.action.onClicked.addListener((tab) => requestFill(tab.id));
+chrome.commands.onCommand.addListener((command) => {
+  if (command !== "fill-password") {
+    return;
+  }
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]) {
+      requestFill(tabs[0].id);
+    }
+  });
+});

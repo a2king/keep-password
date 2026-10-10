@@ -46,7 +46,22 @@ public class InstallOperationsTests
         File.WriteAllText(Path.Combine(cache, "vault.kpvault"), "vault");
 
         InstallOperations.Uninstall(install, deleteCache: false);
-        Assert.False(Directory.Exists(install));
+        if (OperatingSystem.IsWindows())
+        {
+            var removed = false;
+            for (var i = 0; i < 25 && !removed; i++)
+            {
+                Thread.Sleep(200);
+                removed = !Directory.Exists(install);
+            }
+
+            Assert.True(removed);
+        }
+        else
+        {
+            Assert.False(Directory.Exists(install));
+        }
+
         Assert.True(File.Exists(Path.Combine(cache, "vault.kpvault")));
     }
 }

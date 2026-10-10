@@ -40,6 +40,35 @@ public static class SafeStoragePickers
         }
     }
 
+    public static async Task<string?> PickSaveFileAsync(
+        TopLevel owner,
+        string title,
+        string defaultName,
+        IReadOnlyList<FilePickerFileType>? filters,
+        Action<bool>? pauseWatcher = null)
+    {
+        pauseWatcher?.Invoke(true);
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return await PickSaveFileWindowsAsync(owner, title, defaultName, filters);
+            }
+
+            var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = title,
+                SuggestedFileName = defaultName,
+                FileTypeChoices = filters
+            });
+            return file?.TryGetLocalPath();
+        }
+        finally
+        {
+            pauseWatcher?.Invoke(false);
+        }
+    }
+
     public static async Task<string?> PickFolderAsync(
         TopLevel owner,
         string title,
@@ -80,6 +109,22 @@ public static class SafeStoragePickers
         }
 
         return Task.FromResult(Win32StorageDialogs.PickOpenFile(TopLevelHandle(owner), title, ToWin32Filter(filters)));
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static Task<string?> PickSaveFileWindowsAsync(
+        TopLevel owner,
+        string title,
+        string defaultName,
+        IReadOnlyList<FilePickerFileType>? filters)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            return Dispatcher.UIThread.InvokeAsync(() =>
+                Win32StorageDialogs.PickSaveFile(TopLevelHandle(owner), title, ToWin32Filter(filters), defaultName)).GetTask();
+        }
+
+        return Task.FromResult(Win32StorageDialogs.PickSaveFile(TopLevelHandle(owner), title, ToWin32Filter(filters), defaultName));
     }
 
     [SupportedOSPlatform("windows")]

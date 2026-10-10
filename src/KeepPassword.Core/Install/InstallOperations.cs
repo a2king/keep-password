@@ -21,7 +21,7 @@ public static class InstallOperations
         for (var i = 0; i < entries.Count; i++)
         {
             var entry = entries[i];
-            var target = Path.Combine(destinationRoot, entry.FullName.Replace('/', Path.DirectorySeparatorChar));
+            var target = SafeEntryPath(destinationRoot, entry.FullName);
             var folder = Path.GetDirectoryName(target);
             if (!string.IsNullOrEmpty(folder))
             {
@@ -31,6 +31,30 @@ public static class InstallOperations
             entry.ExtractToFile(target, overwrite: true);
             progress?.Report(new InstallProgress((i + 1) * 50.0 / total, "正在解压 " + entry.Name));
         }
+    }
+
+    public static string SafeEntryPath(string destinationRoot, string entryName)
+    {
+        if (string.IsNullOrWhiteSpace(entryName))
+        {
+            throw new InvalidDataException("压缩包包含空路径。");
+        }
+
+        var normalized = entryName.Replace('\\', '/');
+        if (normalized.Contains("..", StringComparison.Ordinal) || Path.IsPathRooted(entryName) || normalized.StartsWith('/'))
+        {
+            throw new InvalidDataException("压缩包路径无效。");
+        }
+
+        var root = Path.GetFullPath(destinationRoot);
+        var target = Path.GetFullPath(Path.Combine(root, entryName.Replace('/', Path.DirectorySeparatorChar)));
+        var prefix = root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!target.StartsWith(prefix, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("压缩包路径无效。");
+        }
+
+        return target;
     }
 
     public static void InstallFromDirectory(

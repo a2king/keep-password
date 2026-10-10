@@ -74,6 +74,18 @@ public sealed class WindowsPasswordFieldDetector : IPasswordFieldDetector
 
         window.get_CurrentName(out var title);
         focused.get_CurrentNativeWindowHandle(out var passwordHandle);
+        WindowsProcessInfo.Query(processId, out var processName, out var elevated);
+        if (AutofillPolicy.IsExtensionBrowser(processName))
+        {
+            Release(focused);
+            if (!ReferenceEquals(window, focused))
+            {
+                Release(window);
+            }
+
+            return null;
+        }
+
         var username = FindUsername(automation, window, focused, out var usernameHandle);
         var fieldKey = passwordHandle != 0
             ? processId + ":" + passwordHandle
@@ -95,7 +107,9 @@ public sealed class WindowsPasswordFieldDetector : IPasswordFieldDetector
             WindowTitle = title ?? "",
             ProcessId = processId,
             PasswordHandle = passwordHandle,
-            UsernameHandle = usernameHandle
+            UsernameHandle = usernameHandle,
+            ProcessName = processName,
+            IsElevated = elevated
         };
     }
 

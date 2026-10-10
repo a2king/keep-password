@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      CODESIGN_CERT_PATH: ${{ secrets.CODESIGN_CERT_PATH }}
+      CODESIGN_CERT_PASSWORD: ${{ secrets.CODESIGN_CERT_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test
+        run: dotnet test KeepPassword.sln -c Release --nologo
+
+      - name: Vulnerable packages
+        run: |
+          dotnet list src/KeepPassword.Core/KeepPassword.Core.csproj package --vulnerable --include-transitive
+          dotnet list src/KeepPassword.App/KeepPassword.App.csproj package --vulnerable --include-transitive
+          dotnet list src/KeepPassword.NativeHost/KeepPassword.NativeHost.csproj package --vulnerable --include-transitive
+
+      - name: Publish Windows build
+        run: dotnet publish src/KeepPassword.App/KeepPassword.App.csproj -c Release -r win-x64 --self-contained true -o artifacts/app
+
+      - name: Verify published integrity hash
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Get-FileHash artifacts/app/KeepPassword.exe -Algorithm SHA256 | Format-List
+          $hash = (Get-FileHash artifacts/app/KeepPassword.exe -Algorithm SHA256).Hash
+          if ([string]::IsNullOrWhiteSpace($hash) -or $hash.Length -ne 64) { throw "完整性校验值无效。" }
+          Set-Content -Path artifacts/KeepPassword.exe.sha256 -Value $hash -Encoding ascii
+          $actual = (Get-FileHash artifacts/app/KeepPassword.exe -Algorithm SHA256).Hash
+          if ($actual -ne (Get-Content artifacts/KeepPassword.exe.sha256).Trim()) { throw "发布文件哈希不一致。" }
+
+      - name: Authenticode when a certificate is configured
+        if: ${{ env.CODESIGN_CERT_PATH != '' }}
+        shell: pwsh
+        run: |
+          if (-not (Test-Path $env:CODESIGN_CERT_PATH)) { throw "找不到签名证书。" }
+          $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($env:CODESIGN_CERT_PATH, $env:CODESIGN_CERT_PASSWORD)
+          Set-AuthenticodeSignature -FilePath artifacts/app/KeepPassword.exe -Certificate $cert | Out-Null
+          $signature = Get-AuthenticodeSignature artifacts/app/KeepPassword.exe
+          if ($signature.Status -eq 'NotSigned') { throw "签名未写入。" }

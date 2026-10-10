@@ -15,3 +15,11 @@ public sealed class CredentialRejectedException : Exception
     {
     }
 }
+
+public sealed class RecoveryFailedException : Exception
+{
+    public RecoveryFailedException()
+        : base("安全问题答案不正确。")
+    {
+    }
+}

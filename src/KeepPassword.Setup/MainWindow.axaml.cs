@@ -74,7 +74,7 @@ public partial class MainWindow : Window
 
             await Task.Run(() =>
             {
-                using var payload = OpenPayload();
+                using var payload = OpenVerifiedPayload();
                 var extract = Path.Combine(Path.GetTempPath(), "keep-password-setup-" + Guid.NewGuid().ToString("n"));
                 Directory.CreateDirectory(extract);
                 try
@@ -142,6 +142,25 @@ public partial class MainWindow : Window
         ProgressText.Text = message;
     }
 
+    private static Stream OpenVerifiedPayload()
+    {
+        var payload = OpenPayload();
+        var expected = ReadExpectedHash();
+        if (string.IsNullOrWhiteSpace(expected))
+        {
+            payload.Dispose();
+            throw new InvalidDataException("安装包缺少完整性校验值。");
+        }
+
+        var buffer = new MemoryStream();
+        payload.CopyTo(buffer);
+        payload.Dispose();
+        buffer.Position = 0;
+        PayloadIntegrity.Verify(buffer, expected);
+        buffer.Position = 0;
+        return buffer;
+    }
+
     private static Stream OpenPayload()
     {
         var assembly = Assembly.GetExecutingAssembly();
@@ -158,5 +177,19 @@ public partial class MainWindow : Window
         }
 
         throw new FileNotFoundException("安装包缺少 payload.zip。请使用官方发布的安装程序。");
+    }
+
+    private static string? ReadExpectedHash()
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        using var resource = assembly.GetManifestResourceStream("KeepPassword.Setup.payload.sha256");
+        if (resource is not null)
+        {
+            using var reader = new StreamReader(resource);
+            return reader.ReadToEnd();
+        }
+
+        var beside = Path.Combine(AppContext.BaseDirectory, "payload.sha256");
+        return File.Exists(beside) ? File.ReadAllText(beside) : null;
     }
 }

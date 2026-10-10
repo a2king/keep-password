@@ -16,6 +16,12 @@ public sealed class WindowsCredentialFiller : ICredentialFiller
             return false;
         }
 
+        WindowsProcessInfo.Query(field.ProcessId, out _, out var elevatedNow);
+        if (!AutofillPolicy.AllowAutoType(field.IsElevated || elevatedNow))
+        {
+            return false;
+        }
+
         try
         {
             IUIAutomationElement? passwordElement = null;
@@ -43,17 +49,7 @@ public sealed class WindowsCredentialFiller : ICredentialFiller
                 }
             }
 
-            var filled = false;
-            if (usernameElement is not null && username.Length > 0)
-            {
-                filled |= SetText(usernameElement, username);
-            }
-
-            if (passwordElement is not null && password.Length > 0)
-            {
-                filled |= SetText(passwordElement, password);
-            }
-
+            var filled = Type(usernameElement, passwordElement, username, password);
             if (releasePassword)
             {
                 Marshal.ReleaseComObject(passwordElement!);
@@ -72,24 +68,33 @@ public sealed class WindowsCredentialFiller : ICredentialFiller
         }
     }
 
-    private static bool SetText(IUIAutomationElement element, string text)
+    private static bool Type(IUIAutomationElement? usernameElement, IUIAutomationElement? passwordElement, string username, string password)
     {
-        if (element.GetCurrentPattern(UiaIds.ValuePattern, out var patternObject) >= 0
-            && patternObject is IUIAutomationValuePattern pattern)
+        var typed = false;
+        foreach (var step in AutofillPolicy.PlanAutoType(username, password))
         {
-            var wrote = pattern.SetValue(text) >= 0;
-            Marshal.ReleaseComObject(pattern);
-            if (wrote)
+            if (step.Action == AutoTypeAction.Tab)
             {
-                return true;
+                typed |= WindowsTextInput.TypeTab();
+                continue;
             }
+
+            var typingUsername = username.Length > 0 && step.Text == username && usernameElement is not null;
+            var target = typingUsername ? usernameElement : passwordElement;
+            if (target is null)
+            {
+                continue;
+            }
+
+            if (target.SetFocus() < 0)
+            {
+                return false;
+            }
+
+            Thread.Sleep(30);
+            typed |= WindowsTextInput.TypeReplacing(step.Text ?? "");
         }
 
-        if (element.SetFocus() < 0)
-        {
-            return false;
-        }
-
-        return WindowsTextInput.TypeReplacing(text);
+        return typed;
     }
 }

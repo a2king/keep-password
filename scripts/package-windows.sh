@@ -80,6 +80,15 @@ echo "== 高压缩打包 payload =="
 )
 echo "payload: $(du -h "$OUT/payload.zip" | awk '{print $1}') / staging: $(du -sh "$STAGING" | awk '{print $1}')"
 
+echo "== 计算 payload 完整性校验值 =="
+python3 - <<PY
+import hashlib, pathlib
+payload = pathlib.Path(r"$OUT/payload.zip")
+digest = hashlib.sha256(payload.read_bytes()).hexdigest()
+pathlib.Path(r"$ROOT/src/KeepPassword.Setup/payload.sha256").write_text(digest + "\n", encoding="ascii")
+print(digest)
+PY
+
 echo "== 发布安装向导（单文件 + 内嵌压缩包） =="
 cp -f "$OUT/payload.zip" "$ROOT/src/KeepPassword.Setup/payload.zip"
 dotnet publish "$ROOT/src/KeepPassword.Setup/KeepPassword.Setup.csproj" \
@@ -89,7 +98,7 @@ dotnet publish "$ROOT/src/KeepPassword.Setup/KeepPassword.Setup.csproj" \
   -p:EnableCompressionInSingleFile=true \
   -p:DebugType=none -p:DebugSymbols=false \
   -o "$SETUP_OUT"
-rm -f "$ROOT/src/KeepPassword.Setup/payload.zip"
+rm -f "$ROOT/src/KeepPassword.Setup/payload.zip" "$ROOT/src/KeepPassword.Setup/payload.sha256"
 
 cp -f "$SETUP_OUT/KeepPassword.Setup.exe" "$OUT/KeepPassword-Setup-win-x64.exe"
 (

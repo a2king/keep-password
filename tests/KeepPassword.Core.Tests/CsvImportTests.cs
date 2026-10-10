@@ -43,8 +43,11 @@ public class CsvImportTests
         var entries = CsvImporter.Import("Name,URL,Username,Password,Note\nA,https://a.example,u,p,n\n");
         Assert.Single(entries);
 
-        var error = Assert.Throws<FormatException>(() => CsvImporter.Import("name,url,username,password\nA,https://a.example,u,p\n"));
-        Assert.Contains("note", error.Message);
+        var chrome = CsvImporter.Import("name,url,username,password\nA,https://a.example,u,p\n");
+        Assert.Equal("A", Assert.Single(chrome).Name);
+
+        var error = Assert.Throws<FormatException>(() => CsvImporter.Import("name,url,username\nA,https://a.example,u\n"));
+        Assert.Contains("password", error.Message);
     }
 
     [Fact]

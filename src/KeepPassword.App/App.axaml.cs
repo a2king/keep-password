@@ -14,6 +14,8 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        ThemeManager.Initialize();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;

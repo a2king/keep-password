@@ -90,6 +90,28 @@ public class CacheDirectoryTests
         Assert.Equal("keep", File.ReadAllText(Path.Combine(source, "note.txt")));
     }
 
+    [Fact]
+    public void Theme_DefaultAndPersistence()
+    {
+        var root = NewRoot();
+        var settings = Path.Combine(root, "config", "settings.json");
+
+        Assert.Equal("System", CacheDirectory.GetTheme(settings));
+
+        CacheDirectory.SetTheme(settings, "Dark");
+        Assert.Equal("Dark", CacheDirectory.GetTheme(settings));
+
+        CacheDirectory.SetTheme(settings, "Light");
+        Assert.Equal("Light", CacheDirectory.GetTheme(settings));
+
+        // When switching directory, theme should be preserved
+        var source = Path.Combine(root, "cache1");
+        var dest = Path.Combine(root, "cache2");
+        Directory.CreateDirectory(source);
+        CacheDirectory.Switch(settings, source, dest);
+        Assert.Equal("Light", CacheDirectory.GetTheme(settings));
+    }
+
     private static string NewRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "keep-password-tests", Guid.NewGuid().ToString("n"));

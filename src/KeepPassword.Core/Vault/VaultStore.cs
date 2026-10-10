@@ -14,7 +14,7 @@ public sealed class VaultStore
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = true
+        WriteIndented = false
     };
 
     private static readonly JsonSerializerOptions PayloadOptions = new()
@@ -33,7 +33,7 @@ public sealed class VaultStore
 
     public bool Exists(string path) => File.Exists(path);
 
-    public void Create(string path, string account, string masterPassword, string shortKey)
+    public void Create(string path, string account, string masterPassword, string shortKey, RecoverySetup? recovery = null)
     {
         RequireSecrets(account, masterPassword, shortKey);
         if (File.Exists(path))
@@ -44,15 +44,26 @@ public sealed class VaultStore
         var trimmed = account.Trim();
         var kdf = new KdfMaterial(Profile, RandomNumberGenerator.GetBytes(Argon2Id.SaltLength));
         var masterKey = Argon2Id.Derive(masterPassword, kdf.Profile, kdf.Salt);
+        RecoverySecrets? secrets = null;
         try
         {
+            secrets = recovery is null ? null : RecoverySecrets.Create(recovery, Profile);
             var shortKeyMaterial = HashShortKey(shortKey, Profile);
-            WriteFile(path, trimmed, kdf, shortKeyMaterial, masterKey, []);
+            WriteFile(path, trimmed, kdf, shortKeyMaterial, masterKey, [], secrets);
         }
         finally
         {
+            secrets?.Zero();
             CryptographicOperations.ZeroMemory(masterKey);
         }
+    }
+
+    public bool HasRecovery(string path) => ReadEnvelope(path).Recovery is not null;
+
+    public IReadOnlyList<string> RecoveryQuestions(string path)
+    {
+        var recovery = ReadEnvelope(path).Recovery ?? throw new InvalidOperationException("此保险库没有启用安全问题恢复。");
+        return recovery.Questions;
     }
 
     public string ReadAccount(string path) => ReadEnvelope(path).Account;
@@ -70,16 +81,30 @@ public sealed class VaultStore
         var cipher = envelope.Cipher ?? throw new InvalidDataException("保险库文件无法读取。");
         var kdf = kdfDto.ToMaterial();
         var masterKey = Argon2Id.Derive(masterPassword, kdf.Profile, kdf.Salt);
+        List<VaultEntry> entries;
+        VaultLabels labels;
         try
         {
-            var entries = DecryptEntries(envelope.Account, masterKey, cipher);
-            return new VaultSession(path, envelope.Account, kdf, shortKeyDto.ToMaterial(), masterKey, entries);
+            (entries, labels) = DecryptPayload(envelope.Account, masterKey, cipher);
         }
         catch (CryptographicException)
         {
             CryptographicOperations.ZeroMemory(masterKey);
             throw new UnlockFailedException();
         }
+
+        RecoverySecrets? recovery;
+        try
+        {
+            recovery = UnwrapRecovery(envelope.Recovery, masterKey);
+        }
+        catch (CryptographicException)
+        {
+            CryptographicOperations.ZeroMemory(masterKey);
+            throw new InvalidDataException("保险库恢复数据已损坏。");
+        }
+
+        return new VaultSession(path, envelope.Account, kdf, shortKeyDto.ToMaterial(), masterKey, entries, recovery, labels);
     }
 
     internal static void WriteFile(
@@ -88,10 +113,14 @@ public sealed class VaultStore
         KdfMaterial kdf,
         ShortKeyMaterial shortKey,
         byte[] masterKey,
-        IReadOnlyList<VaultEntry> entries)
+        IReadOnlyList<VaultEntry> entries,
+        RecoverySecrets? recovery = null,
+        VaultLabels? labels = null)
     {
         var payload = new PayloadDto
         {
+            Spaces = labels?.Spaces.ToList() ?? [],
+            Tags = labels?.Tags.ToList() ?? [],
             Entries = entries.Select(entry => new EntryDto
             {
                 Id = entry.Id,
@@ -100,7 +129,9 @@ public sealed class VaultStore
                 Username = entry.Username ?? "",
                 Password = entry.Password ?? "",
                 Note = entry.Note ?? "",
-                TotpSecret = string.IsNullOrWhiteSpace(entry.TotpSecret) ? null : entry.TotpSecret.Trim()
+                TotpSecret = string.IsNullOrWhiteSpace(entry.TotpSecret) ? null : entry.TotpSecret.Trim(),
+                Space = string.IsNullOrEmpty(entry.Space) ? null : entry.Space,
+                Tags = entry.Tags.Count == 0 ? null : entry.Tags.ToList()
             }).ToList()
         };
 
@@ -115,6 +146,7 @@ public sealed class VaultStore
                 Account = account,
                 Kdf = KdfDto.From(kdf),
                 ShortKey = ShortKeyDto.From(shortKey),
+                Recovery = recovery is null ? null : RecoveryDto.From(recovery, masterKey),
                 Cipher = new CipherDto
                 {
                     Algorithm = "aes-256-gcm",
@@ -132,9 +164,15 @@ public sealed class VaultStore
             }
 
             var temp = path + ".tmp";
-            File.WriteAllBytes(temp, json);
+            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+            {
+                stream.Write(json);
+                stream.Flush(true);
+            }
+
+            FileProtection.RestrictToCurrentUser(temp);
             File.Move(temp, path, overwrite: true);
-            TryRestrictPermissions(path);
+            FileProtection.RestrictToCurrentUser(path);
         }
         finally
         {
@@ -149,7 +187,7 @@ public sealed class VaultStore
         return new ShortKeyMaterial(profile, salt, hash);
     }
 
-    private static List<VaultEntry> DecryptEntries(string account, byte[] masterKey, CipherDto cipher)
+    private static (List<VaultEntry> Entries, VaultLabels Labels) DecryptPayload(string account, byte[] masterKey, CipherDto cipher)
     {
         if (!string.Equals(cipher.Algorithm, "aes-256-gcm", StringComparison.Ordinal))
         {
@@ -167,7 +205,7 @@ public sealed class VaultStore
         {
             var payload = JsonSerializer.Deserialize<PayloadDto>(plaintext, PayloadOptions)
                 ?? throw new InvalidDataException("保险库内容为空。");
-            return payload.Entries.Select(entry => new VaultEntry
+            var entries = payload.Entries.Select(entry => new VaultEntry
             {
                 Id = entry.Id == Guid.Empty ? Guid.NewGuid() : entry.Id,
                 Name = entry.Name ?? "",
@@ -175,8 +213,11 @@ public sealed class VaultStore
                 Username = entry.Username ?? "",
                 Password = entry.Password ?? "",
                 Note = entry.Note ?? "",
-                TotpSecret = string.IsNullOrWhiteSpace(entry.TotpSecret) ? null : entry.TotpSecret.Trim()
+                TotpSecret = string.IsNullOrWhiteSpace(entry.TotpSecret) ? null : entry.TotpSecret.Trim(),
+                Space = LabelName.Normalize(entry.Space),
+                Tags = LabelName.NormalizeAll(entry.Tags)
             }).ToList();
+            return (entries, VaultLabels.From(payload.Spaces, payload.Tags, entries));
         }
         finally
         {
@@ -198,12 +239,69 @@ public sealed class VaultStore
             throw new InvalidDataException("保险库文件无法读取。", ex);
         }
 
-        if (envelope.Version != FormatVersion || envelope.Kdf is null || envelope.ShortKey is null || envelope.Cipher is null)
+        ValidateEnvelope(envelope);
+        return envelope;
+    }
+
+    public VaultSession Recover(string path, IReadOnlyList<string> answers, string newMasterPassword)
+    {
+        if (answers is null || answers.Count != 3)
         {
-            throw new InvalidDataException("保险库文件版本不受支持。");
+            throw new ArgumentException("请回答三个安全问题。", nameof(answers));
         }
 
-        return envelope;
+        if (string.IsNullOrEmpty(newMasterPassword))
+        {
+            throw new ArgumentException("请填写新的主密码。", nameof(newMasterPassword));
+        }
+
+        var envelope = ReadEnvelope(path);
+        var recovery = envelope.Recovery ?? throw new InvalidOperationException("此保险库没有启用安全问题恢复。");
+        var material = recovery.ToMaterial();
+        var recoveryKey = Argon2Id.Derive(RecoverySecrets.Secret(answers), material.Profile, material.Salt);
+        byte[]? oldMaster = null;
+        var handedOff = false;
+        try
+        {
+            oldMaster = Unwrap(recoveryKey, recovery.WrappedMasterKey, MasterWrapAad(material.Questions));
+            var (entries, labels) = DecryptPayload(envelope.Account, oldMaster, envelope.Cipher!);
+            var kdf = new KdfMaterial(material.Profile, RandomNumberGenerator.GetBytes(Argon2Id.SaltLength));
+            var newMaster = Argon2Id.Derive(newMasterPassword, kdf.Profile, kdf.Salt);
+            var secrets = new RecoverySecrets
+            {
+                Profile = material.Profile,
+                Salt = material.Salt,
+                Questions = material.Questions,
+                Key = recoveryKey
+            };
+            try
+            {
+                WriteFile(path, envelope.Account, kdf, envelope.ShortKey!.ToMaterial(), newMaster, entries, secrets, labels);
+                handedOff = true;
+                return new VaultSession(path, envelope.Account, kdf, envelope.ShortKey.ToMaterial(), newMaster, entries, secrets, labels);
+            }
+            catch
+            {
+                CryptographicOperations.ZeroMemory(newMaster);
+                throw;
+            }
+        }
+        catch (CryptographicException)
+        {
+            throw new RecoveryFailedException();
+        }
+        finally
+        {
+            if (oldMaster is not null)
+            {
+                CryptographicOperations.ZeroMemory(oldMaster);
+            }
+
+            if (!handedOff)
+            {
+                CryptographicOperations.ZeroMemory(recoveryKey);
+            }
+        }
     }
 
     private static void RequireSecrets(string account, string masterPassword, string shortKey)
@@ -224,19 +322,145 @@ public sealed class VaultStore
         }
     }
 
-    private static void TryRestrictPermissions(string path)
+    private static RecoverySecrets? UnwrapRecovery(RecoveryDto? recovery, byte[] masterKey)
     {
-        if (OperatingSystem.IsWindows())
+        if (recovery is null)
         {
-            return;
+            return null;
+        }
+
+        var material = recovery.ToMaterial();
+        var recoveryKey = Unwrap(masterKey, recovery.WrappedRecoveryKey, RecoveryKeyAad());
+        return new RecoverySecrets
+        {
+            Profile = material.Profile,
+            Salt = material.Salt,
+            Questions = material.Questions,
+            Key = recoveryKey
+        };
+    }
+
+    private static byte[] Unwrap(byte[] key, CipherDto? cipher, byte[] associatedData)
+    {
+        if (cipher is null)
+        {
+            throw new InvalidDataException("保险库恢复数据已损坏。");
+        }
+
+        return VaultCipher.Decrypt(
+            key,
+            Convert.FromBase64String(cipher.Nonce),
+            Convert.FromBase64String(cipher.Ciphertext),
+            Convert.FromBase64String(cipher.Tag),
+            associatedData);
+    }
+
+    private static byte[] MasterWrapAad(IReadOnlyList<string> questions) =>
+        Encoding.UTF8.GetBytes("keep-password/recovery-master/v1\n" + string.Join('\n', questions));
+
+    private static byte[] RecoveryKeyAad() =>
+        Encoding.UTF8.GetBytes("keep-password/recovery-key/v1");
+
+    private static void ValidateEnvelope(EnvelopeDto envelope)
+    {
+        if (envelope.Version != FormatVersion
+            || !string.Equals(envelope.Format, "keep-password-vault", StringComparison.Ordinal)
+            || envelope.Kdf is null
+            || envelope.ShortKey is null
+            || envelope.Cipher is null)
+        {
+            throw new InvalidDataException("保险库文件版本不受支持。");
+        }
+
+        if (string.IsNullOrWhiteSpace(envelope.Account) || envelope.Account.Length > 256)
+        {
+            throw new InvalidDataException("保险库文件无法读取。");
+        }
+
+        ValidateKdf(envelope.Kdf.Algorithm, envelope.Kdf.MemoryKb, envelope.Kdf.Iterations, envelope.Kdf.Parallelism, envelope.Kdf.Salt, hash: null);
+        ValidateKdf(
+            envelope.ShortKey.Algorithm,
+            envelope.ShortKey.MemoryKb,
+            envelope.ShortKey.Iterations,
+            envelope.ShortKey.Parallelism,
+            envelope.ShortKey.Salt,
+            envelope.ShortKey.Hash);
+        if (!string.Equals(envelope.Cipher.Algorithm, "aes-256-gcm", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("无法识别的加密算法。");
+        }
+
+        RequireDecodedLength(envelope.Cipher.Nonce, VaultCipher.NonceLength);
+        RequireDecodedLength(envelope.Cipher.Tag, VaultCipher.TagLength);
+        var ciphertext = Convert.FromBase64String(envelope.Cipher.Ciphertext);
+        if (ciphertext.Length is 0 or > 16 * 1024 * 1024)
+        {
+            throw new InvalidDataException("保险库文件无法读取。");
+        }
+
+        if (envelope.Recovery is not null)
+        {
+            ValidateRecovery(envelope.Recovery);
+        }
+    }
+
+    private static void ValidateRecovery(RecoveryDto recovery)
+    {
+        if (!recovery.RiskAcknowledged || recovery.Questions.Count != 3 || recovery.Questions.Any(question => string.IsNullOrWhiteSpace(question)))
+        {
+            throw new InvalidDataException("保险库恢复数据已损坏。");
+        }
+
+        ValidateKdf(recovery.Algorithm, recovery.MemoryKb, recovery.Iterations, recovery.Parallelism, recovery.Salt, hash: null);
+        RequireDecodedLength(recovery.WrappedMasterKey?.Nonce, VaultCipher.NonceLength);
+        RequireDecodedLength(recovery.WrappedMasterKey?.Tag, VaultCipher.TagLength);
+        RequireDecodedLength(recovery.WrappedRecoveryKey?.Nonce, VaultCipher.NonceLength);
+        RequireDecodedLength(recovery.WrappedRecoveryKey?.Tag, VaultCipher.TagLength);
+        if (Convert.FromBase64String(recovery.WrappedMasterKey!.Ciphertext).Length != Argon2Id.HashLength
+            || Convert.FromBase64String(recovery.WrappedRecoveryKey!.Ciphertext).Length != Argon2Id.HashLength)
+        {
+            throw new InvalidDataException("保险库恢复数据已损坏。");
+        }
+    }
+
+    private static void ValidateKdf(string? algorithm, int memoryKb, int iterations, int parallelism, string? salt, string? hash)
+    {
+        if (!string.Equals(algorithm, "argon2id", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("无法识别的密钥派生算法。");
         }
 
         try
         {
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            new KdfProfile(memoryKb, iterations, parallelism).Validate();
         }
-        catch (PlatformNotSupportedException)
+        catch (ArgumentOutOfRangeException ex)
         {
+            throw new InvalidDataException("保险库密钥参数不受支持。", ex);
+        }
+
+        RequireDecodedLength(salt, Argon2Id.SaltLength);
+        if (hash is not null)
+        {
+            RequireDecodedLength(hash, Argon2Id.HashLength);
+        }
+    }
+
+    private static void RequireDecodedLength(string? text, int expected)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(text ?? "");
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidDataException("保险库文件无法读取。", ex);
+        }
+
+        if (bytes.Length != expected)
+        {
+            throw new InvalidDataException("保险库文件无法读取。");
         }
     }
 
@@ -256,7 +480,52 @@ public sealed class VaultStore
 
         public ShortKeyDto? ShortKey { get; set; }
 
+        public RecoveryDto? Recovery { get; set; }
+
         public CipherDto? Cipher { get; set; }
+    }
+
+    private sealed class RecoveryDto
+    {
+        public bool RiskAcknowledged { get; set; }
+
+        public List<string> Questions { get; set; } = [];
+
+        public string Algorithm { get; set; } = "argon2id";
+
+        public string Salt { get; set; } = "";
+
+        public int MemoryKb { get; set; }
+
+        public int Iterations { get; set; }
+
+        public int Parallelism { get; set; }
+
+        public CipherDto? WrappedMasterKey { get; set; }
+
+        public CipherDto? WrappedRecoveryKey { get; set; }
+
+        public static RecoveryDto From(RecoverySecrets secrets, byte[] masterKey)
+        {
+            var master = VaultCipher.Encrypt(secrets.Key, masterKey, MasterWrapAad(secrets.Questions));
+            var wrappedKey = VaultCipher.Encrypt(masterKey, secrets.Key, RecoveryKeyAad());
+            return new RecoveryDto
+            {
+                RiskAcknowledged = true,
+                Questions = secrets.Questions.ToList(),
+                Salt = Convert.ToBase64String(secrets.Salt),
+                MemoryKb = secrets.Profile.MemoryKb,
+                Iterations = secrets.Profile.Iterations,
+                Parallelism = secrets.Profile.Parallelism,
+                WrappedMasterKey = CipherDto.From(master),
+                WrappedRecoveryKey = CipherDto.From(wrappedKey)
+            };
+        }
+
+        public (KdfProfile Profile, byte[] Salt, string[] Questions) ToMaterial() => (
+            new KdfProfile(MemoryKb, Iterations, Parallelism),
+            Convert.FromBase64String(Salt),
+            Questions.ToArray());
     }
 
     private sealed class KdfDto
@@ -322,10 +591,21 @@ public sealed class VaultStore
         public string Tag { get; set; } = "";
 
         public string Ciphertext { get; set; } = "";
+
+        public static CipherDto From((byte[] Nonce, byte[] Ciphertext, byte[] Tag) material) => new()
+        {
+            Nonce = Convert.ToBase64String(material.Nonce),
+            Tag = Convert.ToBase64String(material.Tag),
+            Ciphertext = Convert.ToBase64String(material.Ciphertext)
+        };
     }
 
     private sealed class PayloadDto
     {
+        public List<string>? Spaces { get; set; }
+
+        public List<string>? Tags { get; set; }
+
         public List<EntryDto> Entries { get; set; } = [];
     }
 
@@ -344,5 +624,9 @@ public sealed class VaultStore
         public string Note { get; set; } = "";
 
         public string? TotpSecret { get; set; }
+
+        public string? Space { get; set; }
+
+        public List<string>? Tags { get; set; }
     }
 }

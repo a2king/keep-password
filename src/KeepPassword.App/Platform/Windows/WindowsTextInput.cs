@@ -39,6 +39,20 @@ internal static class WindowsTextInput
         return sent == inputs.Count;
     }
 
+    public static bool TypeTab()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        var inputs = new List<INPUT>();
+        Key(inputs, 0x09, keyUp: false);
+        Key(inputs, 0x09, keyUp: true);
+        var sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf<INPUT>());
+        return sent == inputs.Count;
+    }
+
     private static void KeyCombo(List<INPUT> inputs, ushort modifier, ushort key)
     {
         Key(inputs, modifier, keyUp: false);

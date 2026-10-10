@@ -10,19 +10,23 @@ public sealed record KdfProfile(int MemoryKb, int Iterations, int Parallelism)
     /// <summary>单元测试用的轻量参数，算法仍是 Argon2id。</summary>
     public static KdfProfile Fast { get; } = new(4096, 1, 1);
 
+    public const int MaxMemoryKb = 262_144;
+    public const int MaxIterations = 32;
+    public const int MaxParallelism = 8;
+
     public void Validate()
     {
-        if (MemoryKb < 8)
+        if (MemoryKb is < 8 or > MaxMemoryKb)
         {
             throw new ArgumentOutOfRangeException(nameof(MemoryKb));
         }
 
-        if (Iterations < 1)
+        if (Iterations is < 1 or > MaxIterations)
         {
             throw new ArgumentOutOfRangeException(nameof(Iterations));
         }
 
-        if (Parallelism < 1)
+        if (Parallelism is < 1 or > MaxParallelism)
         {
             throw new ArgumentOutOfRangeException(nameof(Parallelism));
         }

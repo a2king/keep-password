@@ -24,9 +24,7 @@ public static class AutofillMatcher
             }
 
             var urlHit = pageHost.Length > 0 && DomainGrouping.HostsMatch(host, pageHost);
-            var titleHit = title.Length > 0 && (
-                title.Contains(host, StringComparison.OrdinalIgnoreCase)
-                || (!string.IsNullOrWhiteSpace(entry.Url) && title.Contains(entry.Url.Trim(), StringComparison.OrdinalIgnoreCase)));
+            var titleHit = pageHost.Length == 0 && DomainGrouping.TitleContainsHost(title, host);
             if (!urlHit && !titleHit)
             {
                 continue;

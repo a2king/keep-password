@@ -20,6 +20,8 @@ public sealed class AppHost : IDisposable
     private readonly ICredentialFiller _filler;
     private readonly NativeMessagingServer _server;
     private readonly AutofillWatcher _watcher;
+    private readonly AutofillGate _gate = new();
+    private readonly AutoLockMonitor _autoLock;
     private readonly Mutex _mutex;
     private VaultSession? _session;
     private MainWindow? _main;
@@ -34,6 +36,7 @@ public sealed class AppHost : IDisposable
         _filler = PlatformAutofill.CreateFiller();
         _server = new NativeMessagingServer(HandleMessageAsync);
         _watcher = new AutofillWatcher(_detector, OnWindowsFieldAsync);
+        _autoLock = new AutoLockMonitor(LockVault);
         _mutex = new Mutex(true, "KeepPassword.SingleInstance", out var created);
         if (!created)
         {
@@ -51,58 +54,41 @@ public sealed class AppHost : IDisposable
 
         InstallTray();
         _server.Start();
-        _ = RunAsync();
-    }
-
-    private async Task RunAsync()
-    {
         try
         {
-            await ShowUnlockAsync();
+            ShowShell();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Console.Error.WriteLine(ex);
             Shutdown();
         }
+    }
+
+    private void ShowShell()
+    {
+        _main = new MainWindow(_store, _location, _detector.IsSupported, PauseWatcher);
+        _main.Unlocked += BeginSession;
+        _main.LockRequested += (_, _) => LockVault();
+        _main.Closing += OnMainClosing;
+        _desktop.MainWindow = _main;
+        _main.Show();
+    }
+
+    private void BeginSession(VaultSession session)
+    {
+        _session = session;
+        _main?.ShowVault(session);
+        _autoLock.Start();
+        _watcher.Start();
     }
 
     public void Dispose()
     {
+        _autoLock.Dispose();
         _watcher.Stop();
         _server.Dispose();
         _session?.Dispose();
         _mutex.Dispose();
-    }
-
-    private async Task ShowUnlockAsync()
-    {
-        if (_exiting)
-        {
-            return;
-        }
-
-        var window = new UnlockWindow(_store, _location);
-        _desktop.MainWindow = window;
-        var session = await window.WaitAsync();
-        if (session is null)
-        {
-            Shutdown();
-            return;
-        }
-
-        ShowMain(session);
-    }
-
-    private void ShowMain(VaultSession session)
-    {
-        _session = session;
-        _main = new MainWindow(session, _detector.IsSupported, _location, PauseWatcher);
-        _main.LockRequested += (_, _) => _ = LockAsync();
-        _main.Closing += OnMainClosing;
-        _desktop.MainWindow = _main;
-        _main.Show();
-        _watcher.Start();
     }
 
     private void OnMainClosing(object? sender, WindowClosingEventArgs e)
@@ -113,16 +99,22 @@ public sealed class AppHost : IDisposable
         }
 
         e.Cancel = true;
-        if (_trayReady)
+        if (_session is { IsUnlocked: true })
         {
-            _main.Hide();
+            if (_trayReady)
+            {
+                _main.Hide();
+                return;
+            }
+
+            LockVault();
             return;
         }
 
-        _ = LockAsync();
+        Dispatcher.UIThread.Post(Shutdown);
     }
 
-    private async Task LockAsync()
+    private void LockVault()
     {
         if (_locking || _session is null)
         {
@@ -132,17 +124,19 @@ public sealed class AppHost : IDisposable
         _locking = true;
         try
         {
+            _autoLock.Stop();
             _watcher.Stop();
             _session.Lock();
             _session = null;
             if (_main is not null)
             {
-                _main.PrepareClose();
-                _main.Close();
-                _main = null;
-            }
+                foreach (var owned in _main.OwnedWindows.ToArray())
+                {
+                    owned.Close();
+                }
 
-            await ShowUnlockAsync();
+                _main.ShowUnlockScreen();
+            }
         }
         finally
         {
@@ -177,7 +171,7 @@ public sealed class AppHost : IDisposable
             var show = new NativeMenuItem("显示");
             show.Click += (_, _) => ShowFromTray();
             var lockItem = new NativeMenuItem("锁定");
-            lockItem.Click += (_, _) => _ = LockAsync();
+            lockItem.Click += (_, _) => LockVault();
             var exit = new NativeMenuItem("退出");
             exit.Click += (_, _) => Shutdown();
             menu.Items.Add(show);
@@ -205,20 +199,18 @@ public sealed class AppHost : IDisposable
 
     private void ShowFromTray()
     {
-        if (_main is { } main && _session is { IsUnlocked: true })
+        if (_main is null)
         {
-            main.Show();
-            main.Activate();
             return;
         }
 
-        _desktop.MainWindow?.Show();
-        _desktop.MainWindow?.Activate();
+        _main.BringToFront();
     }
 
     private void Shutdown()
     {
         _exiting = true;
+        _autoLock.Stop();
         _watcher.Stop();
         _session?.Lock();
         _session = null;
@@ -254,10 +246,21 @@ public sealed class AppHost : IDisposable
             return;
         }
 
+        if (field.IsElevated || !AutofillPolicy.AllowAutoType(field.IsElevated))
+        {
+            if (_main is not null)
+            {
+                await Dialogs.AlertAsync(_main, "无法自动输入", "该窗口以更高权限运行。Keep Password 不会提权，也不会向这个窗口输入密码。");
+            }
+
+            return;
+        }
+
         var request = new AutofillRequest
         {
             Origin = AutofillOrigin.WindowsApplication,
-            WindowTitle = field.WindowTitle
+            WindowTitle = field.WindowTitle,
+            TargetProcess = field.ProcessName
         };
         await PromptAndFillAsync(request, field, CancellationToken.None);
     }
@@ -267,14 +270,28 @@ public sealed class AppHost : IDisposable
         DetectedPasswordField? field,
         CancellationToken cancellationToken)
     {
-        var prompter = new WindowPrompter(_main);
-        var response = await AutofillCoordinator.HandleDiscoverAsync(_session, request, prompter, cancellationToken);
-        if (field is not null && response.Type == "fill" && response.Username is not null && response.Password is not null)
+        var key = request.Url ?? request.WindowTitle ?? request.TargetProcess ?? "";
+        if (!_gate.TryEnter(key, out var lease) || lease is null)
         {
-            _filler.TryFill(field, response.Username, response.Password);
+            return AutofillResponse.Error("已有填充确认正在进行。");
         }
 
-        return response;
+        using (lease)
+        {
+            var prompter = new WindowPrompter(_main);
+            var response = await AutofillCoordinator.HandleDiscoverAsync(_session, request, prompter, cancellationToken);
+            if (field is not null && response.Type == "fill" && response.Username is not null && response.Password is not null)
+            {
+                if (!AutofillPolicy.AllowAutoType(field.IsElevated))
+                {
+                    return AutofillResponse.Error("目标窗口权限更高，已取消输入。");
+                }
+
+                _filler.TryFill(field, response.Username, response.Password);
+            }
+
+            return response;
+        }
     }
 
     private sealed class WindowPrompter : IAutofillPrompter
