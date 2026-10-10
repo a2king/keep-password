@@ -29,10 +29,11 @@
         <!-- 浅色现代风格 (Clean Light) -->
         <ResourceDictionary x:Key="Light">
           <SolidColorBrush x:Key="Kp.Bg" Color="#F4F6F9" />
-          <SolidColorBrush x:Key="Kp.Sidebar" Color="#0F172A" />
-          <SolidColorBrush x:Key="Kp.SidebarHover" Color="#1E293B" />
+          <SolidColorBrush x:Key="Kp.Sidebar" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Kp.SidebarHover" Color="#EEF2F7" />
           <SolidColorBrush x:Key="Kp.SidebarActive" Color="#2563EB" />
-          <SolidColorBrush x:Key="Kp.SidebarText" Color="#94A3B8" />
+          <SolidColorBrush x:Key="Kp.SidebarText" Color="#64748B" />
+          <SolidColorBrush x:Key="Kp.SidebarTextHover" Color="#0F172A" />
           <SolidColorBrush x:Key="Kp.SidebarTextActive" Color="#FFFFFF" />
           <SolidColorBrush x:Key="Kp.Surface" Color="#FFFFFF" />
           <SolidColorBrush x:Key="Kp.SurfaceElevated" Color="#F8FAFC" />
@@ -63,6 +64,7 @@
           <SolidColorBrush x:Key="Kp.SidebarHover" Color="#1C2333" />
           <SolidColorBrush x:Key="Kp.SidebarActive" Color="#2563EB" />
           <SolidColorBrush x:Key="Kp.SidebarText" Color="#8B949E" />
+          <SolidColorBrush x:Key="Kp.SidebarTextHover" Color="#FFFFFF" />
           <SolidColorBrush x:Key="Kp.SidebarTextActive" Color="#FFFFFF" />
           <SolidColorBrush x:Key="Kp.Surface" Color="#151C28" />
           <SolidColorBrush x:Key="Kp.SurfaceElevated" Color="#1C2433" />
@@ -192,7 +194,7 @@
     </Style>
     <Style Selector="Button.nav:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Kp.SidebarHover}" />
-      <Setter Property="Foreground" Value="#FFFFFF" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.SidebarTextHover}" />
     </Style>
     <Style Selector="Button.nav.active /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Kp.SidebarActive}" />
@@ -285,6 +287,28 @@
       <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
       <Setter Property="Padding" Value="12,8" />
       <Setter Property="FontSize" Value="13.5" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox[AcceptsReturn=True]">
+      <Setter Property="VerticalContentAlignment" Value="Top" />
+    </Style>
+    <!-- 卡片内的无边框输入框：负外边距抵消内边距，未聚焦时文字与标题对齐 -->
+    <Style Selector="TextBox.inline">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="5,4" />
+      <Setter Property="Margin" Value="-5,2,-5,0" />
+      <Setter Property="MinHeight" Value="30" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
+      <Setter Property="Padding" Value="12,6,8,6" />
+      <Setter Property="FontSize" Value="13.5" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBox:focus">
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />

@@ -382,16 +382,7 @@ public partial class UserManagementWindow : Window
             }
 
             var entries = await Task.Run(() => EncryptedBackup.ReadEntries(path, password));
-            foreach (var existing in _session.Entries.ToList())
-            {
-                _session.Remove(existing.Id);
-            }
-
-            foreach (var entry in entries)
-            {
-                _session.Upsert(entry);
-            }
-
+            _session.ReplaceAll(entries);
             _session.Save();
             VaultChanged = true;
             DirectoryStatus.Text = $"已还原 {entries.Count} 条，并重新加密。";

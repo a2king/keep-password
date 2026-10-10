@@ -12,7 +12,7 @@ public static class AutofillMatcher
         var matches = new List<AutofillCandidate>();
         foreach (var entry in entries)
         {
-            if (string.IsNullOrEmpty(entry.Username) && string.IsNullOrEmpty(entry.Password))
+            if (entry.Kind != VaultItemKind.Login || (string.IsNullOrEmpty(entry.Username) && string.IsNullOrEmpty(entry.Password)))
             {
                 continue;
             }

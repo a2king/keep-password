@@ -49,8 +49,8 @@ public partial class PasswordGeneratorView : UserControl
             return;
         }
 
-        await SecretClipboard.CopyAsync(clipboard, _password);
         CopyStatus.Text = "已复制。若 30 秒后剪贴板仍是该内容，会自动清除。";
+        await SecretClipboard.CopyAsync(clipboard, _password);
     }
 
     private void OnLengthPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)

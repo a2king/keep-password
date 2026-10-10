@@ -30,9 +30,9 @@
 
         <!-- 欢迎页 -->
         <StackPanel x:Name="WelcomePage" Spacing="0">
-          <TextBlock Text="欢迎安装 Keep Password"
+          <TextBlock x:Name="WelcomeTitle" Text="欢迎安装 Keep Password"
                      FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
-          <TextBlock Text="将覆盖已有安装目录中的程序文件，并清理旧版本残留。保险库和缓存不会被删除。不需要安装 .NET。"
+          <TextBlock x:Name="WelcomeText" Text="将覆盖已有安装目录中的程序文件，并清理旧版本残留。保险库和缓存不会被删除。不需要安装 .NET。"
                      TextWrapping="Wrap" Foreground="#6B778C" Margin="0,0,0,14" />
           <TextBlock Text="安装目录" FontSize="12" FontWeight="SemiBold" Foreground="#6B778C" Margin="0,0,0,6" />
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
@@ -45,7 +45,7 @@
           <TextBlock x:Name="WelcomeError" TextWrapping="Wrap" Foreground="#D14343" Margin="0,12,0,0" IsVisible="False" />
           <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,20,0,0">
             <Button Classes="ghost" Content="取消" Click="OnCancel" />
-            <Button Classes="accent" Content="立即安装" Click="OnStartInstall" />
+            <Button x:Name="InstallButton" Classes="accent" Content="立即安装" Click="OnStartInstall" />
           </StackPanel>
         </StackPanel>
 

@@ -1,4 +1,5 @@
 using Avalonia.Input.Platform;
+using Avalonia.Threading;
 using KeepPassword.Core.Security;
 
 namespace KeepPassword.App.Services;
@@ -17,8 +18,8 @@ public static class SecretClipboard
 
     private sealed class AvaloniaClipboard(IClipboard clipboard) : ITextClipboard
     {
-        public Task<string?> ReadAsync() => clipboard.TryGetTextAsync();
+        public Task<string?> ReadAsync() => Dispatcher.UIThread.InvokeAsync(() => clipboard.TryGetTextAsync());
 
-        public Task WriteAsync(string? value) => clipboard.SetTextAsync(value);
+        public Task WriteAsync(string? value) => Dispatcher.UIThread.InvokeAsync(() => clipboard.SetTextAsync(value));
     }
 }

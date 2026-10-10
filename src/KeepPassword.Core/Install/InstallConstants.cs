@@ -11,7 +11,14 @@ public static class InstallConstants
     public const string NativeHostFolderName = "native-host";
     public const string ExtensionFolderName = "extension";
     public const string UninstallRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\KeepPassword";
-    public const string Version = "0.2.3";
+    public const string NativeHostName = "com.keeppassword.host";
+
+    public static IReadOnlyList<string> NativeHostRegistryKeys { get; } =
+    [
+        @"Software\Google\Chrome\NativeMessagingHosts\" + NativeHostName,
+        @"Software\Microsoft\Edge\NativeMessagingHosts\" + NativeHostName
+    ];
+    public const string Version = "0.2.4";
 
     public static string DefaultInstallDirectory()
     {

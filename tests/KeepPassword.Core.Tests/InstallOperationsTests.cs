@@ -24,7 +24,8 @@ public class InstallOperationsTests
         {
             CreateStartMenuShortcut = false,
             CreateDesktopShortcut = false,
-            LaunchAfterInstall = false
+            LaunchAfterInstall = false,
+            RegisterWithSystem = false
         });
 
         Assert.Equal("new-exe", File.ReadAllText(Path.Combine(target, "KeepPassword.exe")));
@@ -32,6 +33,27 @@ public class InstallOperationsTests
         Assert.Equal("readme", File.ReadAllText(Path.Combine(target, "使用说明.txt")));
         Assert.False(File.Exists(Path.Combine(target, "old.dll")));
         Assert.False(File.Exists(Path.Combine(target, "lib", "gone.dll")));
+    }
+
+    [Fact]
+    public void ResolveExistingInstall_RequiresInstalledExecutable()
+    {
+        var install = Path.Combine(Path.GetTempPath(), "keep-password-tests", Guid.NewGuid().ToString("n"), "Keep Password");
+        Directory.CreateDirectory(install);
+
+        Assert.Null(InstallOperations.ResolveExistingInstall(null, "0.2.2", true, true));
+        Assert.Null(InstallOperations.ResolveExistingInstall("   ", "0.2.2", true, true));
+        Assert.Null(InstallOperations.ResolveExistingInstall(install, "0.2.2", true, true));
+        Assert.Null(InstallOperations.ResolveExistingInstall(Path.Combine(install, "missing"), "0.2.2", true, true));
+
+        File.WriteAllText(Path.Combine(install, InstallConstants.AppExecutableName()), "x");
+        var existing = InstallOperations.ResolveExistingInstall("  " + install + "  ", " 0.2.2 ", true, false);
+        Assert.NotNull(existing);
+        Assert.Equal(Path.GetFullPath(install), existing.Directory);
+        Assert.Equal("0.2.2", existing.Version);
+        Assert.True(existing.HasStartMenuShortcut);
+        Assert.False(existing.HasDesktopShortcut);
+        Assert.Null(InstallOperations.ResolveExistingInstall(install, "", false, false)!.Version);
     }
 
     [Fact]
@@ -45,7 +67,7 @@ public class InstallOperationsTests
         File.WriteAllText(Path.Combine(install, "KeepPassword.exe"), "x");
         File.WriteAllText(Path.Combine(cache, "vault.kpvault"), "vault");
 
-        InstallOperations.Uninstall(install, deleteCache: false);
+        InstallOperations.Uninstall(install, deleteCache: false, unregisterFromSystem: false);
         if (OperatingSystem.IsWindows())
         {
             var removed = false;

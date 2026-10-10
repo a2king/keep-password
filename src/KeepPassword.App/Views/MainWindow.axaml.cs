@@ -5,6 +5,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
+using KeepPassword.Core.Import;
 using KeepPassword.Core.Security;
 using KeepPassword.Core.Vault;
 
@@ -67,19 +68,7 @@ public partial class MainWindow : Window
         _totpTimer.Stop();
         UnlockRoot.Bind(_store, _location.VaultFile);
         UnlockRoot.IsVisible = true;
-        if (View is not null)
-        {
-            View.Name = "";
-            View.Url = "";
-            View.Username = "";
-            View.Password = "";
-            View.Note = "";
-            View.TotpSecret = "";
-            View.PasswordVisible = false;
-        }
-
-        PasswordBox.Text = "";
-        PasswordBox.PasswordChar = '•';
+        View?.CloseDetail();
         GeneratorRoot.ClearSecret();
         ShowItemsPage();
         VaultRoot.IsVisible = false;
@@ -106,7 +95,6 @@ public partial class MainWindow : Window
     {
         _session = session;
         VaultRoot.DataContext = new MainViewModel(session, _platformAutofill);
-        PasswordBox.PasswordChar = '•';
         ShowItemsPage();
         VaultRoot.IsVisible = true;
         UpdateAccountColumns();
@@ -157,6 +145,145 @@ public partial class MainWindow : Window
         {
             View?.SelectTag(key);
         }
+    }
+
+    private void OnKindFilter(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string key })
+        {
+            View?.SelectKind(key);
+        }
+    }
+
+    private async void OnToggleFavorite(object? sender, RoutedEventArgs e)
+    {
+        if (View?.ToggleFavorite() is { } error)
+        {
+            await Dialogs.AlertAsync(this, "无法收藏", error);
+        }
+    }
+
+    private void OnAuthPassword(object? sender, RoutedEventArgs e) => View?.SetKeyAuth(false);
+
+    private void OnAuthKey(object? sender, RoutedEventArgs e) => View?.SetKeyAuth(true);
+
+    private void OnGenerateField(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: FieldEditorView field })
+        {
+            field.Value = MainViewModel.GeneratePassword();
+            field.Revealed = true;
+            if (View is not null)
+            {
+                View.Status = "已填入 16 位随机密码（字母和数字）。";
+            }
+        }
+    }
+
+    private void OnRevealField(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: SecretFieldView field })
+        {
+            field.Revealed = !field.Revealed;
+        }
+    }
+
+    private async void OnCopyField(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: SecretFieldView field })
+        {
+            await CopyAsync(field.Value, field.Label, field.Sensitive);
+        }
+    }
+
+    private async void OnCopyConnection(object? sender, RoutedEventArgs e)
+    {
+        if (View is not null)
+        {
+            await CopyAsync(View.ConnectionString, "连接字符串", sensitive: true);
+        }
+    }
+
+    private async void OnCopyFingerprint(object? sender, RoutedEventArgs e)
+    {
+        if (View is { SshFingerprint: var fingerprint } && fingerprint.StartsWith("SHA256:", StringComparison.Ordinal))
+        {
+            await CopyAsync(fingerprint, "指纹", sensitive: false);
+        }
+    }
+
+    private void OnAddNode(object? sender, RoutedEventArgs e) => View?.AddNode();
+
+    private async void OnCopyNode(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: NodeEditorView node })
+        {
+            await CopyAsync(node.Address, "节点地址", sensitive: false);
+        }
+    }
+
+    private void OnRemoveNode(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: NodeEditorView node })
+        {
+            View?.RemoveNode(node);
+        }
+    }
+
+    private async void OnRemoveCustomField(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: CustomFieldEditorView field } || View is null)
+        {
+            return;
+        }
+
+        if (await Dialogs.ConfirmAsync(this, "删除字段", $"删除自定义字段「{field.Name}」？保存后生效。"))
+        {
+            View.RemoveCustomField(field);
+        }
+    }
+
+    private async void OnAddCustomField(object? sender, RoutedEventArgs e) => await AddCustomFieldAsync();
+
+    private async void OnNewFieldKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            await AddCustomFieldAsync();
+        }
+    }
+
+    private async Task AddCustomFieldAsync()
+    {
+        if (View?.AddCustomField() is { } error)
+        {
+            await Dialogs.AlertAsync(this, "无法添加字段", error);
+        }
+    }
+
+    private async Task CopyAsync(string value, string label, bool sensitive)
+    {
+        if (View is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(value) || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        {
+            View.Status = $"{label}为空，没有复制。";
+            return;
+        }
+
+        if (!sensitive)
+        {
+            await clipboard.SetTextAsync(value);
+            View.Status = $"已复制{label}。";
+            return;
+        }
+
+        View.Status = $"已复制{label}。若 30 秒后剪贴板仍是该内容，会自动清除。";
+        await SecretClipboard.CopyAsync(clipboard, value);
     }
 
     private void OnChooseSpace(object? sender, RoutedEventArgs e)
@@ -211,14 +338,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnNewLogin(object? sender, RoutedEventArgs e)
+    private async void OnNewItem(object? sender, RoutedEventArgs e)
     {
-        if (View is null || !await ConfirmDiscardAsync())
+        if (sender is not MenuItem { Tag: string code } || View is null || !await ConfirmDiscardAsync())
         {
             return;
         }
 
-        View.NewLogin();
+        View.NewItem(VaultItemKinds.Parse(code));
     }
 
     private async void OnNewTotp(object? sender, RoutedEventArgs e)
@@ -252,12 +379,29 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!await Dialogs.ConfirmAsync(this, "删除条目", "删除后无法恢复。确定删除这条记录吗？"))
+        var references = View.ReferencingNames();
+        var message = references.Count == 0
+            ? "删除后无法恢复。确定删除这条记录吗？"
+            : $"以下 {references.Count} 个条目正在使用这把 SSH 密钥：{string.Join("、", references)}。\n删除后会同时解除它们的关联（改回密码认证），且无法恢复。确定删除吗？";
+        if (!await Dialogs.ConfirmAsync(this, "删除条目", message))
         {
             return;
         }
 
         View.Delete();
+    }
+
+    private async void OnUndoImport(object? sender, RoutedEventArgs e)
+    {
+        if (View is not { CanUndoImport: true })
+        {
+            return;
+        }
+
+        if (await Dialogs.ConfirmAsync(this, "撤销导入", "将删除上一次导入创建的全部条目（导入后修改过的也会删除）。确定撤销吗？"))
+        {
+            View.UndoImport();
+        }
     }
 
     private async void OnImport(object? sender, RoutedEventArgs e)
@@ -280,9 +424,20 @@ public partial class MainWindow : Window
             }
 
             var text = await File.ReadAllTextAsync(path);
-            View.ImportCsv(text);
+            var table = CsvImporter.ReadTable(text);
+            if (table.Headers.Count == 0 || table.Rows.Count == 0)
+            {
+                await Dialogs.AlertAsync(this, "无法导入", "CSV 文件为空，或只有表头没有数据行。");
+                return;
+            }
+
+            var entries = await new ImportWizardWindow(table, Path.GetFileName(path)).ShowDialog<IReadOnlyList<VaultEntry>?>(this);
+            if (entries is { Count: > 0 })
+            {
+                View.ApplyImport(entries);
+            }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or FormatException or ArgumentException or InvalidOperationException or UnauthorizedAccessException)
         {
             await Dialogs.AlertAsync(this, "无法导入", ex.Message);
         }
@@ -338,28 +493,6 @@ public partial class MainWindow : Window
         NavGenerator.Classes.Add("active");
     }
 
-    private void OnFillGenerated(object? sender, RoutedEventArgs e)
-    {
-        if (View is not { IsNewLogin: true })
-        {
-            return;
-        }
-
-        View.FillGeneratedPassword();
-        PasswordBox.PasswordChar = '\0';
-    }
-
-    private async void OnCopyPassword(object? sender, RoutedEventArgs e)
-    {
-        if (View is null || string.IsNullOrEmpty(View.Password) || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
-        {
-            return;
-        }
-
-        await SecretClipboard.CopyAsync(clipboard, View.Password);
-        await Dialogs.AlertAsync(this, "已复制", "密码已复制。若 30 秒后剪贴板仍是该内容，会自动清除。");
-    }
-
     private async void OnAudit(object? sender, RoutedEventArgs e)
     {
         if (View is null)
@@ -407,17 +540,6 @@ public partial class MainWindow : Window
         {
             ThemeLabel.Text = ThemeManager.GetThemeDisplayName(theme);
         }
-    }
-
-    private void OnTogglePassword(object? sender, RoutedEventArgs e)
-    {
-        if (View is null)
-        {
-            return;
-        }
-
-        View.PasswordVisible = !View.PasswordVisible;
-        PasswordBox.PasswordChar = View.PasswordVisible ? '\0' : '•';
     }
 
     private async Task<bool> ConfirmDiscardAsync()

@@ -121,18 +121,7 @@ public sealed class VaultStore
         {
             Spaces = labels?.Spaces.ToList() ?? [],
             Tags = labels?.Tags.ToList() ?? [],
-            Entries = entries.Select(entry => new EntryDto
-            {
-                Id = entry.Id,
-                Name = entry.Name ?? "",
-                Url = entry.Url ?? "",
-                Username = entry.Username ?? "",
-                Password = entry.Password ?? "",
-                Note = entry.Note ?? "",
-                TotpSecret = string.IsNullOrWhiteSpace(entry.TotpSecret) ? null : entry.TotpSecret.Trim(),
-                Space = string.IsNullOrEmpty(entry.Space) ? null : entry.Space,
-                Tags = entry.Tags.Count == 0 ? null : entry.Tags.ToList()
-            }).ToList()
+            Entries = entries.Select(EntryDto.From).ToList()
         };
 
         var plaintext = JsonSerializer.SerializeToUtf8Bytes(payload, PayloadOptions);
@@ -205,18 +194,8 @@ public sealed class VaultStore
         {
             var payload = JsonSerializer.Deserialize<PayloadDto>(plaintext, PayloadOptions)
                 ?? throw new InvalidDataException("保险库内容为空。");
-            var entries = payload.Entries.Select(entry => new VaultEntry
-            {
-                Id = entry.Id == Guid.Empty ? Guid.NewGuid() : entry.Id,
-                Name = entry.Name ?? "",
-                Url = entry.Url ?? "",
-                Username = entry.Username ?? "",
-                Password = entry.Password ?? "",
-                Note = entry.Note ?? "",
-                TotpSecret = string.IsNullOrWhiteSpace(entry.TotpSecret) ? null : entry.TotpSecret.Trim(),
-                Space = LabelName.Normalize(entry.Space),
-                Tags = LabelName.NormalizeAll(entry.Tags)
-            }).ToList();
+            var entries = payload.Entries.Select(entry => entry.ToEntry()).ToList();
+            VaultSession.DropDanglingKeyReferences(entries);
             return (entries, VaultLabels.From(payload.Spaces, payload.Tags, entries));
         }
         finally
@@ -628,5 +607,96 @@ public sealed class VaultStore
         public string? Space { get; set; }
 
         public List<string>? Tags { get; set; }
+
+        public string? Kind { get; set; }
+
+        public bool? Favorite { get; set; }
+
+        public Dictionary<string, string>? Fields { get; set; }
+
+        public List<CustomFieldDto>? CustomFields { get; set; }
+
+        public Guid? SshKeyId { get; set; }
+
+        public List<NodeDto>? Nodes { get; set; }
+
+        public static EntryDto From(VaultEntry entry) => new()
+        {
+            Id = entry.Id,
+            Kind = entry.Kind == VaultItemKind.Login ? null : VaultItemKinds.Code(entry.Kind),
+            Favorite = entry.Favorite ? true : null,
+            Name = entry.Name ?? "",
+            Url = entry.Url ?? "",
+            Username = entry.Username ?? "",
+            Password = entry.Password ?? "",
+            Note = entry.Note ?? "",
+            TotpSecret = string.IsNullOrWhiteSpace(entry.TotpSecret) ? null : entry.TotpSecret.Trim(),
+            Space = string.IsNullOrEmpty(entry.Space) ? null : entry.Space,
+            Tags = entry.Tags.Count == 0 ? null : entry.Tags.ToList(),
+            Fields = entry.Fields.Count == 0 ? null : new Dictionary<string, string>(entry.Fields, StringComparer.Ordinal),
+            CustomFields = entry.CustomFields.Count == 0
+                ? null
+                : entry.CustomFields.Select(field => new CustomFieldDto { Name = field.Name, Value = field.Value, Sensitive = field.Sensitive }).ToList(),
+            SshKeyId = entry.SshKeyId,
+            Nodes = entry.Nodes.Count == 0
+                ? null
+                : entry.Nodes.Select(node => new NodeDto { Name = node.Name, Role = node.Role, Host = node.Host, Port = node.Port, Service = node.Service }).ToList()
+        };
+
+        public VaultEntry ToEntry() => new()
+        {
+            Id = Id == Guid.Empty ? Guid.NewGuid() : Id,
+            Kind = VaultItemKinds.Parse(Kind),
+            Favorite = Favorite == true,
+            Name = Name ?? "",
+            Url = Url ?? "",
+            Username = Username ?? "",
+            Password = Password ?? "",
+            Note = Note ?? "",
+            TotpSecret = string.IsNullOrWhiteSpace(TotpSecret) ? null : TotpSecret.Trim(),
+            Space = LabelName.Normalize(Space),
+            Tags = LabelName.NormalizeAll(Tags),
+            Fields = Fields is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : Fields.Where(pair => !string.IsNullOrEmpty(pair.Key) && !string.IsNullOrEmpty(pair.Value))
+                    .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
+            CustomFields = CustomFields?.Select(field => new VaultCustomField
+            {
+                Name = field.Name ?? "",
+                Value = field.Value ?? "",
+                Sensitive = field.Sensitive
+            }).ToList() ?? [],
+            SshKeyId = SshKeyId,
+            Nodes = Nodes?.Select(node => new ClusterNode
+            {
+                Name = node.Name ?? "",
+                Role = node.Role ?? "",
+                Host = node.Host ?? "",
+                Port = node.Port ?? "",
+                Service = node.Service ?? ""
+            }).ToList() ?? []
+        };
+    }
+
+    private sealed class CustomFieldDto
+    {
+        public string Name { get; set; } = "";
+
+        public string Value { get; set; } = "";
+
+        public bool Sensitive { get; set; }
+    }
+
+    private sealed class NodeDto
+    {
+        public string Name { get; set; } = "";
+
+        public string Role { get; set; } = "";
+
+        public string Host { get; set; } = "";
+
+        public string Port { get; set; } = "";
+
+        public string Service { get; set; } = "";
     }
 }

@@ -3,6 +3,8 @@ using KeepPassword.Core.Vault;
 
 namespace KeepPassword.Core.Import;
 
+public sealed record CsvTable(IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<string>> Rows);
+
 public static class CsvImporter
 {
     public const int MaxCharacters = 8_000_000;
@@ -18,7 +20,7 @@ public static class CsvImporter
         ("otp", ["otpauth", "otp", "onetimepassword"], false)
     ];
 
-    public static IReadOnlyList<VaultEntry> Import(string text)
+    public static CsvTable ReadTable(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
         if (text.Length > MaxCharacters)
@@ -33,31 +35,40 @@ public static class CsvImporter
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            return [];
+            return new CsvTable([], []);
         }
 
-        var delimiter = DetectDelimiter(text);
-        var rows = Parse(text, delimiter);
-        if (rows.Count == 0)
-        {
-            return [];
-        }
-
-        if (rows.Count > MaxRows)
+        var rows = Parse(text, DetectDelimiter(text));
+        if (rows.Count > MaxRows + 1)
         {
             throw new FormatException("CSV 行数超过上限。");
         }
 
-        var columns = MapHeader(rows[0]);
-        var entries = new List<VaultEntry>();
-        for (var i = 1; i < rows.Count; i++)
+        if (rows.Count == 0)
         {
-            var row = rows[i];
-            if (row.All(string.IsNullOrWhiteSpace))
-            {
-                continue;
-            }
+            return new CsvTable([], []);
+        }
 
+        var header = rows[0].Select(name => name.Trim()).ToList();
+        var body = rows.Skip(1)
+            .Where(row => !row.All(string.IsNullOrWhiteSpace))
+            .Select(row => (IReadOnlyList<string>)row)
+            .ToList();
+        return new CsvTable(header, body);
+    }
+
+    public static IReadOnlyList<VaultEntry> Import(string text)
+    {
+        var table = ReadTable(text);
+        if (table.Headers.Count == 0)
+        {
+            return [];
+        }
+
+        var columns = MapHeader(table.Headers);
+        var entries = new List<VaultEntry>();
+        foreach (var row in table.Rows)
+        {
             entries.Add(new VaultEntry
             {
                 Id = Guid.NewGuid(),
@@ -154,7 +165,7 @@ public static class CsvImporter
         return resolved;
     }
 
-    private static string? TotpSecret(string value)
+    internal static string? TotpSecret(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {

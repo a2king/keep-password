@@ -244,26 +244,47 @@ public sealed class VaultSession : IDisposable
         lock (_gate)
         {
             EnsureUnlocked();
-            var copy = entry.Clone();
-            if (copy.Id == Guid.Empty)
-            {
-                copy.Id = Guid.NewGuid();
-            }
-
-            copy.Space = VaultLabels.AddTo(_labels.Spaces, copy.Space);
-            copy.Tags = LabelName.NormalizeAll(copy.Tags)
-                .Select(tag => VaultLabels.AddTo(_labels.Tags, tag))
-                .ToList();
-
+            var copy = Prepare(entry);
             var index = _entries.FindIndex(item => item.Id == copy.Id);
-            if (index < 0)
+            if (index >= 0 && _entries[index].Kind != copy.Kind)
             {
-                _entries.Add(copy);
+                throw new InvalidOperationException("条目类型创建后不能修改。");
             }
-            else
+
+            if (copy.SshKeyId is { } keyId && !_entries.Any(item => item.Id == keyId && item.Kind == VaultItemKind.SshKey))
             {
-                _entries[index] = copy;
+                throw new ArgumentException("关联的 SSH 密钥不存在。", nameof(entry));
             }
+
+            Commit(copy, index);
+        }
+    }
+
+    public void ReplaceAll(IEnumerable<VaultEntry> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            var prepared = entries.Select(Prepare).ToList();
+            DropDanglingKeyReferences(prepared);
+            _entries.Clear();
+            foreach (var copy in prepared)
+            {
+                Commit(copy, _entries.FindIndex(item => item.Id == copy.Id));
+            }
+        }
+    }
+
+    public IReadOnlyList<string> ReferencingNames(Guid keyId)
+    {
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            return _entries
+                .Where(entry => entry.SshKeyId == keyId)
+                .Select(entry => string.IsNullOrWhiteSpace(entry.Name) ? "未命名" : entry.Name)
+                .ToList();
         }
     }
 
@@ -272,7 +293,75 @@ public sealed class VaultSession : IDisposable
         lock (_gate)
         {
             EnsureUnlocked();
-            return _entries.RemoveAll(entry => entry.Id == id) > 0;
+            var removed = _entries.RemoveAll(entry => entry.Id == id) > 0;
+            if (removed)
+            {
+                DropDanglingKeyReferences(_entries);
+            }
+
+            return removed;
+        }
+    }
+
+    internal static void DropDanglingKeyReferences(List<VaultEntry> entries)
+    {
+        var keys = entries.Where(entry => entry.Kind == VaultItemKind.SshKey).Select(entry => entry.Id).ToHashSet();
+        foreach (var entry in entries.Where(entry => entry.SshKeyId is { } id && !keys.Contains(id)))
+        {
+            entry.SshKeyId = null;
+            if (entry.Field(FieldKeys.Auth) == FieldKeys.AuthSshKey)
+            {
+                entry.SetField(FieldKeys.Auth, FieldKeys.AuthPassword);
+            }
+        }
+    }
+
+    private static VaultEntry Prepare(VaultEntry entry)
+    {
+        var copy = entry.Clone();
+        if (copy.Id == Guid.Empty)
+        {
+            copy.Id = Guid.NewGuid();
+        }
+
+        foreach (var field in copy.CustomFields)
+        {
+            field.Name = field.Name.Trim();
+        }
+
+        if (!ItemTemplates.UsesKeyAuth(copy))
+        {
+            copy.SshKeyId = null;
+        }
+
+        if (copy.Kind == VaultItemKind.SshKey)
+        {
+            var details = SshKeyInfo.Inspect(copy.Field(FieldKeys.PrivateKey), copy.Field(FieldKeys.PublicKey)).Details;
+            copy.SetField(FieldKeys.KeyType, details?.KeyType);
+            copy.SetField(FieldKeys.Fingerprint, details?.Fingerprint);
+        }
+
+        if (VaultItemRules.Validate(copy) is { } error)
+        {
+            throw new ArgumentException(error, nameof(entry));
+        }
+
+        return copy;
+    }
+
+    private void Commit(VaultEntry copy, int index)
+    {
+        copy.Space = VaultLabels.AddTo(_labels.Spaces, copy.Space);
+        copy.Tags = LabelName.NormalizeAll(copy.Tags)
+            .Select(tag => VaultLabels.AddTo(_labels.Tags, tag))
+            .ToList();
+        if (index < 0)
+        {
+            _entries.Add(copy);
+        }
+        else
+        {
+            _entries[index] = copy;
         }
     }
 

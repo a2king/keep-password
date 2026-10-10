@@ -23,7 +23,7 @@ public sealed class HibpRangeClient : IPwnedRangeClient, IDisposable
         _http = httpClient ?? new HttpClient();
         if (_http.DefaultRequestHeaders.UserAgent.Count == 0)
         {
-            _http.DefaultRequestHeaders.UserAgent.ParseAdd("KeepPassword/0.2.3");
+            _http.DefaultRequestHeaders.UserAgent.ParseAdd("KeepPassword/0.2.4");
         }
 
         if (!_http.DefaultRequestHeaders.Contains("Add-Padding"))

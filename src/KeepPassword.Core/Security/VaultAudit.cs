@@ -16,7 +16,10 @@ public static class VaultAudit
     public static IReadOnlyList<AuditFinding> Analyze(IEnumerable<VaultEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);
-        var list = entries.ToList();
+        var list = entries
+            .Where(entry => entry.Kind is not (VaultItemKind.SshKey or VaultItemKind.ApiCredential))
+            .Where(entry => !ItemTemplates.UsesKeyAuth(entry))
+            .ToList();
         var findings = new List<AuditFinding>();
         var reuse = list
             .Where(entry => !string.IsNullOrEmpty(entry.Password))

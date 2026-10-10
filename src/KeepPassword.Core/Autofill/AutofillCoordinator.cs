@@ -36,7 +36,7 @@ public static class AutofillCoordinator
         }
 
         var entry = session.Entries.FirstOrDefault(item => item.Id == decision.EntryId);
-        if (entry is null)
+        if (entry is null || entry.Kind != VaultItemKind.Login || matches.All(match => match.Id != entry.Id))
         {
             return AutofillResponse.Cancelled();
         }

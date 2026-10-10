@@ -113,7 +113,7 @@ public static class InstallOperations
             progress?.Report(new InstallProgress(55 + (i + 1) * 35.0 / total, "正在复制 " + Path.GetFileName(relative)));
         }
 
-        if (OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows() && options.RegisterWithSystem)
         {
             progress?.Report(new InstallProgress(93, "正在写入卸载信息…"));
             WriteWindowsUninstallInfo(targetRoot);
@@ -141,9 +141,53 @@ public static class InstallOperations
         progress?.Report(new InstallProgress(100, "安装完成"));
     }
 
-    public static void Uninstall(string installRoot, bool deleteCache)
+    public static ExistingInstall? FindExistingInstall()
     {
-        if (OperatingSystem.IsWindows())
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        using var key = Registry.CurrentUser.OpenSubKey(InstallConstants.UninstallRegistryKey);
+        return ResolveExistingInstall(
+            key?.GetValue("InstallLocation") as string,
+            key?.GetValue("DisplayVersion") as string,
+            File.Exists(StartMenuShortcutPath()),
+            File.Exists(DesktopShortcutPath()));
+    }
+
+    public static ExistingInstall? ResolveExistingInstall(string? location, string? version, bool hasStartMenuShortcut, bool hasDesktopShortcut)
+    {
+        if (string.IsNullOrWhiteSpace(location))
+        {
+            return null;
+        }
+
+        string directory;
+        try
+        {
+            directory = Path.GetFullPath(location.Trim());
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        if (!File.Exists(Path.Combine(directory, InstallConstants.AppExecutableName())))
+        {
+            return null;
+        }
+
+        return new ExistingInstall(
+            directory,
+            string.IsNullOrWhiteSpace(version) ? null : version.Trim(),
+            hasStartMenuShortcut,
+            hasDesktopShortcut);
+    }
+
+    public static void Uninstall(string installRoot, bool deleteCache, bool unregisterFromSystem = true)
+    {
+        if (OperatingSystem.IsWindows() && unregisterFromSystem)
         {
             TryDeleteFile(StartMenuShortcutPath());
             TryDeleteFile(DesktopShortcutPath());
@@ -265,6 +309,18 @@ public static class InstallOperations
     private static void RemoveWindowsUninstallInfo()
     {
         Registry.CurrentUser.DeleteSubKeyTree(InstallConstants.UninstallRegistryKey, throwOnMissingSubKey: false);
+        foreach (var key in InstallConstants.NativeHostRegistryKeys)
+        {
+            try
+            {
+                Registry.CurrentUser.DeleteSubKeyTree(key, throwOnMissingSubKey: false);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        TryDeleteFile(Path.Combine(AppDataPaths.VaultDirectory(), InstallConstants.NativeHostName + ".json"));
     }
 
     [SupportedOSPlatform("windows")]

@@ -15,8 +15,33 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        PathBox.Text = InstallConstants.DefaultInstallDirectory();
         StepTitle.Text = "第 1 步 / 共 3 步 · 选项";
+        var existing = FindExistingInstall();
+        if (existing is null)
+        {
+            PathBox.Text = InstallConstants.DefaultInstallDirectory();
+            return;
+        }
+
+        PathBox.Text = existing.Directory;
+        StartMenuBox.IsChecked = existing.HasStartMenuShortcut;
+        DesktopBox.IsChecked = existing.HasDesktopShortcut;
+        var version = existing.Version is null ? "" : " v" + existing.Version;
+        WelcomeTitle.Text = "更新 Keep Password";
+        WelcomeText.Text = $"检测到已安装{version}，将更新到 v{InstallConstants.Version} 并覆盖原安装目录。保险库和缓存不会被删除。";
+        InstallButton.Content = "立即更新";
+    }
+
+    private static ExistingInstall? FindExistingInstall()
+    {
+        try
+        {
+            return InstallOperations.FindExistingInstall();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private void OnCancel(object? sender, RoutedEventArgs e) => Close();
