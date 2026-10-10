@@ -6,26 +6,64 @@ using KeepPassword.Core.Vault;
 
 namespace KeepPassword.App.Views;
 
-public partial class UserManagementWindow : Window
+public partial class SettingsView : UserControl
 {
-    private readonly VaultSession? _session;
-    private readonly VaultLocation? _location;
-    private readonly Action<bool>? _pauseWatcher;
+    private VaultSession? _session;
+    private VaultLocation? _location;
+    private Action<bool>? _pauseWatcher;
 
-    public bool VaultChanged { get; private set; }
+    public SettingsView()
+    {
+        InitializeComponent();
+        ThemeManager.ThemeChanged += UpdateThemeButtons;
+    }
 
-    public UserManagementWindow() => InitializeComponent();
+    public event EventHandler? VaultChanged;
 
-    public UserManagementWindow(VaultSession session, VaultLocation location, Action<bool>? pauseWatcher = null)
-        : this()
+    private Window Host => TopLevel.GetTopLevel(this) as Window
+        ?? throw new InvalidOperationException("设置页尚未挂到窗口上。");
+
+    public void Show(VaultSession session, VaultLocation location, Action<bool>? pauseWatcher)
     {
         _session = session;
         _location = location;
         _pauseWatcher = pauseWatcher;
         AccountText.Text = "当前账号：" + session.Account;
         DirectoryBox.Text = location.Directory;
+        LabelStatus.Text = "";
+        DirectoryStatus.Text = "";
+        KeyStatus.Text = "";
+        ErrorBox.IsVisible = false;
         UpdateThemeButtons(ThemeManager.CurrentTheme);
         RebuildLabels();
+        Scroller.Offset = default;
+    }
+
+    public void Clear()
+    {
+        _session = null;
+        _location = null;
+        _pauseWatcher = null;
+        ClearSecrets();
+        NewSpaceBox.Text = "";
+        NewTagBox.Text = "";
+        SpaceList.Children.Clear();
+        TagList.Children.Clear();
+        AccountText.Text = "";
+        LabelStatus.Text = "";
+        DirectoryStatus.Text = "";
+        KeyStatus.Text = "";
+        ErrorBox.IsVisible = false;
+    }
+
+    private void ClearSecrets()
+    {
+        NewKeyBox.Text = "";
+        ConfirmBox.Text = "";
+        MasterBox.Text = "";
+        CurrentMasterBox.Text = "";
+        NewMasterBox.Text = "";
+        ConfirmMasterBox.Text = "";
     }
 
     private void RebuildLabels()
@@ -137,7 +175,7 @@ public partial class UserManagementWindow : Window
 
         var effect = isSpace ? "这些账号会变为未分类。" : "这些账号会去掉该标签。";
         var message = usage == 0 ? $"确定删除「{name}」吗？" : $"「{name}」正被 {usage} 个账号使用，{effect}确定删除吗？";
-        if (!await Dialogs.ConfirmAsync(this, isSpace ? "删除空间分类" : "删除账号标签", message))
+        if (!await Dialogs.ConfirmAsync(Host, isSpace ? "删除空间分类" : "删除账号标签", message))
         {
             return;
         }
@@ -168,7 +206,7 @@ public partial class UserManagementWindow : Window
         {
             var message = change();
             _session.Save();
-            VaultChanged = true;
+            VaultChanged?.Invoke(this, EventArgs.Empty);
             LabelStatus.Text = message;
             RebuildLabels();
         }
@@ -207,13 +245,20 @@ public partial class UserManagementWindow : Window
         }
     }
 
-    private void OnCancel(object? sender, RoutedEventArgs e) => Close();
+    private void OnCancel(object? sender, RoutedEventArgs e)
+    {
+        NewKeyBox.Text = "";
+        ConfirmBox.Text = "";
+        MasterBox.Text = "";
+        KeyStatus.Text = "";
+        ErrorBox.IsVisible = false;
+    }
 
     private async void OnBrowseDirectory(object? sender, RoutedEventArgs e)
     {
         try
         {
-            var path = await SafeStoragePickers.PickFolderAsync(this, "选择缓存目录", _pauseWatcher);
+            var path = await SafeStoragePickers.PickFolderAsync(Host, "选择缓存目录", _pauseWatcher);
             if (!string.IsNullOrWhiteSpace(path))
             {
                 DirectoryBox.Text = path;
@@ -273,11 +318,15 @@ public partial class UserManagementWindow : Window
 
         SaveButton.IsEnabled = false;
         BusyText.IsVisible = true;
-        ErrorText.IsVisible = false;
+        ErrorBox.IsVisible = false;
+        KeyStatus.Text = "";
         try
         {
-            await Task.Run(() => _session.ChangeShortKey(master, next));
-            Close();
+            var session = _session;
+            await Task.Run(() => session.ChangeShortKey(master, next));
+            NewKeyBox.Text = "";
+            ConfirmBox.Text = "";
+            KeyStatus.Text = "短密钥已更新。";
         }
         catch (Exception ex) when (ex is CredentialRejectedException or ArgumentException)
         {
@@ -308,7 +357,8 @@ public partial class UserManagementWindow : Window
         try
         {
             var current = CurrentMasterBox.Text ?? "";
-            await Task.Run(() => _session.ChangeMasterPassword(current, next));
+            var session = _session;
+            await Task.Run(() => session.ChangeMasterPassword(current, next));
             CurrentMasterBox.Text = "";
             NewMasterBox.Text = "";
             ConfirmMasterBox.Text = "";
@@ -331,7 +381,7 @@ public partial class UserManagementWindow : Window
         try
         {
             var path = await SafeStoragePickers.PickSaveFileAsync(
-                this,
+                Host,
                 "导出加密备份",
                 "keep-password-backup.kpvault",
                 [new FilePickerFileType("Keep Password 保险库") { Patterns = ["*.kpvault"] }],
@@ -358,7 +408,7 @@ public partial class UserManagementWindow : Window
             return;
         }
 
-        if (!await Dialogs.ConfirmAsync(this, "还原加密备份", "还原会替换当前保险库中的全部条目，并使用当前主密码重新加密。此操作需要备份文件自己的主密码。"))
+        if (!await Dialogs.ConfirmAsync(Host, "还原加密备份", "还原会替换当前保险库中的全部条目，并使用当前主密码重新加密。此操作需要备份文件自己的主密码。"))
         {
             return;
         }
@@ -366,7 +416,7 @@ public partial class UserManagementWindow : Window
         try
         {
             var path = await SafeStoragePickers.PickOpenFileAsync(
-                this,
+                Host,
                 "选择加密备份",
                 [new FilePickerFileType("Keep Password 保险库") { Patterns = ["*.kpvault"] }],
                 _pauseWatcher);
@@ -382,9 +432,15 @@ public partial class UserManagementWindow : Window
             }
 
             var entries = await Task.Run(() => EncryptedBackup.ReadEntries(path, password));
-            _session.ReplaceAll(entries);
-            _session.Save();
-            VaultChanged = true;
+            if (_session is not { IsUnlocked: true } session)
+            {
+                return;
+            }
+
+            session.ReplaceAll(entries);
+            session.Save();
+            VaultChanged?.Invoke(this, EventArgs.Empty);
+            RebuildLabels();
             DirectoryStatus.Text = $"已还原 {entries.Count} 条，并重新加密。";
             ErrorBox.IsVisible = false;
         }
@@ -432,7 +488,7 @@ public partial class UserManagementWindow : Window
                 }
             }
         };
-        await window.ShowDialog(this);
+        await window.ShowDialog(Host);
         return value;
     }
 

@@ -1,14 +1,8 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="KeepPassword.App.Views.UserManagementWindow"
-        Title="设置"
-        Width="580"
-        SizeToContent="Height"
-        CanResize="False"
-        WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource Kp.Bg}"
-        Icon="/Assets/logo.png">
-  <Window.Styles>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="KeepPassword.App.Views.SettingsView"
+             Background="Transparent">
+  <UserControl.Styles>
     <Style Selector="Button.theme-segment">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="{DynamicResource Kp.TextMuted}" />
@@ -30,10 +24,10 @@
       <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
       <Setter Property="BoxShadow" Value="0 2 6 0 #18000000" />
     </Style>
-  </Window.Styles>
+  </UserControl.Styles>
 
-  <ScrollViewer MaxHeight="740">
-    <Border Classes="card" Margin="24">
+  <ScrollViewer x:Name="Scroller">
+    <Border Classes="card" Margin="28,24" MaxWidth="760">
       <StackPanel Spacing="0">
         <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,16">
           <Border Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1">
@@ -97,8 +91,9 @@
           <TextBlock x:Name="ErrorText" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
         </Border>
         <TextBlock x:Name="BusyText" Text="正在验证主密码…" Classes="muted" Margin="0,8,0,0" IsVisible="False" />
+        <TextBlock x:Name="KeyStatus" Classes="muted" Margin="0,8,0,0" TextWrapping="Wrap" />
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,14,0,20">
-          <Button Classes="ghost" Content="取消" Click="OnCancel" />
+          <Button Classes="ghost" Content="清空" Click="OnCancel" />
           <Button x:Name="SaveButton" Classes="accent" Content="保存短密钥" Click="OnSave" />
         </StackPanel>
 
@@ -134,4 +129,4 @@
       </StackPanel>
     </Border>
   </ScrollViewer>
-</Window>
+</UserControl>

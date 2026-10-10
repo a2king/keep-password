@@ -1093,8 +1093,9 @@ public sealed class MainViewModel : ViewModelBase
 
     private void BuildChoices()
     {
-        var spaces = _session.Spaces.Concat(_pendingSpaces).Distinct(LabelName.Comparer).ToList();
-        var tags = _session.Tags.Concat(_pendingTags).Distinct(LabelName.Comparer).ToList();
+        var unlocked = _session.IsUnlocked;
+        var spaces = (unlocked ? _session.Spaces : []).Concat(_pendingSpaces).Distinct(LabelName.Comparer).ToList();
+        var tags = (unlocked ? _session.Tags : []).Concat(_pendingTags).Distinct(LabelName.Comparer).ToList();
         SpaceChoices = spaces
             .Select(space => new LabelChipView { Name = space, IsSelected = LabelName.Comparer.Equals(space, _editSpace) })
             .ToList();

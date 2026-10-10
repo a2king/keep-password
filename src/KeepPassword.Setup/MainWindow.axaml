@@ -3,7 +3,8 @@
         x:Class="KeepPassword.Setup.MainWindow"
         Title="安装 Keep Password"
         Width="560"
-        Height="420"
+        MinHeight="420"
+        SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterScreen"
         Icon="/Assets/logo.png">

@@ -31,25 +31,25 @@
               <TextBlock Text="生成器" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
             </StackPanel>
           </Button>
-          <Button Classes="nav" Click="OnTotp" ToolTip.Tip="双重验证码 (TOTP)">
+          <Button x:Name="NavTotp" Classes="nav" Click="OnTotp" ToolTip.Tip="双重验证码 (TOTP)">
             <StackPanel Spacing="4" HorizontalAlignment="Center">
               <PathIcon Data="{StaticResource Icon.Totp}" Width="20" Height="20" />
               <TextBlock Text="验证码" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
             </StackPanel>
           </Button>
-          <Button Classes="nav" Click="OnAudit" ToolTip.Tip="密码安全审计">
+          <Button x:Name="NavAudit" Classes="nav" Click="OnAudit" ToolTip.Tip="密码安全审计">
             <StackPanel Spacing="4" HorizontalAlignment="Center">
               <PathIcon Data="{StaticResource Icon.Audit}" Width="20" Height="20" />
               <TextBlock Text="审计" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
             </StackPanel>
           </Button>
-          <Button Classes="nav" Click="OnBreach" ToolTip.Tip="公开泄露检查">
+          <Button x:Name="NavBreach" Classes="nav" Click="OnBreach" ToolTip.Tip="公开泄露检查">
             <StackPanel Spacing="4" HorizontalAlignment="Center">
               <PathIcon Data="{StaticResource Icon.Breach}" Width="20" Height="20" />
               <TextBlock Text="泄露" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
             </StackPanel>
           </Button>
-          <Button Classes="nav" Click="OnUsers" ToolTip.Tip="账户与偏好设置">
+          <Button x:Name="NavSettings" Classes="nav" Click="OnUsers" ToolTip.Tip="账户与偏好设置">
             <StackPanel Spacing="4" HorizontalAlignment="Center">
               <PathIcon Data="{StaticResource Icon.Settings}" Width="20" Height="20" />
               <TextBlock Text="设置" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
@@ -510,6 +510,22 @@
 
       <Border x:Name="GeneratorPage" IsVisible="False" Background="{DynamicResource Kp.Bg}">
         <views:PasswordGeneratorView x:Name="GeneratorRoot" />
+      </Border>
+
+      <Border x:Name="TotpPage" IsVisible="False" Background="{DynamicResource Kp.Bg}">
+        <views:TotpView x:Name="TotpRoot" />
+      </Border>
+
+      <Border x:Name="AuditPage" IsVisible="False" Background="{DynamicResource Kp.Bg}">
+        <views:AuditView x:Name="AuditRoot" />
+      </Border>
+
+      <Border x:Name="BreachPage" IsVisible="False" Background="{DynamicResource Kp.Bg}">
+        <views:BreachView x:Name="BreachRoot" />
+      </Border>
+
+      <Border x:Name="SettingsPage" IsVisible="False" Background="{DynamicResource Kp.Bg}">
+        <views:SettingsView x:Name="SettingsRoot" />
       </Border>
     </Grid>
   </Grid>

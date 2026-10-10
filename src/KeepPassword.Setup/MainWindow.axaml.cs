@@ -27,9 +27,12 @@ public partial class MainWindow : Window
         StartMenuBox.IsChecked = existing.HasStartMenuShortcut;
         DesktopBox.IsChecked = existing.HasDesktopShortcut;
         var version = existing.Version is null ? "" : " v" + existing.Version;
-        WelcomeTitle.Text = "更新 Keep Password";
-        WelcomeText.Text = $"检测到已安装{version}，将更新到 v{InstallConstants.Version} 并覆盖原安装目录。保险库和缓存不会被删除。";
-        InstallButton.Content = "立即更新";
+        var reinstall = existing.Version == InstallConstants.Version;
+        WelcomeTitle.Text = reinstall ? "重新安装 Keep Password" : "更新 Keep Password";
+        WelcomeText.Text = reinstall
+            ? $"检测到已安装{version}，将重新安装到原安装目录。保险库和缓存不会被删除。"
+            : $"检测到已安装{version}，将更新到 v{InstallConstants.Version} 并覆盖原安装目录。保险库和缓存不会被删除。";
+        InstallButton.Content = reinstall ? "重新安装" : "立即更新";
     }
 
     private static ExistingInstall? FindExistingInstall()

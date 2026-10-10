@@ -122,12 +122,11 @@ public sealed class AppHost : IDisposable
         }
 
         _locking = true;
+        var session = _session;
         try
         {
             _autoLock.Stop();
             _watcher.Stop();
-            _session.Lock();
-            _session = null;
             if (_main is not null)
             {
                 foreach (var owned in _main.OwnedWindows.ToArray())
@@ -140,6 +139,8 @@ public sealed class AppHost : IDisposable
         }
         finally
         {
+            session.Lock();
+            _session = null;
             _locking = false;
         }
     }

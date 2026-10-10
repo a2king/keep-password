@@ -33,6 +33,16 @@ public partial class MainWindow : Window
         _totpTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _totpTimer.Tick += (_, _) => View?.RefreshTotp();
         UnlockRoot.Unlocked += session => Unlocked?.Invoke(session);
+        SettingsRoot.VaultChanged += (_, _) => View?.Reload();
+        AuditRoot.Rerun = () =>
+        {
+            if (View is not null)
+            {
+                AuditRoot.Show(View.Audit());
+            }
+        };
+        BreachRoot.Checker = token => View?.CheckBreachesAsync(token)
+            ?? Task.FromResult<IReadOnlyList<BreachFinding>>([]);
         AccountScroller.SizeChanged += (_, _) => UpdateAccountColumns();
         UpdateThemeButtonState(ThemeManager.CurrentTheme);
         ThemeManager.ThemeChanged += UpdateThemeButtonState;
@@ -70,7 +80,10 @@ public partial class MainWindow : Window
         UnlockRoot.IsVisible = true;
         View?.CloseDetail();
         GeneratorRoot.ClearSecret();
-        ShowItemsPage();
+        ShowPage(ItemsPage);
+        AuditRoot.Clear();
+        BreachRoot.Reset();
+        SettingsRoot.Clear();
         VaultRoot.IsVisible = false;
         VaultRoot.DataContext = null;
         _session = null;
@@ -95,7 +108,7 @@ public partial class MainWindow : Window
     {
         _session = session;
         VaultRoot.DataContext = new MainViewModel(session, _platformAutofill);
-        ShowItemsPage();
+        ShowPage(ItemsPage);
         VaultRoot.IsVisible = true;
         UpdateAccountColumns();
         UnlockRoot.ClearSecrets();
@@ -443,86 +456,89 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnTotp(object? sender, RoutedEventArgs e)
+    private void OnNavItems(object? sender, RoutedEventArgs e) => ShowPage(ItemsPage);
+
+    private void OnNavGenerator(object? sender, RoutedEventArgs e) => ShowPage(GeneratorPage);
+
+    private void OnTotp(object? sender, RoutedEventArgs e)
     {
         if (_session is null)
         {
             return;
         }
 
-        await new TotpWindow(_session).ShowDialog(this);
-    }
-
-    private async void OnUsers(object? sender, RoutedEventArgs e)
-    {
-        if (_session is null)
+        if (!TotpPage.IsVisible)
         {
-            return;
+            TotpRoot.Start(_session);
         }
 
-        if (_location is null)
-        {
-            return;
-        }
-
-        var settings = new UserManagementWindow(_session, _location, _pauseWatcher);
-        await settings.ShowDialog(this);
-        if (settings.VaultChanged)
-        {
-            View?.Reload();
-        }
+        ShowPage(TotpPage);
     }
 
-    private void OnNavItems(object? sender, RoutedEventArgs e) => ShowItemsPage();
-
-    private void OnNavGenerator(object? sender, RoutedEventArgs e) => ShowGeneratorPage();
-
-    private void ShowItemsPage()
-    {
-        ItemsPage.IsVisible = true;
-        GeneratorPage.IsVisible = false;
-        NavGenerator.Classes.Remove("active");
-        NavItems.Classes.Add("active");
-    }
-
-    private void ShowGeneratorPage()
-    {
-        ItemsPage.IsVisible = false;
-        GeneratorPage.IsVisible = true;
-        NavItems.Classes.Remove("active");
-        NavGenerator.Classes.Add("active");
-    }
-
-    private async void OnAudit(object? sender, RoutedEventArgs e)
+    private void OnAudit(object? sender, RoutedEventArgs e)
     {
         if (View is null)
         {
             return;
         }
 
-        await new AuditWindow(View.Audit()).ShowDialog(this);
+        AuditRoot.Show(View.Audit());
+        ShowPage(AuditPage);
     }
 
-    private async void OnBreach(object? sender, RoutedEventArgs e)
+    private void OnBreach(object? sender, RoutedEventArgs e)
     {
         if (View is null)
         {
             return;
         }
 
-        if (!await Dialogs.ConfirmAsync(this, "泄露检查", BreachChecker.PrivacyNotice))
+        ShowPage(BreachPage);
+    }
+
+    private void OnUsers(object? sender, RoutedEventArgs e)
+    {
+        if (_session is null || _location is null)
         {
             return;
         }
 
-        try
+        if (!SettingsPage.IsVisible)
         {
-            var findings = await View.CheckBreachesAsync();
-            await new BreachWindow(findings).ShowDialog(this);
+            SettingsRoot.Show(_session, _location, _pauseWatcher);
         }
-        catch (Exception ex) when (ex is IOException or HttpRequestException or TaskCanceledException)
+
+        ShowPage(SettingsPage);
+    }
+
+    private void ShowPage(Control page)
+    {
+        (Control Page, Button Nav)[] pages =
+        [
+            (ItemsPage, NavItems),
+            (GeneratorPage, NavGenerator),
+            (TotpPage, NavTotp),
+            (AuditPage, NavAudit),
+            (BreachPage, NavBreach),
+            (SettingsPage, NavSettings)
+        ];
+        foreach (var (candidate, nav) in pages)
         {
-            await Dialogs.AlertAsync(this, "泄露检查失败", "网络查询没有完成。密码明文和完整哈希都没有上传。");
+            var active = candidate == page;
+            candidate.IsVisible = active;
+            if (active)
+            {
+                nav.Classes.Add("active");
+            }
+            else
+            {
+                nav.Classes.Remove("active");
+            }
+        }
+
+        if (page != TotpPage)
+        {
+            TotpRoot.Stop();
         }
     }
 
