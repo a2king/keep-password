@@ -16,44 +16,51 @@ public static class VaultAudit
     public static IReadOnlyList<AuditFinding> Analyze(IEnumerable<VaultEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);
-        var list = entries
-            .Where(entry => entry.Kind is not (VaultItemKind.SshKey or VaultItemKind.ApiCredential))
-            .Where(entry => !ItemTemplates.UsesKeyAuth(entry))
+        var accounts = entries
+            .Where(entry => VaultItemKinds.HasAccounts(entry.Kind))
+            .SelectMany(entry => entry.Accounts.Select(account => (Entry: entry, Account: account)))
+            .Where(item => !ItemTemplates.UsesKeyAuth(item.Entry, item.Account))
             .ToList();
-        var findings = new List<AuditFinding>();
-        var reuse = list
-            .Where(entry => !string.IsNullOrEmpty(entry.Password))
-            .GroupBy(entry => entry.Password)
+        var reuse = accounts
+            .Where(item => !string.IsNullOrEmpty(item.Account.Password))
+            .GroupBy(item => item.Account.Password)
             .Where(group => group.Count() > 1)
-            .SelectMany(group => group.Select(entry => (entry.Id, group.Count() - 1)))
+            .SelectMany(group => group.Select(item => (item.Account.Id, group.Count() - 1)))
             .ToDictionary(item => item.Id, item => item.Item2);
 
-        foreach (var entry in list)
+        var findings = new List<AuditFinding>();
+        foreach (var (entry, account) in accounts)
         {
-            if (string.IsNullOrEmpty(entry.Username) && string.IsNullOrEmpty(entry.Password) && string.IsNullOrWhiteSpace(entry.Url))
+            if (string.IsNullOrEmpty(account.Username) && string.IsNullOrEmpty(account.Password))
             {
                 continue;
             }
 
-            var name = string.IsNullOrWhiteSpace(entry.Name) ? "未命名" : entry.Name;
+            var name = AccountTitle(entry, account);
             var domain = DomainGrouping.HostOf(entry.Url);
-            if (string.IsNullOrEmpty(entry.Password))
+            if (string.IsNullOrEmpty(account.Password))
             {
-                findings.Add(new AuditFinding(entry.Id, name, domain, AuditKind.Empty, "此登录没有密码。请生成并保存一个高强度密码。"));
+                findings.Add(new AuditFinding(entry.Id, name, domain, AuditKind.Empty, "此账号没有密码。请生成并保存一个高强度密码。"));
                 continue;
             }
 
-            if (PasswordStrengthEvaluator.Evaluate(entry.Password) == PasswordStrength.Weak)
+            if (PasswordStrengthEvaluator.Evaluate(account.Password) == PasswordStrength.Weak)
             {
                 findings.Add(new AuditFinding(entry.Id, name, domain, AuditKind.Weak, "密码强度不足。请换成更长、且包含多类字符的密码。"));
             }
 
-            if (reuse.TryGetValue(entry.Id, out var others))
+            if (reuse.TryGetValue(account.Id, out var others))
             {
-                findings.Add(new AuditFinding(entry.Id, name, domain, AuditKind.Reused, "此密码还用于其他 " + others + " 个条目。请为每个站点使用独立密码。"));
+                findings.Add(new AuditFinding(entry.Id, name, domain, AuditKind.Reused, "此密码还用于其他 " + others + " 个账号。请为每个账号使用独立密码。"));
             }
         }
 
         return findings;
+    }
+
+    public static string AccountTitle(VaultEntry entry, VaultAccount account)
+    {
+        var name = string.IsNullOrWhiteSpace(entry.Name) ? "未命名" : entry.Name;
+        return entry.Accounts.Count > 1 && account.Username.Trim().Length > 0 ? $"{name} · {account.Username.Trim()}" : name;
     }
 }

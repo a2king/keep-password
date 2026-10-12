@@ -13,7 +13,7 @@ public sealed class VaultLabelTests
         {
             session.AddSpace("  工作  ");
             session.AddTag("空闲标签");
-            session.Upsert(new VaultEntry { Name = "GitHub", Space = "个人", Tags = ["开发", "开发", " 重要 "] });
+            session.Upsert(new VaultEntry { Name = "GitHub", Accounts = [new VaultAccount { Username = "u", Password = "p" }], Space = "个人", Tags = ["开发", "开发", " 重要 "] });
             session.Save();
         }
 
@@ -31,7 +31,7 @@ public sealed class VaultLabelTests
         var path = TestVault.NewPath();
         using var session = TestVault.CreateUnlocked(path);
         session.AddTag("Dev");
-        session.Upsert(new VaultEntry { Name = "a", Tags = ["dev"] });
+        session.Upsert(new VaultEntry { Name = "a", Accounts = [new VaultAccount { Username = "u", Password = "p" }], Tags = ["dev"] });
         Assert.Equal(["Dev"], session.Tags);
         Assert.Equal(["Dev"], Assert.Single(session.Entries).Tags);
     }
@@ -41,8 +41,8 @@ public sealed class VaultLabelTests
     {
         var path = TestVault.NewPath();
         using var session = TestVault.CreateUnlocked(path);
-        session.Upsert(new VaultEntry { Name = "a", Space = "旧空间", Tags = ["甲", "乙"] });
-        session.Upsert(new VaultEntry { Name = "b", Space = "工作", Tags = ["乙"] });
+        session.Upsert(new VaultEntry { Name = "a", Accounts = [new VaultAccount { Username = "u", Password = "p" }], Space = "旧空间", Tags = ["甲", "乙"] });
+        session.Upsert(new VaultEntry { Name = "b", Accounts = [new VaultAccount { Username = "u", Password = "p" }], Space = "工作", Tags = ["乙"] });
 
         session.RenameSpace("旧空间", "新空间");
         session.RenameTag("甲", "乙");
@@ -59,7 +59,7 @@ public sealed class VaultLabelTests
     {
         var path = TestVault.NewPath();
         using var session = TestVault.CreateUnlocked(path);
-        session.Upsert(new VaultEntry { Name = "a", Space = "工作", Tags = ["甲", "乙"] });
+        session.Upsert(new VaultEntry { Name = "a", Accounts = [new VaultAccount { Username = "u", Password = "p" }], Space = "工作", Tags = ["甲", "乙"] });
 
         session.DeleteSpace("工作");
         session.DeleteTag("甲");

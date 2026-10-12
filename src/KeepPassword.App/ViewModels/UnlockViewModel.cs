@@ -19,6 +19,8 @@ public sealed class UnlockViewModel : ViewModelBase
     private bool _riskAcknowledged;
     private bool _isRecovering;
     private bool _recoveryAvailable;
+    private bool _hasShortUnlock;
+    private bool _useMaster;
     private string _question1 = "";
     private string _question2 = "";
     private string _question3 = "";
@@ -45,17 +47,65 @@ public sealed class UnlockViewModel : ViewModelBase
             if (Set(ref _isCreate, value))
             {
                 OnPropertyChanged(nameof(Title));
-                OnPropertyChanged(nameof(Hint));
                 OnPropertyChanged(nameof(SubmitText));
+                NotifyMode();
             }
         }
     }
 
     public string Title => IsCreate ? "创建保险库" : "解锁保险库";
 
-    public string Hint => IsCreate
-        ? "第一次使用会在本机创建保险库。请设置账号、主密码和短密钥。主密码用来加密保险库，短密钥另外保存验证哈希，两者都不会明文落盘。"
-        : "再次打开只需输入主密码。短密钥只在自动填充和修改短密钥时使用。";
+    public string Hint
+    {
+        get
+        {
+            if (IsCreate)
+            {
+                return "第一次使用会在本机创建保险库。请设置账号、主密码和短密钥。之后打开只需输入短密钥。";
+            }
+
+            if (IsRecovering)
+            {
+                return "回答安全问题后设置新的主密码。短密钥解锁会关闭，下次用主密码打开后会重新开启。";
+            }
+
+            if (ShowShortUnlock)
+            {
+                return "输入短密钥即可解锁。忘记短密钥时可以改用主密码。";
+            }
+
+            if (ShowPairingShort)
+            {
+                return "请输入主密码。之后打开只需短密钥。";
+            }
+
+            return "使用主密码解锁。下次仍可改用短密钥。";
+        }
+    }
+
+    public bool HasShortUnlock
+    {
+        get => _hasShortUnlock;
+        private set
+        {
+            if (Set(ref _hasShortUnlock, value))
+            {
+                NotifyMode();
+            }
+        }
+    }
+
+    public bool ShowShortUnlock => !IsCreate && !IsRecovering && HasShortUnlock && !_useMaster;
+
+    public bool ShowPairingShort => !IsCreate && !IsRecovering && !HasShortUnlock;
+
+    public bool ShowMaster => !ShowShortUnlock;
+
+    public bool ShowShortField => ShowShortUnlock;
+
+    public bool ShowUseMaster => ShowShortUnlock;
+
+    public bool ShowUseShort => !IsCreate && !IsRecovering && HasShortUnlock && _useMaster;
 
     public string SubmitText => IsRecovering ? "重置并解锁" : IsCreate ? "创建并解锁" : "解锁";
 
@@ -81,6 +131,7 @@ public sealed class UnlockViewModel : ViewModelBase
             if (Set(ref _isRecovering, value))
             {
                 OnPropertyChanged(nameof(SubmitText));
+                NotifyMode();
             }
         }
     }
@@ -162,8 +213,28 @@ public sealed class UnlockViewModel : ViewModelBase
     public void UseVaultFile(string path)
     {
         _path = path;
+        _useMaster = false;
         IsCreate = !_store.Exists(path);
         RefreshAccount();
+    }
+
+    public void UseMasterPassword()
+    {
+        if (!HasShortUnlock || IsCreate)
+        {
+            return;
+        }
+
+        _useMaster = true;
+        Error = "";
+        NotifyMode();
+    }
+
+    public void UseShortKey()
+    {
+        _useMaster = false;
+        Error = "";
+        NotifyMode();
     }
 
     public async Task<bool> SubmitAsync()
@@ -193,11 +264,18 @@ public sealed class UnlockViewModel : ViewModelBase
             return false;
         }
 
+        if (ShowShortField && string.IsNullOrEmpty(ShortKey))
+        {
+            Error = "请填写短密钥。";
+            return false;
+        }
+
         var account = Account.Trim();
         var master = MasterPassword;
         var shortKey = ShortKey;
         var answers = new[] { Answer1, Answer2, Answer3 };
         var questions = new[] { Question1, Question2, Question3 };
+        var useShort = ShowShortUnlock;
         IsBusy = true;
         try
         {
@@ -221,7 +299,12 @@ public sealed class UnlockViewModel : ViewModelBase
                         };
                     }
 
-                    _store.Create(_path, account, master, shortKey, recovery);
+                    return _store.CreateSession(_path, account, master, shortKey, recovery);
+                }
+
+                if (useShort)
+                {
+                    return _store.UnlockWithShortKey(_path, shortKey);
                 }
 
                 return _store.Unlock(_path, master);
@@ -276,6 +359,8 @@ public sealed class UnlockViewModel : ViewModelBase
         if (IsCreate || !_store.Exists(_path))
         {
             AccountLabel = "";
+            HasShortUnlock = false;
+            NotifyMode();
             return;
         }
 
@@ -283,12 +368,27 @@ public sealed class UnlockViewModel : ViewModelBase
         {
             AccountLabel = "账号 " + _store.ReadAccount(_path);
             RecoveryAvailable = _store.HasRecovery(_path);
+            HasShortUnlock = _store.HasShortUnlock(_path);
         }
         catch (Exception ex) when (ex is InvalidDataException or IOException)
         {
             AccountLabel = "";
+            HasShortUnlock = false;
             Error = Friendly(ex);
         }
+
+        NotifyMode();
+    }
+
+    private void NotifyMode()
+    {
+        OnPropertyChanged(nameof(Hint));
+        OnPropertyChanged(nameof(ShowMaster));
+        OnPropertyChanged(nameof(ShowShortField));
+        OnPropertyChanged(nameof(ShowShortUnlock));
+        OnPropertyChanged(nameof(ShowPairingShort));
+        OnPropertyChanged(nameof(ShowUseMaster));
+        OnPropertyChanged(nameof(ShowUseShort));
     }
 
     private static string Friendly(Exception ex)

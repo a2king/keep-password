@@ -107,7 +107,7 @@
         <Border Classes="section">
           <StackPanel>
             <TextBlock Text="修改短密钥" Classes="h2" Margin="0,0,0,4" />
-            <TextBlock Text="提交前必须验证当前主密码。短密钥仅用于自动填入确认，更新后主密码和条目不变。"
+            <TextBlock Text="提交前必须验证当前主密码。短密钥也可以解锁保险库，自动填入时仍会再确认一次。更新后主密码和条目不变。"
                        TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
             <TextBlock x:Name="AccountText" Classes="muted" Margin="0,0,0,4" FontWeight="SemiBold" />
             <TextBlock Text="新短密钥" Classes="label" />
@@ -163,6 +163,20 @@
                 </StackPanel>
               </Button>
             </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="section">
+          <StackPanel>
+            <TextBlock Text="明文导出" Classes="h2" Margin="0,0,0,4" />
+            <TextBlock Text="把全部条目导出成 CSV，一个账号一行。文件包含明文密码、验证码密钥和私钥，请自行保管。登录、服务器、数据库、API 凭据和集群服务可以按类型重新导入。"
+                       TextWrapping="Wrap" Classes="muted" Margin="0,0,0,10" />
+            <Button Classes="soft" Click="OnExportCsv" HorizontalAlignment="Left">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <PathIcon Data="{StaticResource Icon.Copy}" Width="14" Height="14" />
+                <TextBlock Text="导出 CSV" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
           </StackPanel>
         </Border>
       </StackPanel>

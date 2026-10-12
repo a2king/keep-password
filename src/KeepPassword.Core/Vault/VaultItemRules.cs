@@ -5,14 +5,19 @@ public static class VaultItemRules
     public const int MaxValueLength = 65_536;
     public const int MaxCustomFields = 100;
     public const int MaxNodes = 200;
+    public const int MaxAccounts = 100;
 
     public static string? Validate(VaultEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        if (TooLong(entry.Name) || TooLong(entry.Url) || TooLong(entry.Username) || TooLong(entry.Password) || TooLong(entry.Note)
-            || TooLong(entry.TotpSecret) || entry.Fields.Values.Any(TooLong))
+        if (TooLong(entry.Name) || TooLong(entry.Url) || TooLong(entry.Note) || entry.Fields.Values.Any(TooLong))
         {
             return "字段内容过长。";
+        }
+
+        if (ValidateAccounts(entry) is { } accountError)
+        {
+            return accountError;
         }
 
         if (entry.CustomFields.Count > MaxCustomFields)
@@ -74,7 +79,7 @@ public static class VaultItemRules
             return "端口必须是 1-65535 之间的数字。";
         }
 
-        return ValidateKeyAuth(entry);
+        return null;
     }
 
     private static string? ValidateDatabase(VaultEntry entry)
@@ -131,11 +136,75 @@ public static class VaultItemRules
             }
         }
 
-        return ValidateKeyAuth(entry);
+        return null;
     }
 
-    private static string? ValidateKeyAuth(VaultEntry entry) =>
-        ItemTemplates.UsesKeyAuth(entry) && entry.SshKeyId is null ? "请选择要关联的 SSH 密钥。" : null;
+    private static string? ValidateAccounts(VaultEntry entry)
+    {
+        if (!VaultItemKinds.HasAccounts(entry.Kind))
+        {
+            return entry.Accounts.Count == 0 ? null : $"{VaultItemKinds.DisplayName(entry.Kind)}条目不支持账号列表。";
+        }
+
+        if (entry.Accounts.Count == 0)
+        {
+            return "请至少添加一个账号。";
+        }
+
+        if (entry.Accounts.Count > MaxAccounts)
+        {
+            return $"账号最多 {MaxAccounts} 个。";
+        }
+
+        var labels = ItemTemplates.AccountLabelsOf(entry);
+        for (var i = 0; i < entry.Accounts.Count; i++)
+        {
+            var account = entry.Accounts[i];
+            if (TooLong(account.Username) || TooLong(account.Password) || TooLong(account.Note) || TooLong(account.TotpSecret))
+            {
+                return "字段内容过长。";
+            }
+
+            if (entry.Kind != VaultItemKind.Login && !string.IsNullOrWhiteSpace(account.TotpSecret))
+            {
+                return "只有登录条目的账号支持验证码密钥。";
+            }
+
+            if (IsTotpOnly(entry, account))
+            {
+                continue;
+            }
+
+            if (account.Username.Trim().Length == 0)
+            {
+                return $"第 {i + 1} 个账号缺少{labels.Username}。";
+            }
+
+            if (ItemTemplates.UsesKeyAuth(entry, account))
+            {
+                if (account.SshKeyId is null)
+                {
+                    return $"第 {i + 1} 个账号请选择要关联的 SSH 密钥。";
+                }
+
+                continue;
+            }
+
+            if (account.Password.Length == 0)
+            {
+                return $"第 {i + 1} 个账号缺少{labels.Password}。";
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsTotpOnly(VaultEntry entry, VaultAccount account) =>
+        entry.Kind == VaultItemKind.Login
+        && entry.Accounts.Count == 1
+        && account.Username.Length == 0
+        && account.Password.Length == 0
+        && !string.IsNullOrWhiteSpace(account.TotpSecret);
 
     private static bool TooLong(string? value) => value is not null && value.Length > MaxValueLength;
 }

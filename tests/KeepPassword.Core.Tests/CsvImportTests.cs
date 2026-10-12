@@ -18,8 +18,8 @@ public class CsvImportTests
         var entries = CsvImporter.Import(csv);
 
         Assert.Equal(2, entries.Count);
-        Assert.Equal("p,ass", entries[0].Password);
-        Assert.Equal("ada@example.com", entries[1].Username);
+        Assert.Equal("p,ass", entries[0].Accounts[0].Password);
+        Assert.Equal("ada@example.com", entries[1].Accounts[0].Username);
         Assert.Equal("个人", entries[1].Note);
     }
 
@@ -33,7 +33,7 @@ public class CsvImportTests
         var entry = Assert.Single(entries);
         Assert.Equal("银行", entry.Name);
         Assert.Equal("https://bank.example", entry.Url);
-        Assert.Equal("secret", entry.Password);
+        Assert.Equal("secret", entry.Accounts[0].Password);
         Assert.Equal("备注", entry.Note);
     }
 

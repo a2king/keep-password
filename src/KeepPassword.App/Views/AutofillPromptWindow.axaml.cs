@@ -74,7 +74,7 @@ public partial class AutofillPromptWindow : Window
             return;
         }
 
-        Decision = new AutofillDecision { EntryId = selected.Id, ShortKey = shortKey };
+        Decision = new AutofillDecision { EntryId = selected.Id, AccountId = selected.AccountId, ShortKey = shortKey };
         Close();
     }
 

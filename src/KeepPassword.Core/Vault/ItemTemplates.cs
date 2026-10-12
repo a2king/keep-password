@@ -23,43 +23,49 @@ public static class FieldKeys
     public const string Token = "token";
     public const string Environment = "environment";
     public const string Product = "product";
+    public const string ClientId = "clientId";
+    public const string AccountNote = "accountNote";
 
     public const string AuthPassword = "password";
     public const string AuthSshKey = "sshKey";
 
-    public static bool IsEntryProperty(string key) => key is Url or Username or Password or Totp;
+    public static bool IsAccountField(string key) => key is Username or Password or Totp or AccountNote;
 
-    public static string Read(VaultEntry entry, string key) => key switch
-    {
-        Url => entry.Url,
-        Username => entry.Username,
-        Password => entry.Password,
-        Totp => entry.TotpSecret ?? "",
-        _ => entry.Field(key)
-    };
+    public static string Read(VaultEntry entry, string key) => key == Url ? entry.Url : entry.Field(key);
 
     public static void Write(VaultEntry entry, string key, string value)
     {
+        if (key == Url)
+        {
+            entry.Url = value.Trim();
+        }
+        else
+        {
+            entry.SetField(key, value);
+        }
+    }
+
+    public static void WriteAccount(VaultAccount account, string key, string value)
+    {
         switch (key)
         {
-            case Url:
-                entry.Url = value.Trim();
-                break;
             case Username:
-                entry.Username = value;
+                account.Username = value;
                 break;
             case Password:
-                entry.Password = value;
+                account.Password = value;
                 break;
             case Totp:
-                entry.TotpSecret = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                account.TotpSecret = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
                 break;
-            default:
-                entry.SetField(key, value);
+            case AccountNote:
+                account.Note = value;
                 break;
         }
     }
 }
+
+public sealed record AccountLabels(string Username, string Password);
 
 public sealed record FieldSpec(string Key, string Label, bool Sensitive = false, bool Multiline = false, string Placeholder = "");
 
@@ -112,11 +118,6 @@ public static class ItemTemplates
                     entry.SetField(FieldKeys.Port, Protocols[0].DefaultPort);
                 }
 
-                if (entry.Field(FieldKeys.Auth).Length == 0)
-                {
-                    entry.SetField(FieldKeys.Auth, FieldKeys.AuthPassword);
-                }
-
                 break;
             case VaultItemKind.Database:
                 if (entry.Field(FieldKeys.Driver).Length == 0)
@@ -126,20 +127,41 @@ public static class ItemTemplates
                 }
 
                 break;
-            case VaultItemKind.Cluster:
-                if (entry.Field(FieldKeys.Auth).Length == 0)
-                {
-                    entry.SetField(FieldKeys.Auth, FieldKeys.AuthPassword);
-                }
-
-                break;
         }
     }
 
-    public static bool UsesKeyAuth(VaultEntry entry) =>
-        VaultItemKinds.UsesSshKey(entry.Kind)
-        && entry.Field(FieldKeys.Auth) == FieldKeys.AuthSshKey
-        && (entry.Kind == VaultItemKind.Cluster || Protocol(entry.Field(FieldKeys.Protocol)).SupportsKey);
+    public static bool SupportsKeyAuth(VaultEntry entry) =>
+        entry.Kind == VaultItemKind.Cluster
+        || (entry.Kind == VaultItemKind.Server && Protocol(entry.Field(FieldKeys.Protocol)).SupportsKey);
+
+    public static bool UsesKeyAuth(VaultEntry entry, VaultAccount account) =>
+        SupportsKeyAuth(entry) && account.Auth == FieldKeys.AuthSshKey;
+
+    /// <summary>
+    /// 旧数据把认证方式和密钥引用放在条目上。读入或保存时挪到账号上，并清除条目上的值。
+    /// </summary>
+    public static void AdoptLegacyKeyAuth(VaultEntry entry)
+    {
+        var legacyKey = entry.SshKeyId;
+        var legacyAuth = entry.Field(FieldKeys.Auth) == FieldKeys.AuthSshKey;
+        if (legacyAuth && SupportsKeyAuth(entry))
+        {
+            foreach (var account in entry.Accounts)
+            {
+                if (account.Auth == FieldKeys.AuthSshKey)
+                {
+                    account.SshKeyId ??= legacyKey;
+                    continue;
+                }
+
+                account.Auth = FieldKeys.AuthSshKey;
+                account.SshKeyId ??= legacyKey;
+            }
+        }
+
+        entry.SshKeyId = null;
+        entry.SetField(FieldKeys.Auth, null);
+    }
 
     public static IReadOnlyList<FieldSpec> Fields(VaultEntry entry) => entry.Kind switch
     {
@@ -154,52 +176,34 @@ public static class ItemTemplates
         VaultItemKind.ApiCredential =>
         [
             new(FieldKeys.Url, "服务地址", Placeholder: "https://api.example.com"),
-            new(FieldKeys.Username, "账号 / Client ID"),
+            new(FieldKeys.ClientId, "账号 / Client ID"),
             new(FieldKeys.ApiKey, "API Key", Sensitive: true),
             new(FieldKeys.Secret, "Secret", Sensitive: true),
             new(FieldKeys.Token, "Token", Sensitive: true),
             new(FieldKeys.Environment, "环境", Placeholder: "开发 / 测试 / 生产")
         ],
-        VaultItemKind.Cluster => ClusterFields(entry),
+        VaultItemKind.Cluster =>
+        [
+            new(FieldKeys.Product, "服务类型", Placeholder: "例如 NebulaGraph、Kafka、Elasticsearch")
+        ],
         _ =>
         [
-            new(FieldKeys.Url, "网址", Placeholder: "https://example.com"),
-            new(FieldKeys.Username, "用户名"),
-            new(FieldKeys.Password, "密码", Sensitive: true),
-            new(FieldKeys.Totp, "验证码密钥", Sensitive: true, Placeholder: "Base32 密钥或 otpauth:// 链接")
+            new(FieldKeys.Url, "网址", Placeholder: "https://example.com")
         ]
     };
 
-    private static IReadOnlyList<FieldSpec> ServerFields(VaultEntry entry)
-    {
-        var fields = new List<FieldSpec>
-        {
-            new(FieldKeys.Host, "主机 / IP"),
-            new(FieldKeys.Port, "端口"),
-            new(FieldKeys.Username, "用户名")
-        };
-        if (!UsesKeyAuth(entry))
-        {
-            fields.Add(new FieldSpec(FieldKeys.Password, "密码", Sensitive: true));
-        }
+    public static AccountLabels AccountLabelsOf(VaultEntry entry) =>
+        entry.Kind == VaultItemKind.Database && entry.Field(FieldKeys.Driver) == "oss"
+            ? new AccountLabels("AccessKey ID", "AccessKey Secret")
+            : new AccountLabels("用户名", "密码");
 
-        return fields;
-    }
+    public static bool AccountNeedsPassword(VaultEntry entry, VaultAccount account) => !UsesKeyAuth(entry, account);
 
-    private static IReadOnlyList<FieldSpec> ClusterFields(VaultEntry entry)
-    {
-        var fields = new List<FieldSpec>
-        {
-            new(FieldKeys.Product, "服务类型", Placeholder: "例如 NebulaGraph、Kafka、Elasticsearch"),
-            new(FieldKeys.Username, "共用用户名")
-        };
-        if (!UsesKeyAuth(entry))
-        {
-            fields.Add(new FieldSpec(FieldKeys.Password, "共用密码", Sensitive: true));
-        }
-
-        return fields;
-    }
+    private static IReadOnlyList<FieldSpec> ServerFields(VaultEntry entry) =>
+    [
+        new(FieldKeys.Host, "主机 / IP"),
+        new(FieldKeys.Port, "端口")
+    ];
 
     private static IReadOnlyList<FieldSpec> DatabaseFields(string driver)
     {
@@ -207,38 +211,29 @@ public static class ItemTemplates
         {
             "sqlite" =>
             [
-                new(FieldKeys.Database, "数据库文件", Placeholder: @"C:\data\app.db"),
-                new(FieldKeys.Password, "密码（可选）", Sensitive: true)
+                new(FieldKeys.Database, "数据库文件", Placeholder: @"C:\data\app.db")
             ],
             "redis" =>
             [
                 new(FieldKeys.Host, "主机 / IP"),
                 new(FieldKeys.Port, "端口"),
-                new(FieldKeys.Database, "DB 编号", Placeholder: "0"),
-                new(FieldKeys.Username, "用户名（可选）"),
-                new(FieldKeys.Password, "密码", Sensitive: true)
+                new(FieldKeys.Database, "DB 编号", Placeholder: "0")
             ],
             "elasticsearch" =>
             [
                 new(FieldKeys.Host, "主机 / IP"),
-                new(FieldKeys.Port, "端口"),
-                new(FieldKeys.Username, "用户名"),
-                new(FieldKeys.Password, "密码", Sensitive: true)
+                new(FieldKeys.Port, "端口")
             ],
             "oss" =>
             [
                 new(FieldKeys.Host, "Endpoint", Placeholder: "oss-cn-hangzhou.aliyuncs.com"),
-                new(FieldKeys.Database, "Bucket"),
-                new(FieldKeys.Username, "AccessKey ID"),
-                new(FieldKeys.Password, "AccessKey Secret", Sensitive: true)
+                new(FieldKeys.Database, "Bucket")
             ],
             _ =>
             [
                 new(FieldKeys.Host, "主机 / IP"),
                 new(FieldKeys.Port, "端口"),
-                new(FieldKeys.Database, "数据库名"),
-                new(FieldKeys.Username, "用户名"),
-                new(FieldKeys.Password, "密码", Sensitive: true)
+                new(FieldKeys.Database, "数据库名")
             ]
         };
     }

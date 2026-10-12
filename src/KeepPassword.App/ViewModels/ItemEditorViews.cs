@@ -1,4 +1,5 @@
 using Avalonia.Media;
+using KeepPassword.Core.Totp;
 using KeepPassword.Core.Vault;
 
 namespace KeepPassword.App.ViewModels;
@@ -67,18 +68,30 @@ public abstract class SecretFieldView : ViewModelBase
 
 public sealed class FieldEditorView : SecretFieldView
 {
+    private string _label;
+
     public FieldEditorView(FieldSpec spec, string value, bool canGenerate, Action<SecretFieldView> changed)
         : base(value, spec.Sensitive, spec.Multiline, changed)
     {
         Spec = spec;
         CanGenerate = canGenerate;
+        _label = spec.Label;
     }
 
     public FieldSpec Spec { get; }
 
     public string Key => Spec.Key;
 
-    public override string Label => Spec.Label;
+    public override string Label => _label;
+
+    public void Relabel(string label)
+    {
+        if (_label != label)
+        {
+            _label = label;
+            OnPropertyChanged(nameof(Label));
+        }
+    }
 
     public string Placeholder => Spec.Placeholder;
 
@@ -102,6 +115,215 @@ public sealed class CustomFieldEditorView : SecretFieldView
     public string TypeText => Sensitive ? "敏感" : "文本";
 
     public VaultCustomField ToModel() => new() { Name = Name, Value = Value, Sensitive = Sensitive };
+}
+
+public sealed class AccountEditorView : ViewModelBase
+{
+    private readonly Action _changed;
+    private string _note;
+    private bool _showPassword = true;
+    private bool _showAuth;
+    private bool _useKey;
+    private Guid? _sshKeyId;
+    private IReadOnlyList<KeyOptionView> _keys = [];
+    private bool _showTotp;
+    private string _totpPreview = "";
+
+    public AccountEditorView(VaultAccount account, bool canGenerate, Action changed)
+    {
+        Id = account.Id;
+        _note = account.Note;
+        _useKey = account.Auth == FieldKeys.AuthSshKey;
+        _sshKeyId = account.SshKeyId;
+        _showPassword = !_useKey;
+        _changed = changed;
+        UsernameField = new FieldEditorView(new FieldSpec(FieldKeys.Username, "用户名"), account.Username, false, _ => _changed());
+        PasswordField = new FieldEditorView(new FieldSpec(FieldKeys.Password, "密码", Sensitive: true), account.Password, canGenerate, _ => _changed());
+        TotpField = new FieldEditorView(
+            new FieldSpec(FieldKeys.Totp, "验证码密钥", Sensitive: true, Placeholder: "Base32 密钥或 otpauth:// 链接"),
+            account.TotpSecret ?? "",
+            false,
+            _ => { RefreshTotp(); _changed(); });
+    }
+
+    public Guid Id { get; }
+
+    public FieldEditorView UsernameField { get; }
+
+    public FieldEditorView PasswordField { get; }
+
+    public FieldEditorView TotpField { get; }
+
+    public string Note
+    {
+        get => _note;
+        set
+        {
+            if (Set(ref _note, value ?? ""))
+            {
+                _changed();
+            }
+        }
+    }
+
+    public bool ShowPassword
+    {
+        get => _showPassword;
+        private set => Set(ref _showPassword, value);
+    }
+
+    public bool ShowAuth
+    {
+        get => _showAuth;
+        private set => Set(ref _showAuth, value);
+    }
+
+    public bool UseKeyAuth => _useKey;
+
+    public bool UsePasswordAuth => !_useKey;
+
+    public bool HasSshKeyOptions => _keys.Count > 0;
+
+    public bool ShowKeyPicker => UseKeyAuth && HasSshKeyOptions;
+
+    public bool ShowMissingKeyHint => UseKeyAuth && !HasSshKeyOptions;
+
+    public IReadOnlyList<KeyOptionView> SshKeyOptions => _keys;
+
+    public KeyOptionView? SelectedSshKey
+    {
+        get => _keys.FirstOrDefault(option => option.Id == _sshKeyId);
+        set
+        {
+            var id = value?.Id;
+            if (_sshKeyId == id)
+            {
+                return;
+            }
+
+            _sshKeyId = id;
+            OnPropertyChanged();
+            _changed();
+        }
+    }
+
+    public void SetKeyAuth(bool useKey)
+    {
+        if (_useKey == useKey)
+        {
+            return;
+        }
+
+        _useKey = useKey;
+        if (!useKey)
+        {
+            _sshKeyId = null;
+        }
+
+        ShowPassword = !useKey;
+        NotifyAuth();
+        _changed();
+    }
+
+    public void SetKeyOptions(IReadOnlyList<KeyOptionView> keys)
+    {
+        _keys = keys;
+        OnPropertyChanged(nameof(SshKeyOptions));
+        OnPropertyChanged(nameof(HasSshKeyOptions));
+        OnPropertyChanged(nameof(ShowKeyPicker));
+        OnPropertyChanged(nameof(ShowMissingKeyHint));
+        OnPropertyChanged(nameof(SelectedSshKey));
+    }
+
+    public bool ShowTotp
+    {
+        get => _showTotp;
+        private set => Set(ref _showTotp, value);
+    }
+
+    public string TotpPreview
+    {
+        get => _totpPreview;
+        private set
+        {
+            if (Set(ref _totpPreview, value))
+            {
+                OnPropertyChanged(nameof(HasTotpPreview));
+            }
+        }
+    }
+
+    public bool HasTotpPreview => ShowTotp && TotpPreview.Length > 0;
+
+    public bool IsBlank => ToModel().IsBlank;
+
+    public string DisplayName => UsernameField.Value.Trim().Length > 0 ? UsernameField.Value.Trim() : "未填写用户名的账号";
+
+    public void Configure(AccountLabels labels, bool showAuth, bool showTotp)
+    {
+        UsernameField.Relabel(labels.Username);
+        PasswordField.Relabel(labels.Password);
+        ShowAuth = showAuth;
+        if (!showAuth && _useKey)
+        {
+            _useKey = false;
+            _sshKeyId = null;
+            ShowPassword = true;
+            NotifyAuth();
+        }
+
+        ShowTotp = showTotp;
+        RefreshTotp();
+    }
+
+    public void Clear()
+    {
+        UsernameField.Value = "";
+        PasswordField.Value = "";
+        TotpField.Value = "";
+        Note = "";
+        _useKey = false;
+        _sshKeyId = null;
+        ShowPassword = true;
+        NotifyAuth();
+    }
+
+    public void RefreshTotp()
+    {
+        var secret = TotpField.Value;
+        if (!ShowTotp || string.IsNullOrWhiteSpace(secret))
+        {
+            TotpPreview = "";
+            OnPropertyChanged(nameof(HasTotpPreview));
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        TotpPreview = TotpGenerator.TryGenerateFromBase32(secret, now, out var code)
+            ? $"{code}    剩余 {TotpGenerator.RemainingSeconds(now)} 秒"
+            : "密钥无法识别";
+        OnPropertyChanged(nameof(HasTotpPreview));
+    }
+
+    public VaultAccount ToModel() => new()
+    {
+        Id = Id,
+        Username = UsernameField.Value,
+        Password = ShowPassword ? PasswordField.Value : "",
+        Note = Note,
+        TotpSecret = ShowTotp && !string.IsNullOrWhiteSpace(TotpField.Value) ? TotpField.Value.Trim() : null,
+        Auth = ShowAuth && _useKey ? FieldKeys.AuthSshKey : "",
+        SshKeyId = ShowAuth && _useKey ? _sshKeyId : null
+    };
+
+    private void NotifyAuth()
+    {
+        OnPropertyChanged(nameof(UseKeyAuth));
+        OnPropertyChanged(nameof(UsePasswordAuth));
+        OnPropertyChanged(nameof(ShowKeyPicker));
+        OnPropertyChanged(nameof(ShowMissingKeyHint));
+        OnPropertyChanged(nameof(SelectedSshKey));
+    }
 }
 
 public sealed class NodeEditorView : ViewModelBase

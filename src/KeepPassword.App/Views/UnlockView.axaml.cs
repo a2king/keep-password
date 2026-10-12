@@ -24,7 +24,17 @@ public partial class UnlockView : UserControl
 
     public void FocusMaster()
     {
-        Dispatcher.UIThread.Post(() => MasterBox.Focus(), DispatcherPriority.Input);
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (View?.ShowShortUnlock == true)
+            {
+                UnlockShortBox.Focus();
+            }
+            else
+            {
+                MasterBox.Focus();
+            }
+        }, DispatcherPriority.Input);
     }
 
     public void ClearSecrets()
@@ -33,6 +43,7 @@ public partial class UnlockView : UserControl
         ConfirmMasterBox.Text = "";
         ShortBox.Text = "";
         ConfirmShortBox.Text = "";
+        UnlockShortBox.Text = "";
         Answer1Box.Text = "";
         Answer2Box.Text = "";
         Answer3Box.Text = "";
@@ -72,6 +83,20 @@ public partial class UnlockView : UserControl
         Unlocked?.Invoke(session);
     }
 
+    private void OnUseMaster(object? sender, RoutedEventArgs e)
+    {
+        View?.UseMasterPassword();
+        UnlockShortBox.Text = "";
+        MasterBox.Focus();
+    }
+
+    private void OnUseShort(object? sender, RoutedEventArgs e)
+    {
+        View?.UseShortKey();
+        MasterBox.Text = "";
+        UnlockShortBox.Focus();
+    }
+
     private void OnBeginRecovery(object? sender, RoutedEventArgs e) => View?.BeginRecovery();
 
     private void OnCancelRecovery(object? sender, RoutedEventArgs e) => View?.CancelRecovery();
@@ -85,7 +110,7 @@ public partial class UnlockView : UserControl
 
         View.MasterPassword = MasterBox.Text ?? "";
         View.ConfirmMaster = View.IsRecovering ? RecoverConfirmBox.Text ?? "" : ConfirmMasterBox.Text ?? "";
-        View.ShortKey = ShortBox.Text ?? "";
+        View.ShortKey = View.IsCreate ? ShortBox.Text ?? "" : UnlockShortBox.Text ?? "";
         View.ConfirmShort = ConfirmShortBox.Text ?? "";
         if (View.IsRecovering)
         {

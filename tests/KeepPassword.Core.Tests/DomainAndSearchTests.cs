@@ -32,8 +32,7 @@ public class DomainAndSearchTests
             {
                 Name = "GitHub",
                 Url = "https://github.com",
-                Username = "ada",
-                Password = "unique-secret-xyz",
+                Accounts = [new VaultAccount { Username = "ada", Password = "unique-secret-xyz" }],
                 Note = "工作笔记"
             }
         };
@@ -49,7 +48,6 @@ public class DomainAndSearchTests
     {
         Name = name,
         Url = url,
-        Username = "ada",
-        Password = "pw"
+        Accounts = [new VaultAccount { Username = "ada", Password = "pw" }]
     };
 }

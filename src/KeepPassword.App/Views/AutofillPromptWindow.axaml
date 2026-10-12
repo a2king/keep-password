@@ -18,7 +18,7 @@
           <Border Width="36" Height="36" CornerRadius="8" Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1">
             <Image Source="/Assets/logo.png" Width="26" Height="26" HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
-          <TextBlock Text="选择要填入的账号条目" Classes="h2" VerticalAlignment="Center" />
+          <TextBlock Text="选择要填入的账号" Classes="h2" VerticalAlignment="Center" />
         </StackPanel>
         <TextBlock x:Name="ContextText" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,4" />
         <TextBlock x:Name="TargetText" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,4" />
@@ -48,6 +48,8 @@
                 <Run Text=" · " />
                 <Run Text="{Binding Domain}" />
               </TextBlock>
+              <TextBlock Text="{Binding AccountNote}" Classes="muted" FontSize="12" TextTrimming="CharacterEllipsis"
+                         IsVisible="{Binding AccountNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </StackPanel>
           </DataTemplate>
         </ListBox.ItemTemplate>

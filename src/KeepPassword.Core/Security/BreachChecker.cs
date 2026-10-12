@@ -108,19 +108,19 @@ public static class BreachChecker
         ArgumentNullException.ThrowIfNull(client);
         var findings = new List<BreachFinding>();
         var seen = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var entry in entries)
+        foreach (var (entry, account) in entries.SelectMany(entry => entry.Accounts.Select(account => (entry, account))))
         {
-            if (string.IsNullOrEmpty(entry.Password))
+            if (string.IsNullOrEmpty(account.Password))
             {
                 continue;
             }
 
-            if (!seen.TryGetValue(entry.Password, out var count))
+            if (!seen.TryGetValue(account.Password, out var count))
             {
-                var hash = Sha1Hex(entry.Password);
+                var hash = Sha1Hex(account.Password);
                 var body = await client.GetRangeAsync(hash[..5], cancellationToken).ConfigureAwait(false);
                 count = MatchCount(body, hash);
-                seen[entry.Password] = count;
+                seen[account.Password] = count;
             }
 
             if (count <= 0)
@@ -130,7 +130,7 @@ public static class BreachChecker
 
             findings.Add(new BreachFinding(
                 entry.Id,
-                string.IsNullOrWhiteSpace(entry.Name) ? "未命名" : entry.Name,
+                VaultAudit.AccountTitle(entry, account),
                 DomainGrouping.HostOf(entry.Url),
                 count,
                 "该密码曾出现在公开泄露数据中 " + count + " 次。请立即更换，且不要在其他站点复用。"));

@@ -33,8 +33,12 @@ public class CacheDirectoryTests
         Assert.Equal(Path.GetFullPath(destination), updated);
         Assert.False(Directory.Exists(source));
         Assert.Equal("keep", File.ReadAllText(Path.Combine(destination, "note.txt")));
-        using var session = TestVault.Store().Unlock(Path.Combine(destination, AppDataPaths.VaultFileName), "correct horse");
+        var moved = Path.Combine(destination, AppDataPaths.VaultFileName);
+        using var session = TestVault.Store().Unlock(moved, "correct horse");
         Assert.Equal("ada", session.Account);
+        Assert.True(TestVault.Store().HasShortUnlock(moved));
+        using var byShort = TestVault.Store().UnlockWithShortKey(moved, "short-key");
+        Assert.Equal("ada", byShort.Account);
         Assert.Equal(Path.GetFullPath(destination), CacheDirectory.Resolve(settings, source));
     }
 

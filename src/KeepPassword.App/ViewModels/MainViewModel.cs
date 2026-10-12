@@ -111,7 +111,6 @@ public sealed class MainViewModel : ViewModelBase
     private string _name = "";
     private string _note = "";
     private string _status = "";
-    private string _totpPreview = "";
     private string _snapshot = "";
     private bool _hasDetail;
     private bool _isNew;
@@ -223,6 +222,14 @@ public sealed class MainViewModel : ViewModelBase
 
     public ObservableCollection<NodeEditorView> Nodes { get; } = [];
 
+    public ObservableCollection<AccountEditorView> Accounts { get; } = [];
+
+    public bool ShowAccounts => VaultItemKinds.HasAccounts(_draft.Kind);
+
+    public string AccountsTitle => $"账号（{Accounts.Count}）";
+
+    public bool CanAddAccount => Accounts.Count < VaultItemRules.MaxAccounts;
+
     public bool HasCustomFields => CustomFields.Count > 0;
 
     public IReadOnlyList<ServerProtocol> Protocols => ItemTemplates.Protocols;
@@ -252,11 +259,6 @@ public sealed class MainViewModel : ViewModelBase
             }
 
             _draft.SetField(FieldKeys.Protocol, value.Code);
-            if (!value.SupportsKey)
-            {
-                _draft.SetField(FieldKeys.Auth, FieldKeys.AuthPassword);
-            }
-
             RebuildPresetFields();
         }
     }
@@ -292,34 +294,7 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
-    public bool ShowAuth => _draft.Kind == VaultItemKind.Cluster
-        || (_draft.Kind == VaultItemKind.Server && ItemTemplates.Protocol(_draft.Field(FieldKeys.Protocol)).SupportsKey);
-
-    public bool UseKeyAuth => _draft.Field(FieldKeys.Auth) == FieldKeys.AuthSshKey;
-
-    public bool UsePasswordAuth => !UseKeyAuth;
-
-    public bool ShowKeyPicker => ItemTemplates.UsesKeyAuth(_draft);
-
     public IReadOnlyList<KeyOptionView> SshKeyOptions { get; private set; } = [];
-
-    public bool HasSshKeyOptions => SshKeyOptions.Count > 0;
-
-    public KeyOptionView? SelectedSshKey
-    {
-        get => SshKeyOptions.FirstOrDefault(option => option.Id == _draft.SshKeyId);
-        set
-        {
-            var id = value?.Id;
-            if (_draft.SshKeyId == id)
-            {
-                return;
-            }
-
-            _draft.SshKeyId = id;
-            OnPropertyChanged();
-        }
-    }
 
     public bool ShowSshInfo => _draft.Kind == VaultItemKind.SshKey;
 
@@ -347,18 +322,10 @@ public sealed class MainViewModel : ViewModelBase
 
     public bool ShowNodes => _draft.Kind == VaultItemKind.Cluster;
 
-    public bool ShowTotp => _draft.Kind == VaultItemKind.Login;
-
     public string Status
     {
         get => _status;
         set => Set(ref _status, value);
-    }
-
-    public string TotpPreview
-    {
-        get => _totpPreview;
-        private set => Set(ref _totpPreview, value);
     }
 
     public bool IsDirty => HasDetail && Snapshot() != _snapshot;
@@ -387,6 +354,11 @@ public sealed class MainViewModel : ViewModelBase
             entry.Nodes.Add(new ClusterNode());
         }
 
+        if (VaultItemKinds.HasAccounts(kind))
+        {
+            entry.Accounts.Add(new VaultAccount());
+        }
+
         IsNewItem = true;
         Apply(entry);
         ClearSelection();
@@ -394,35 +366,58 @@ public sealed class MainViewModel : ViewModelBase
         {
             VaultItemKind.Login => "新的登录条目。需要密码时点「生成」，默认是 16 位字母和数字。",
             VaultItemKind.SshKey => "粘贴私钥和公钥内容，保存后只写入加密保险库。",
-            VaultItemKind.Cluster => "集群内所有节点共用同一套账号和密码 / 密钥。",
-            _ => $"新的{VaultItemKinds.DisplayName(kind)}条目。条目类型保存后不能修改。"
+            VaultItemKind.Cluster => "集群内所有节点共用下方的账号和密码 / 密钥。",
+            _ => $"新的{VaultItemKinds.DisplayName(kind)}条目。一个实例可以添加多个账号，条目类型保存后不能修改。"
         };
     }
 
     public void NewTotp()
     {
         NewItem(VaultItemKind.Login);
-        Status = "独立验证码只需填写名称和验证码密钥。";
+        Status = "独立验证码只需填写名称和账号中的验证码密钥。";
     }
 
-    public static string GeneratePassword() => PasswordGenerator.Generate(PasswordGeneratorOptions.DefaultLogin);
-
-    public void SetKeyAuth(bool useKey)
+    public AccountEditorView? AddAccount()
     {
-        var value = useKey ? FieldKeys.AuthSshKey : FieldKeys.AuthPassword;
-        if (_draft.Field(FieldKeys.Auth) == value)
+        if (!ShowAccounts || !CanAddAccount)
         {
+            return null;
+        }
+
+        var account = CreateAccountView(new VaultAccount(), canGenerate: true);
+        Accounts.Add(account);
+        OnAccountsChanged();
+        return account;
+    }
+
+    public void RemoveAccount(AccountEditorView account)
+    {
+        if (Accounts.Count <= 1)
+        {
+            account.Clear();
             return;
         }
 
-        _draft.SetField(FieldKeys.Auth, value);
-        if (!useKey)
-        {
-            _draft.SshKeyId = null;
-        }
+        Accounts.Remove(account);
 
-        RebuildPresetFields();
+        OnAccountsChanged();
     }
+
+    private AccountEditorView CreateAccountView(VaultAccount account, bool canGenerate)
+    {
+        var view = new AccountEditorView(account, canGenerate, () => { });
+        view.SetKeyOptions(SshKeyOptions);
+        view.Configure(ItemTemplates.AccountLabelsOf(_draft), ItemTemplates.SupportsKeyAuth(_draft), _draft.Kind == VaultItemKind.Login);
+        return view;
+    }
+
+    private void OnAccountsChanged()
+    {
+        OnPropertyChanged(nameof(AccountsTitle));
+        OnPropertyChanged(nameof(CanAddAccount));
+    }
+
+    public static string GeneratePassword() => PasswordGenerator.Generate(PasswordGeneratorOptions.DefaultLogin);
 
     public string? ToggleFavorite()
     {
@@ -603,21 +598,10 @@ public sealed class MainViewModel : ViewModelBase
 
     public void RefreshTotp()
     {
-        var secret = _draft.TotpSecret;
-        if (!HasDetail || !ShowTotp || string.IsNullOrWhiteSpace(secret))
+        foreach (var account in Accounts)
         {
-            TotpPreview = "";
-            return;
+            account.RefreshTotp();
         }
-
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        if (!TotpGenerator.TryGenerateFromBase32(secret, now, out var code))
-        {
-            TotpPreview = "密钥无法识别";
-            return;
-        }
-
-        TotpPreview = $"{code}    剩余 {TotpGenerator.RemainingSeconds(now)} 秒";
     }
 
     public void SelectSpace(string key)
@@ -747,9 +731,12 @@ public sealed class MainViewModel : ViewModelBase
                 Detail = string.Join(" · ", new[] { entry.Field(FieldKeys.KeyType), entry.Field(FieldKeys.Fingerprint) }.Where(text => text.Length > 0))
             })
             .ToList();
+        foreach (var account in Accounts)
+        {
+            account.SetKeyOptions(SshKeyOptions);
+        }
+
         OnPropertyChanged(nameof(SshKeyOptions));
-        OnPropertyChanged(nameof(HasSshKeyOptions));
-        OnPropertyChanged(nameof(SelectedSshKey));
         ApplyFilters();
     }
 
@@ -757,14 +744,15 @@ public sealed class MainViewModel : ViewModelBase
     {
         var login = entry.Kind == VaultItemKind.Login;
         var title = login ? AddressOf(entry) : (string.IsNullOrWhiteSpace(entry.Name) ? VaultItemKinds.DisplayName(entry.Kind) : entry.Name.Trim());
+        var accounts = AccountSummary(entry);
         string subtitle;
         if (login)
         {
-            subtitle = string.IsNullOrWhiteSpace(entry.Username) ? "未填写账号" : entry.Username;
+            subtitle = accounts.Length == 0 ? "未填写账号" : accounts;
         }
         else
         {
-            var parts = new[] { CaptionOf(entry), entry.Username }.Where(text => !string.IsNullOrWhiteSpace(text)).ToList();
+            var parts = new[] { CaptionOf(entry), accounts }.Where(text => !string.IsNullOrWhiteSpace(text)).ToList();
             subtitle = parts.Count == 0 ? VaultItemKinds.DisplayName(entry.Kind) : string.Join(" · ", parts);
         }
 
@@ -778,6 +766,17 @@ public sealed class MainViewModel : ViewModelBase
             Tags = entry.Tags.ToList(),
             Logo = entry.Kind == VaultItemKind.Database ? DatabaseIcons.Find(entry.Field(FieldKeys.Driver)) : null
         };
+    }
+
+    private static string AccountSummary(VaultEntry entry)
+    {
+        var first = entry.Accounts.Select(account => account.Username.Trim()).FirstOrDefault(name => name.Length > 0) ?? "";
+        if (entry.Accounts.Count <= 1)
+        {
+            return first;
+        }
+
+        return first.Length == 0 ? $"{entry.Accounts.Count} 个账号" : $"{first} 等 {entry.Accounts.Count} 个账号";
     }
 
     private static string CaptionOf(VaultEntry entry) => entry.Kind switch
@@ -1052,6 +1051,17 @@ public sealed class MainViewModel : ViewModelBase
             Nodes.Add(new NodeEditorView(entry.Nodes[i], i + 1, () => { }));
         }
 
+        Accounts.Clear();
+        if (VaultItemKinds.HasAccounts(entry.Kind))
+        {
+            var accounts = entry.Accounts.Count == 0 ? [new VaultAccount()] : entry.Accounts;
+            for (var i = 0; i < accounts.Count; i++)
+            {
+                Accounts.Add(CreateAccountView(accounts[i], IsNewItem || accounts[i].Password.Length == 0));
+            }
+        }
+
+        OnAccountsChanged();
         HasDetail = true;
         RebuildPresetFields();
         _snapshot = Snapshot();
@@ -1061,14 +1071,17 @@ public sealed class MainViewModel : ViewModelBase
 
     private void RebuildPresetFields()
     {
-        var canGenerate = IsNewItem;
         PresetFields = ItemTemplates.Fields(_draft)
-            .Select(spec => new FieldEditorView(
-                spec,
-                FieldKeys.Read(_draft, spec.Key),
-                canGenerate && spec.Key == FieldKeys.Password,
-                OnFieldChanged))
+            .Select(spec => new FieldEditorView(spec, FieldKeys.Read(_draft, spec.Key), false, OnFieldChanged))
             .ToList();
+        var labels = ItemTemplates.AccountLabelsOf(_draft);
+        var showAuth = ItemTemplates.SupportsKeyAuth(_draft);
+        foreach (var account in Accounts)
+        {
+            account.SetKeyOptions(SshKeyOptions);
+            account.Configure(labels, showAuth, _draft.Kind == VaultItemKind.Login);
+        }
+
         UpdateSshInspection();
         OnPropertyChanged(nameof(PresetFields));
         OnPropertyChanged(nameof(Kind));
@@ -1080,17 +1093,11 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(SelectedProtocol));
         OnPropertyChanged(nameof(ShowDriver));
         OnPropertyChanged(nameof(SelectedDriver));
-        OnPropertyChanged(nameof(ShowAuth));
-        OnPropertyChanged(nameof(UseKeyAuth));
-        OnPropertyChanged(nameof(UsePasswordAuth));
-        OnPropertyChanged(nameof(ShowKeyPicker));
-        OnPropertyChanged(nameof(SelectedSshKey));
         OnPropertyChanged(nameof(ShowSshInfo));
         OnPropertyChanged(nameof(SshReferences));
         OnPropertyChanged(nameof(ShowNodes));
-        OnPropertyChanged(nameof(ShowTotp));
+        OnPropertyChanged(nameof(ShowAccounts));
         OnPropertyChanged(nameof(HasCustomFields));
-        RefreshTotp();
     }
 
     private void OnFieldChanged(SecretFieldView field)
@@ -1101,14 +1108,9 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         FieldKeys.Write(_draft, preset.Key, preset.Value);
-        switch (preset.Key)
+        if (preset.Key is FieldKeys.PrivateKey or FieldKeys.PublicKey)
         {
-            case FieldKeys.PrivateKey or FieldKeys.PublicKey:
-                UpdateSshInspection();
-                break;
-            case FieldKeys.Totp:
-                RefreshTotp();
-                break;
+            UpdateSshInspection();
         }
     }
 
@@ -1132,6 +1134,7 @@ public sealed class MainViewModel : ViewModelBase
         entry.Tags = _editTags.ToList();
         entry.CustomFields = CustomFields.Select(field => field.ToModel()).ToList();
         entry.Nodes = Nodes.Select(node => node.ToModel()).ToList();
+        entry.Accounts = ShowAccounts ? Accounts.Select(account => account.ToModel()).ToList() : [];
         return entry;
     }
 
@@ -1140,7 +1143,8 @@ public sealed class MainViewModel : ViewModelBase
         _draft = new VaultEntry();
         Name = "";
         Note = "";
-        TotpPreview = "";
+        Accounts.Clear();
+        OnAccountsChanged();
         _editSpace = "";
         _editTags = [];
         _pendingSpaces.Clear();
@@ -1181,10 +1185,8 @@ public sealed class MainViewModel : ViewModelBase
             '\u001f',
             entry.Name,
             entry.Url,
-            entry.Username,
-            entry.Password,
             entry.Note,
-            entry.TotpSecret ?? "",
+            string.Join('\u001e', entry.Accounts.Select(account => string.Join('\u001d', account.Id, account.Username, account.Password, account.Note, account.TotpSecret ?? "", account.Auth, account.SshKeyId?.ToString() ?? ""))),
             entry.Space,
             string.Join('\u001e', entry.Tags),
             string.Join('\u001e', entry.Fields.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Key + "=" + pair.Value)),

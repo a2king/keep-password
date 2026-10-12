@@ -27,8 +27,13 @@
             <TextBlock Text="账号" Classes="label" IsVisible="{Binding IsCreate}" />
             <TextBox Text="{Binding Account}" views:AsciiInput.IsEnabled="True" Watermark="例如 ada" IsVisible="{Binding IsCreate}" Classes="mono" />
 
-            <TextBlock Text="主密码" Classes="label" />
-            <TextBox x:Name="MasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="请输入主密码" Classes="mono" FontSize="15" />
+            <TextBlock Text="主密码" Classes="label" IsVisible="{Binding ShowMaster}" />
+            <TextBox x:Name="MasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="请输入主密码" Classes="mono" FontSize="15" IsVisible="{Binding ShowMaster}" />
+
+            <TextBlock Text="短密钥" Classes="label" IsVisible="{Binding ShowShortField}" />
+            <TextBox x:Name="UnlockShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="请输入短密钥" Classes="mono" FontSize="15" IsVisible="{Binding ShowShortField}" />
+            <Button Classes="ghost" Content="改用主密码解锁" Click="OnUseMaster" IsVisible="{Binding ShowUseMaster}" HorizontalAlignment="Left" Margin="0,8,0,0" />
+            <Button Classes="ghost" Content="改用短密钥解锁" Click="OnUseShort" IsVisible="{Binding ShowUseShort}" HorizontalAlignment="Left" Margin="0,8,0,0" />
 
             <StackPanel IsVisible="{Binding IsCreate}">
               <TextBlock Text="确认主密码" Classes="label" />

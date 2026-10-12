@@ -48,9 +48,11 @@ public static class CsvMapper
         [Favorite] = ["favorite", "favourite", "收藏"],
         [Nodes] = ["nodes", "节点", "节点地址", "hosts"],
         [FieldPrefix + FieldKeys.Url] = ["url", "website", "login_uri", "uri", "网址", "地址", "服务地址", "endpoint url"],
-        [FieldPrefix + FieldKeys.Username] = ["username", "user", "login", "login_username", "account", "用户名", "账号", "账户", "accesskey id", "client id"],
+        [FieldPrefix + FieldKeys.Username] = ["username", "user", "login", "login_username", "account", "用户名", "账号", "账户", "accesskey id"],
         [FieldPrefix + FieldKeys.Password] = ["password", "login_password", "pass", "密码", "accesskey secret"],
-        [FieldPrefix + FieldKeys.Totp] = ["otpauth", "otp", "totp", "onetimepassword", "one-time password", "login_totp", "验证码"],
+        [FieldPrefix + FieldKeys.Totp] = ["otpauth", "otp", "totp", "onetimepassword", "one-time password", "login_totp", "验证码", "验证码密钥"],
+        [FieldPrefix + FieldKeys.AccountNote] = ["account note", "账号说明"],
+        [FieldPrefix + FieldKeys.ClientId] = ["client id", "clientid", "client_id", "账号 / client id"],
         [FieldPrefix + FieldKeys.Host] = ["host", "hostname", "server", "ip", "主机", "服务器", "endpoint"],
         [FieldPrefix + FieldKeys.Port] = ["port", "端口"],
         [FieldPrefix + FieldKeys.Protocol] = ["protocol", "协议"],
@@ -83,12 +85,25 @@ public static class CsvMapper
         }
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var spec in ItemTemplates.Fields(template).Concat(ExtraFields(kind)))
+        foreach (var spec in ItemTemplates.Fields(template))
         {
             if (seen.Add(spec.Key))
             {
                 targets.Add(new ImportTarget(FieldPrefix + spec.Key, spec.Label));
             }
+        }
+
+        if (VaultItemKinds.HasAccounts(kind))
+        {
+            var labels = ItemTemplates.AccountLabelsOf(template);
+            targets.Add(new ImportTarget(FieldPrefix + FieldKeys.Username, labels.Username));
+            targets.Add(new ImportTarget(FieldPrefix + FieldKeys.Password, labels.Password));
+            if (kind == VaultItemKind.Login)
+            {
+                targets.Add(new ImportTarget(FieldPrefix + FieldKeys.Totp, "验证码密钥"));
+            }
+
+            targets.Add(new ImportTarget(FieldPrefix + FieldKeys.AccountNote, "账号说明"));
         }
 
         if (kind == VaultItemKind.Cluster)
@@ -215,9 +230,9 @@ public static class CsvMapper
             return new ImportRowResult(index + 2, null, "缺少条目名称。");
         }
 
-        if (kind == VaultItemKind.Login && entry.Url.Length == 0 && entry.Username.Length == 0 && entry.Password.Length == 0 && entry.TotpSecret is null)
+        if (VaultItemKinds.HasAccounts(kind) && entry.Accounts.Count == 0)
         {
-            return new ImportRowResult(index + 2, null, "网址、用户名、密码和验证码都为空。");
+            return new ImportRowResult(index + 2, null, "缺少账号信息（用户名和密码）。");
         }
 
         var error = VaultItemRules.Validate(entry);
@@ -256,6 +271,17 @@ public static class CsvMapper
         }
 
         var key = target[FieldPrefix.Length..];
+        if (FieldKeys.IsAccountField(key))
+        {
+            if (entry.Accounts.Count == 0)
+            {
+                entry.Accounts.Add(new VaultAccount());
+            }
+
+            FieldKeys.WriteAccount(entry.Accounts[0], key, key == FieldKeys.Totp ? CsvImporter.TotpSecret(value) ?? "" : value);
+            return null;
+        }
+
         switch (key)
         {
             case FieldKeys.Protocol:
@@ -290,9 +316,6 @@ public static class CsvMapper
 
                 return null;
             }
-            case FieldKeys.Totp:
-                entry.TotpSecret = CsvImporter.TotpSecret(value);
-                return null;
             case FieldKeys.Port:
                 entry.SetField(FieldKeys.Port, value.Trim());
                 return null;
@@ -327,14 +350,8 @@ public static class CsvMapper
             return target;
         }
 
-        return entry.Username.Trim();
+        return entry.Accounts.FirstOrDefault()?.Username.Trim() ?? "";
     }
-
-    private static IEnumerable<FieldSpec> ExtraFields(VaultItemKind kind) => kind switch
-    {
-        VaultItemKind.Server or VaultItemKind.Cluster => [new FieldSpec(FieldKeys.Password, "密码", Sensitive: true)],
-        _ => []
-    };
 
     private static VaultEntry Template(VaultItemKind kind)
     {

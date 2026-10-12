@@ -1,7 +1,9 @@
+using System.Text;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using KeepPassword.App.Services;
+using KeepPassword.Core.Import;
 using KeepPassword.Core.Vault;
 
 namespace KeepPassword.App.Views;
@@ -362,7 +364,9 @@ public partial class SettingsView : UserControl
             CurrentMasterBox.Text = "";
             NewMasterBox.Text = "";
             ConfirmMasterBox.Text = "";
-            DirectoryStatus.Text = "主密码已更换，保险库已用新密钥重新加密。";
+            DirectoryStatus.Text = session.ShortUnlockReady
+                ? "主密码已更换，保险库已用新密钥重新加密。短密钥仍可解锁。"
+                : "主密码已更换，保险库已用新密钥重新加密。短密钥解锁已关闭，下次用主密码打开后会重新开启。";
             ErrorBox.IsVisible = false;
         }
         catch (Exception ex) when (ex is CredentialRejectedException or ArgumentException or IOException)
@@ -445,6 +449,47 @@ public partial class SettingsView : UserControl
             ErrorBox.IsVisible = false;
         }
         catch (Exception ex) when (ex is UnlockFailedException or IOException or InvalidDataException or ArgumentException)
+        {
+            ShowError(ex.Message);
+        }
+    }
+
+    private async void OnExportCsv(object? sender, RoutedEventArgs e)
+    {
+        if (_session is not { IsUnlocked: true })
+        {
+            return;
+        }
+
+        if (!await Dialogs.ConfirmAsync(Host, "导出 CSV", "CSV 包含全部明文密码、验证码密钥和私钥。文件不会加密，导出后请自行保管。确定导出吗？"))
+        {
+            return;
+        }
+
+        if (_session is not { IsUnlocked: true })
+        {
+            return;
+        }
+
+        try
+        {
+            var path = await SafeStoragePickers.PickSaveFileAsync(
+                Host,
+                "导出 CSV",
+                "KeepPassword-导出.csv",
+                [new FilePickerFileType("CSV 文件") { Patterns = ["*.csv"] }],
+                _pauseWatcher);
+            if (string.IsNullOrWhiteSpace(path) || _session is not { IsUnlocked: true } current)
+            {
+                return;
+            }
+
+            var csv = CsvExporter.Export(current.Entries);
+            await Task.Run(() => File.WriteAllText(path, csv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true)));
+            DirectoryStatus.Text = "已导出 CSV。";
+            ErrorBox.IsVisible = false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             ShowError(ex.Message);
         }

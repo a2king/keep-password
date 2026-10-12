@@ -84,14 +84,14 @@ public class SecurityPhaseTests
         var fresh = TestVault.NewPath();
         using (var session = TestVault.CreateUnlocked(fresh))
         {
-            session.Upsert(new VaultEntry { Name = "保留", Url = "https://example.com", Username = "ada", Password = "pw" });
+            session.Upsert(new VaultEntry { Name = "保留", Url = "https://example.com", Accounts = [new VaultAccount { Username = "ada", Password = "pw" }] });
             session.Save();
             session.ChangeMasterPassword("correct horse", "new horse");
         }
 
         Assert.Throws<UnlockFailedException>(() => TestVault.Store().Unlock(fresh, "correct horse"));
         using var unlocked = TestVault.Store().Unlock(fresh, "new horse");
-        Assert.Equal("pw", Assert.Single(unlocked.Entries).Password);
+        Assert.Equal("pw", Assert.Single(unlocked.Entries).Accounts[0].Password);
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public class SecurityPhaseTests
         Assert.Throws<RecoveryFailedException>(() => store.Recover(path, ["no", "no", "no"], "other horse"));
 
         using var recovered = store.Recover(path, ["alpha-answer", "beta-answer", "gamma-answer"], "other horse");
-        recovered.Upsert(new VaultEntry { Name = "恢复后", Username = "ada", Password = "kept", Url = "https://example.com" });
+        recovered.Upsert(new VaultEntry { Name = "恢复后", Accounts = [new VaultAccount { Username = "ada", Password = "kept" }], Url = "https://example.com" });
         recovered.Save();
         recovered.Lock();
         using var unlocked = store.Unlock(path, "other horse");
@@ -173,9 +173,9 @@ public class SecurityPhaseTests
     [Fact]
     public void AuditAndBreach_DoNotExposePasswords()
     {
-        var reused = new VaultEntry { Name = "A", Url = "https://a.example", Username = "ada", Password = "password" };
-        var other = new VaultEntry { Name = "B", Url = "https://b.example", Username = "ada", Password = "password" };
-        var empty = new VaultEntry { Name = "C", Url = "https://c.example", Username = "ada", Password = "" };
+        var reused = new VaultEntry { Name = "A", Url = "https://a.example", Accounts = [new VaultAccount { Username = "ada", Password = "password" }] };
+        var other = new VaultEntry { Name = "B", Url = "https://b.example", Accounts = [new VaultAccount { Username = "ada", Password = "password" }] };
+        var empty = new VaultEntry { Name = "C", Url = "https://c.example", Accounts = [new VaultAccount { Username = "ada", Password = "" }] };
         var findings = VaultAudit.Analyze([reused, other, empty]);
         var rendered = string.Join('\n', findings.Select(finding => finding.Name + finding.Advice));
         Assert.DoesNotContain("password", rendered);
@@ -200,7 +200,7 @@ public class SecurityPhaseTests
         var entry = Assert.Single(imported);
         Assert.Equal("GitHub", entry.Name);
         Assert.Equal("https://github.com", entry.Url);
-        Assert.Equal("GEZDGNBVGY3TQOJQ", entry.TotpSecret);
+        Assert.Equal("GEZDGNBVGY3TQOJQ", entry.Accounts[0].TotpSecret);
 
         var path = TestVault.NewPath();
         var backup = TestVault.NewPath();
@@ -212,7 +212,7 @@ public class SecurityPhaseTests
         }
 
         var restored = EncryptedBackup.ReadEntries(backup, "correct horse");
-        Assert.Equal("ada", Assert.Single(restored).Username);
+        Assert.Equal("ada", Assert.Single(restored).Accounts[0].Username);
         Assert.DoesNotContain("s3cret", File.ReadAllText(backup));
     }
 

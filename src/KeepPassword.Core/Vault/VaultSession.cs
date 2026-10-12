@@ -12,6 +12,9 @@ public sealed class VaultSession : IDisposable
     private readonly List<VaultEntry> _entries;
     private readonly VaultLabels _labels;
     private byte[] _masterKey;
+    private VaultStore.ShortWrapMaterial? _shortWrap;
+    private byte[]? _shortWrapKey;
+    private bool _deviceQuick;
     private RecoverySecrets? _recovery;
     private bool _unlocked;
 
@@ -23,7 +26,10 @@ public sealed class VaultSession : IDisposable
         byte[] masterKey,
         List<VaultEntry> entries,
         RecoverySecrets? recovery = null,
-        VaultLabels? labels = null)
+        VaultLabels? labels = null,
+        VaultStore.ShortWrapMaterial? shortWrap = null,
+        byte[]? shortWrapKey = null,
+        bool deviceQuick = false)
     {
         _path = path;
         Account = account;
@@ -32,6 +38,9 @@ public sealed class VaultSession : IDisposable
         _masterKey = masterKey;
         _entries = entries;
         _recovery = recovery;
+        _shortWrap = shortWrap;
+        _shortWrapKey = shortWrapKey;
+        _deviceQuick = deviceQuick;
         _labels = labels ?? VaultLabels.From(null, null, entries);
         _unlocked = true;
     }
@@ -188,6 +197,17 @@ public sealed class VaultSession : IDisposable
         }
     }
 
+    public bool ShortUnlockReady
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _unlocked && (_shortWrapKey is not null || _deviceQuick);
+            }
+        }
+    }
+
     public string Account { get; }
 
     public string VaultPath
@@ -251,7 +271,7 @@ public sealed class VaultSession : IDisposable
                 throw new InvalidOperationException("条目类型创建后不能修改。");
             }
 
-            if (copy.SshKeyId is { } keyId && !_entries.Any(item => item.Id == keyId && item.Kind == VaultItemKind.SshKey))
+            if (copy.Accounts.Any(account => account.SshKeyId is { } keyId && !_entries.Any(item => item.Id == keyId && item.Kind == VaultItemKind.SshKey)))
             {
                 throw new ArgumentException("关联的 SSH 密钥不存在。", nameof(entry));
             }
@@ -282,7 +302,7 @@ public sealed class VaultSession : IDisposable
         {
             EnsureUnlocked();
             return _entries
-                .Where(entry => entry.SshKeyId == keyId)
+                .Where(entry => entry.SshKeyId == keyId || entry.Accounts.Any(account => account.SshKeyId == keyId))
                 .Select(entry => string.IsNullOrWhiteSpace(entry.Name) ? "未命名" : entry.Name)
                 .ToList();
         }
@@ -306,12 +326,21 @@ public sealed class VaultSession : IDisposable
     internal static void DropDanglingKeyReferences(List<VaultEntry> entries)
     {
         var keys = entries.Where(entry => entry.Kind == VaultItemKind.SshKey).Select(entry => entry.Id).ToHashSet();
-        foreach (var entry in entries.Where(entry => entry.SshKeyId is { } id && !keys.Contains(id)))
+        foreach (var entry in entries)
         {
-            entry.SshKeyId = null;
-            if (entry.Field(FieldKeys.Auth) == FieldKeys.AuthSshKey)
+            if (entry.SshKeyId is { } id && !keys.Contains(id))
             {
-                entry.SetField(FieldKeys.Auth, FieldKeys.AuthPassword);
+                entry.SshKeyId = null;
+                entry.SetField(FieldKeys.Auth, null);
+            }
+
+            foreach (var account in entry.Accounts)
+            {
+                if (account.SshKeyId is { } keyId && !keys.Contains(keyId))
+                {
+                    account.SshKeyId = null;
+                    account.Auth = "";
+                }
             }
         }
     }
@@ -329,9 +358,23 @@ public sealed class VaultSession : IDisposable
             field.Name = field.Name.Trim();
         }
 
-        if (!ItemTemplates.UsesKeyAuth(copy))
+        ItemTemplates.AdoptLegacyKeyAuth(copy);
+        var allowKey = ItemTemplates.SupportsKeyAuth(copy);
+        foreach (var account in copy.Accounts)
         {
-            copy.SshKeyId = null;
+            if (account.Id == Guid.Empty)
+            {
+                account.Id = Guid.NewGuid();
+            }
+
+            if (!allowKey || account.Auth != FieldKeys.AuthSshKey)
+            {
+                account.Auth = "";
+                account.SshKeyId = null;
+                continue;
+            }
+
+            account.Password = "";
         }
 
         if (copy.Kind == VaultItemKind.SshKey)
@@ -411,18 +454,57 @@ public sealed class VaultSession : IDisposable
             var next = Argon2Id.Derive(newPassword, _kdf.Profile, salt);
             var previous = _masterKey;
             var previousKdf = _kdf;
+            var previousWrap = _shortWrap;
+            var nextWrap = _shortWrapKey is null || _shortWrap is null
+                ? null
+                : VaultStore.RewrapShortUnlock(_shortWrap, _shortWrapKey, next);
             try
             {
                 _masterKey = next;
                 _kdf = new VaultStore.KdfMaterial(_kdf.Profile, salt);
+                _shortWrap = nextWrap;
                 VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _masterKey, _entries, _recovery, _labels);
             }
             catch
             {
                 _masterKey = previous;
                 _kdf = previousKdf;
+                _shortWrap = previousWrap;
                 CryptographicOperations.ZeroMemory(next);
                 throw;
+            }
+
+            try
+            {
+                if (_shortWrap is not null && _shortWrapKey is not null)
+                {
+                    VaultStore.WriteQuickUnlock(_path, _kdf.Salt, _shortWrap);
+                    _deviceQuick = false;
+                }
+                else if (_deviceQuick)
+                {
+                    if (!VaultStore.TryWriteDeviceQuickUnlock(_path, _kdf.Salt, _masterKey))
+                    {
+                        VaultStore.DeleteQuickUnlock(_path);
+                        _deviceQuick = false;
+                    }
+                }
+                else
+                {
+                    VaultStore.DeleteQuickUnlock(_path);
+                    _shortWrap = null;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                VaultStore.DeleteQuickUnlock(_path);
+                _shortWrap = null;
+                _deviceQuick = false;
+                if (_shortWrapKey is not null)
+                {
+                    CryptographicOperations.ZeroMemory(_shortWrapKey);
+                    _shortWrapKey = null;
+                }
             }
 
             CryptographicOperations.ZeroMemory(previous);
@@ -475,8 +557,82 @@ public sealed class VaultSession : IDisposable
                 CryptographicOperations.ZeroMemory(derived);
             }
 
-            _shortKey = VaultStore.HashShortKey(newShortKey, _shortKey.Profile);
-            VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _masterKey, _entries, _recovery, _labels);
+            var nextShort = VaultStore.HashShortKey(newShortKey, _shortKey.Profile);
+            var (wrap, key) = VaultStore.CreateShortWrap(newShortKey, _shortKey.Profile, _masterKey);
+            var previousShort = _shortKey;
+            var previousWrap = _shortWrap;
+            var previousKey = _shortWrapKey;
+            _shortKey = nextShort;
+            _shortWrap = wrap;
+            _shortWrapKey = key;
+            try
+            {
+                VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _masterKey, _entries, _recovery, _labels);
+            }
+            catch
+            {
+                _shortKey = previousShort;
+                _shortWrap = previousWrap;
+                _shortWrapKey = previousKey;
+                CryptographicOperations.ZeroMemory(key);
+                throw;
+            }
+
+            try
+            {
+                VaultStore.WriteQuickUnlock(_path, _kdf.Salt, wrap);
+                _deviceQuick = false;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                VaultStore.DeleteQuickUnlock(_path);
+                _deviceQuick = false;
+            }
+
+            if (previousKey is not null)
+            {
+                CryptographicOperations.ZeroMemory(previousKey);
+            }
+        }
+    }
+
+    public void EnableShortUnlock(string shortKey)
+    {
+        if (string.IsNullOrEmpty(shortKey))
+        {
+            throw new ArgumentException("请填写短密钥。", nameof(shortKey));
+        }
+
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            if (!Argon2Id.Verify(shortKey, _shortKey.Profile, _shortKey.Salt, _shortKey.Hash))
+            {
+                throw new ArgumentException("短密钥不正确。", nameof(shortKey));
+            }
+
+            var (wrap, key) = VaultStore.CreateShortWrap(shortKey, _shortKey.Profile, _masterKey);
+            var previousWrap = _shortWrap;
+            var previousKey = _shortWrapKey;
+            _shortWrap = wrap;
+            _shortWrapKey = key;
+            try
+            {
+                VaultStore.WriteQuickUnlock(_path, _kdf.Salt, wrap);
+                _deviceQuick = false;
+            }
+            catch
+            {
+                _shortWrap = previousWrap;
+                _shortWrapKey = previousKey;
+                CryptographicOperations.ZeroMemory(key);
+                throw;
+            }
+
+            if (previousKey is not null)
+            {
+                CryptographicOperations.ZeroMemory(previousKey);
+            }
         }
     }
 
@@ -505,6 +661,14 @@ public sealed class VaultSession : IDisposable
             CryptographicOperations.ZeroMemory(_masterKey);
         }
 
+        if (_shortWrapKey is not null)
+        {
+            CryptographicOperations.ZeroMemory(_shortWrapKey);
+            _shortWrapKey = null;
+        }
+
+        _shortWrap = null;
+        _deviceQuick = false;
         _entries.Clear();
         _labels.Spaces.Clear();
         _labels.Tags.Clear();

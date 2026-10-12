@@ -16,14 +16,13 @@ public class AutofillAndPathTests
             Id = Guid.NewGuid(),
             Name = "GitHub",
             Url = "https://github.com/login",
-            Username = "ada",
-            Password = "pw"
+            Accounts = [new VaultAccount { Username = "ada", Password = "pw" }]
         };
         var totpOnly = new VaultEntry
         {
             Id = Guid.NewGuid(),
             Name = "令牌",
-            TotpSecret = "GEZDGNBVGY3TQOJQ"
+            Accounts = [new VaultAccount { TotpSecret = "GEZDGNBVGY3TQOJQ" }]
         };
         var entries = new[] { login, totpOnly };
 
@@ -46,8 +45,7 @@ public class AutofillAndPathTests
         {
             Name = "GitHub",
             Url = "https://github.com",
-            Username = "ada",
-            Password = "s3cret"
+            Accounts = [new VaultAccount { Username = "ada", Password = "s3cret" }]
         };
         session.Upsert(entry);
         var request = Request("https://github.com/login");
@@ -73,6 +71,30 @@ public class AutofillAndPathTests
         session.Lock();
         var locked = await AutofillCoordinator.HandleDiscoverAsync(session, request, new FakePrompter(entry.Id, "short-key"));
         Assert.Equal("locked", locked.Type);
+    }
+
+    [Fact]
+    public async Task Coordinator_FillsTheChosenAccountOfMultiAccountLogin()
+    {
+        var path = TestVault.NewPath();
+        using var session = TestVault.CreateUnlocked(path);
+        var readOnly = new VaultAccount { Username = "reader", Password = "read-pw", Note = "只读" };
+        var writer = new VaultAccount { Username = "writer", Password = "write-pw" };
+        var entry = new VaultEntry { Name = "后台", Url = "https://admin.example.com", Accounts = [readOnly, writer] };
+        session.Upsert(entry);
+        var request = Request("https://admin.example.com/login");
+
+        var matches = AutofillMatcher.Match(session.Entries, request);
+        Assert.Equal(2, matches.Count);
+        Assert.Contains(matches, match => match.AccountId == readOnly.Id && match.Username == "reader" && match.AccountNote == "只读");
+
+        var filled = await AutofillCoordinator.HandleDiscoverAsync(session, request, new FakePrompter(entry.Id, "short-key", writer.Id));
+        Assert.Equal("fill", filled.Type);
+        Assert.Equal("writer", filled.Username);
+        Assert.Equal("write-pw", filled.Password);
+
+        var forged = await AutofillCoordinator.HandleDiscoverAsync(session, request, new FakePrompter(entry.Id, "short-key", Guid.NewGuid()));
+        Assert.Equal("cancelled", forged.Type);
     }
 
     [Fact]
@@ -117,11 +139,13 @@ public class AutofillAndPathTests
     {
         private readonly Guid? _id;
         private readonly string? _shortKey;
+        private readonly Guid? _accountId;
 
-        public FakePrompter(Guid? id, string? shortKey)
+        public FakePrompter(Guid? id, string? shortKey, Guid? accountId = null)
         {
             _id = id;
             _shortKey = shortKey;
+            _accountId = accountId;
         }
 
         public Task<AutofillDecision?> PromptAsync(
@@ -138,6 +162,7 @@ public class AutofillAndPathTests
             return Task.FromResult<AutofillDecision?>(new AutofillDecision
             {
                 EntryId = _id.Value,
+                AccountId = _accountId ?? matches.FirstOrDefault(match => match.Id == _id.Value)?.AccountId ?? Guid.Empty,
                 ShortKey = _shortKey
             });
         }

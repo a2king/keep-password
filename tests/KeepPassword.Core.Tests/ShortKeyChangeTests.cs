@@ -10,7 +10,7 @@ public class ShortKeyChangeTests
     {
         var path = TestVault.NewPath();
         using var session = TestVault.CreateUnlocked(path);
-        session.Upsert(new VaultEntry { Name = "保留", Url = "https://example.com", Username = "ada", Password = "pw" });
+        session.Upsert(new VaultEntry { Name = "保留", Url = "https://example.com", Accounts = [new VaultAccount { Username = "ada", Password = "pw" }] });
         session.Save();
 
         var error = Assert.Throws<CredentialRejectedException>(() => session.ChangeShortKey("not-the-master", "new-short"));
@@ -29,7 +29,7 @@ public class ShortKeyChangeTests
         var path = TestVault.NewPath();
         using (var session = TestVault.CreateUnlocked(path))
         {
-            session.Upsert(new VaultEntry { Name = "保留", Password = "pw", Username = "ada", Url = "https://example.com" });
+            session.Upsert(new VaultEntry { Name = "保留", Accounts = [new VaultAccount { Username = "ada", Password = "pw" }], Url = "https://example.com" });
             session.ChangeShortKey("correct horse", "new-short");
         }
 

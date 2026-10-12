@@ -36,11 +36,13 @@ public static class AutofillCoordinator
         }
 
         var entry = session.Entries.FirstOrDefault(item => item.Id == decision.EntryId);
-        if (entry is null || entry.Kind != VaultItemKind.Login || matches.All(match => match.Id != entry.Id))
+        var account = entry?.Accounts.FirstOrDefault(item => item.Id == decision.AccountId);
+        if (entry is null || account is null || entry.Kind != VaultItemKind.Login
+            || matches.All(match => match.Id != entry.Id || match.AccountId != account.Id))
         {
             return AutofillResponse.Cancelled();
         }
 
-        return AutofillResponse.Fill(entry.Username, entry.Password);
+        return AutofillResponse.Fill(account.Username, account.Password);
     }
 }

@@ -40,8 +40,7 @@ public class VaultUnlockTests
             {
                 Name = "GitHub",
                 Url = "https://github.com/login",
-                Username = "ada",
-                Password = "s3cret",
+                Accounts = [new VaultAccount { Username = "ada", Password = "s3cret" }],
                 Note = "工作"
             });
             created.Save();
@@ -50,8 +49,9 @@ public class VaultUnlockTests
         using var session = TestVault.Store().Unlock(path, "correct horse");
         var entry = Assert.Single(session.Entries);
         Assert.Equal("GitHub", entry.Name);
-        Assert.Equal("ada", entry.Username);
-        Assert.Equal("s3cret", entry.Password);
+        var account = Assert.Single(entry.Accounts);
+        Assert.Equal("ada", account.Username);
+        Assert.Equal("s3cret", account.Password);
         Assert.Equal("工作", entry.Note);
     }
 
@@ -67,8 +67,7 @@ public class VaultUnlockTests
             {
                 Name = "邮箱",
                 Url = "https://mail.example.com",
-                Username = "ada@example.com",
-                Password = "plain-password"
+                Accounts = [new VaultAccount { Username = "ada@example.com", Password = "plain-password" }]
             });
             session.Save();
         }
@@ -79,5 +78,142 @@ public class VaultUnlockTests
         Assert.DoesNotContain("plain-password", text);
         Assert.Contains("argon2id", text);
         Assert.Contains("aes-256-gcm", text);
+        var quick = System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(path + ".quick"));
+        Assert.DoesNotContain(master, quick);
+        Assert.DoesNotContain(shortKey, quick);
+        Assert.DoesNotContain("plain-password", quick);
+    }
+
+    [Fact]
+    public void ShortUnlock_AfterCreate_OpensTheSameVault()
+    {
+        var path = TestVault.NewPath();
+        var store = TestVault.Store();
+        using (var created = store.CreateSession(path, "ada", "correct horse", "short-key"))
+        {
+            created.Upsert(new VaultEntry
+            {
+                Name = "GitHub",
+                Accounts = [new VaultAccount { Username = "ada", Password = "s3cret" }]
+            });
+            created.Save();
+        }
+
+        Assert.True(store.HasShortUnlock(path));
+        using var session = store.UnlockWithShortKey(path, "short-key");
+        Assert.Equal("s3cret", Assert.Single(Assert.Single(session.Entries).Accounts).Password);
+        Assert.True(session.ShortUnlockReady);
+
+        var wrong = Assert.Throws<UnlockFailedException>(() => store.UnlockWithShortKey(path, "other-key"));
+        Assert.Contains("短密钥", wrong.Message);
+    }
+
+    [Fact]
+    public void FirstUnlock_UsesMasterPassword_ThenShortKeyOnly()
+    {
+        var path = TestVault.NewPath();
+        var store = TestVault.Store();
+        store.Create(path, "ada", "correct horse", "short-key");
+        File.Delete(path + ".quick");
+        Assert.False(store.HasShortUnlock(path));
+        Assert.Throws<InvalidOperationException>(() => store.UnlockWithShortKey(path, "short-key"));
+
+        using (var session = store.Unlock(path, "correct horse"))
+        {
+            Assert.True(session.ShortUnlockReady);
+            Assert.Equal("ada", session.Account);
+        }
+
+        Assert.True(store.HasShortUnlock(path));
+        var quick = System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(path + ".quick"));
+        Assert.DoesNotContain("correct horse", quick);
+        Assert.DoesNotContain("short-key", quick);
+        var wrong = Assert.Throws<UnlockFailedException>(() => store.UnlockWithShortKey(path, "other-key"));
+        Assert.Contains("短密钥", wrong.Message);
+        using var unlocked = store.UnlockWithShortKey(path, "short-key");
+        Assert.Equal("ada", unlocked.Account);
+    }
+
+    [Fact]
+    public void ShortUnlock_SurvivesMasterAndShortKeyChanges()
+    {
+        var path = TestVault.NewPath();
+        var store = TestVault.Store();
+        using (var session = store.CreateSession(path, "ada", "correct horse", "short-key"))
+        {
+            session.Upsert(new VaultEntry
+            {
+                Name = "保留",
+                Accounts = [new VaultAccount { Username = "ada", Password = "pw" }]
+            });
+            session.Save();
+            session.ChangeMasterPassword("correct horse", "new horse");
+            session.ChangeShortKey("new horse", "new-short");
+        }
+
+        Assert.Throws<UnlockFailedException>(() => store.UnlockWithShortKey(path, "short-key"));
+        using var unlocked = store.UnlockWithShortKey(path, "new-short");
+        Assert.Equal("pw", Assert.Single(Assert.Single(unlocked.Entries).Accounts).Password);
+        using var byMaster = store.Unlock(path, "new horse");
+        Assert.Equal("保留", Assert.Single(byMaster.Entries).Name);
+    }
+
+    [Fact]
+    public void ChangingMasterWithoutShortWrap_DisablesShortUnlock()
+    {
+        var path = TestVault.NewPath();
+        var store = TestVault.Store();
+        store.Create(path, "ada", "correct horse", "short-key");
+        using (var session = store.Unlock(path, "correct horse"))
+        {
+            Assert.False(session.ShortUnlockReady);
+            session.ChangeMasterPassword("correct horse", "new horse");
+            Assert.False(session.ShortUnlockReady);
+        }
+
+        Assert.False(store.HasShortUnlock(path));
+        using var unlocked = store.Unlock(path, "new horse");
+        Assert.Equal("ada", unlocked.Account);
+    }
+
+    [Fact]
+    public void Recovery_DisablesShortUnlockUntilItIsEnabledAgain()
+    {
+        var path = TestVault.NewPath();
+        var store = TestVault.Store();
+        store.Create(path, "ada", "correct horse", "short-key", new RecoverySetup
+        {
+            RiskAcknowledged = true,
+            Questions = ["一", "二", "三"],
+            Answers = ["alpha", "beta", "gamma"]
+        });
+        Assert.True(store.HasShortUnlock(path));
+
+        using (var recovered = store.Recover(path, ["alpha", "beta", "gamma"], "other horse"))
+        {
+            Assert.False(recovered.ShortUnlockReady);
+        }
+
+        Assert.False(store.HasShortUnlock(path));
+        using (var session = store.Unlock(path, "other horse"))
+        {
+            Assert.True(session.ShortUnlockReady);
+        }
+
+        using var byShort = store.UnlockWithShortKey(path, "short-key");
+        Assert.True(byShort.VerifyShortKey("short-key"));
+    }
+
+    [Fact]
+    public void VaultFileAlone_DoesNotEnableShortUnlock()
+    {
+        var path = TestVault.NewPath();
+        var store = TestVault.Store();
+        store.Create(path, "ada", "correct horse", "short-key");
+        var copy = path + ".copy";
+        File.Copy(path, copy);
+        Assert.False(store.HasShortUnlock(copy));
+        using var session = store.Unlock(copy, "correct horse");
+        Assert.Equal("ada", session.Account);
     }
 }

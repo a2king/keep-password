@@ -20,8 +20,6 @@ internal static class TestVault
         string masterPassword = "correct horse",
         string shortKey = "short-key")
     {
-        var store = Store();
-        store.Create(path, account, masterPassword, shortKey);
-        return store.Unlock(path, masterPassword);
+        return Store().CreateSession(path, account, masterPassword, shortKey);
     }
 }

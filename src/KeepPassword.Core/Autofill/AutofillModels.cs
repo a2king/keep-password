@@ -25,9 +25,13 @@ public sealed class AutofillCandidate
 {
     public required Guid Id { get; init; }
 
+    public required Guid AccountId { get; init; }
+
     public required string Name { get; init; }
 
     public required string Username { get; init; }
+
+    public string AccountNote { get; init; } = "";
 
     public required string Domain { get; init; }
 }
@@ -52,6 +56,8 @@ public sealed class DetectedPasswordField
 public sealed class AutofillDecision
 {
     public required Guid EntryId { get; init; }
+
+    public required Guid AccountId { get; init; }
 
     public required string ShortKey { get; init; }
 }

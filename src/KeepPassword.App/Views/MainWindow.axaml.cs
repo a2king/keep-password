@@ -180,9 +180,21 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnAuthPassword(object? sender, RoutedEventArgs e) => View?.SetKeyAuth(false);
+    private void OnAccountAuthPassword(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: AccountEditorView account })
+        {
+            account.SetKeyAuth(false);
+        }
+    }
 
-    private void OnAuthKey(object? sender, RoutedEventArgs e) => View?.SetKeyAuth(true);
+    private void OnAccountAuthKey(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: AccountEditorView account })
+        {
+            account.SetKeyAuth(true);
+        }
+    }
 
     private void OnGenerateField(object? sender, RoutedEventArgs e)
     {
@@ -222,6 +234,21 @@ public partial class MainWindow : Window
     }
 
     private void OnAddNode(object? sender, RoutedEventArgs e) => View?.AddNode();
+
+    private void OnAddAccount(object? sender, RoutedEventArgs e) => View?.AddAccount();
+
+    private async void OnRemoveAccount(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: AccountEditorView account } || View is null)
+        {
+            return;
+        }
+
+        if (account.IsBlank || await Dialogs.ConfirmAsync(this, "删除账号", $"删除账号「{account.DisplayName}」？保存后生效。"))
+        {
+            View.RemoveAccount(account);
+        }
+    }
 
     private async void OnCopyNode(object? sender, RoutedEventArgs e)
     {

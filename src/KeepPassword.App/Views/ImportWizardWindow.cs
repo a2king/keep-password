@@ -312,7 +312,7 @@ public sealed class ImportWizardWindow : Window
             _failed = result?.Error is not null;
             if (result?.Entry is { } entry)
             {
-                var detail = new[] { ItemTemplates.Summary(entry), entry.Username }.FirstOrDefault(text => !string.IsNullOrWhiteSpace(text));
+                var detail = new[] { ItemTemplates.Summary(entry), entry.Accounts.FirstOrDefault()?.Username }.FirstOrDefault(text => !string.IsNullOrWhiteSpace(text));
                 Title = detail is null ? $"{label}  {entry.Name}" : $"{label}  {entry.Name} · {detail}";
                 Error = "可导入";
             }

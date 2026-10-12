@@ -63,4 +63,7 @@ public static class VaultItemKinds
     };
 
     public static bool UsesSshKey(VaultItemKind kind) => kind is VaultItemKind.Server or VaultItemKind.Cluster;
+
+    public static bool HasAccounts(VaultItemKind kind) =>
+        kind is VaultItemKind.Login or VaultItemKind.Server or VaultItemKind.Database or VaultItemKind.Cluster;
 }

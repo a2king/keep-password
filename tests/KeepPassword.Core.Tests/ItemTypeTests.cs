@@ -20,7 +20,7 @@ public sealed class ItemTypeTests
         var path = TestVault.NewPath();
         using (var session = TestVault.CreateUnlocked(path))
         {
-            session.Upsert(new VaultEntry { Name = "GitHub", Url = "https://github.com", Username = "ada", Password = "pw" });
+            session.Upsert(new VaultEntry { Name = "GitHub", Url = "https://github.com", Accounts = [new VaultAccount { Username = "ada", Password = "pw" }] });
             session.Save();
         }
 
@@ -47,7 +47,7 @@ public sealed class ItemTypeTests
             session.Upsert(key);
             keyId = Assert.Single(session.Entries).Id;
 
-            var server = new VaultEntry { Name = "生产机", Kind = VaultItemKind.Server, Username = "root", Favorite = true, SshKeyId = keyId };
+            var server = new VaultEntry { Name = "生产机", Kind = VaultItemKind.Server, Accounts = [new VaultAccount { Username = "root" }], Favorite = true, SshKeyId = keyId };
             server.SetField(FieldKeys.Protocol, "ssh");
             server.SetField(FieldKeys.Host, "10.0.0.8");
             server.SetField(FieldKeys.Port, "2222");
@@ -57,7 +57,7 @@ public sealed class ItemTypeTests
             session.Upsert(server);
             serverId = session.Entries.Single(entry => entry.Kind == VaultItemKind.Server).Id;
 
-            var cluster = new VaultEntry { Name = "Nebula", Kind = VaultItemKind.Cluster, Username = "root", Password = "nebula" };
+            var cluster = new VaultEntry { Name = "Nebula", Kind = VaultItemKind.Cluster, Accounts = [new VaultAccount { Username = "root", Password = "nebula" }] };
             cluster.SetField(FieldKeys.Product, "NebulaGraph");
             cluster.Nodes.Add(new ClusterNode { Name = "graphd-1", Role = "graphd", Host = "10.0.1.1", Port = "9669", Service = "graph" });
             cluster.Nodes.Add(new ClusterNode { Name = "metad-1", Role = "metad", Host = "10.0.1.2", Port = "9559" });
@@ -73,7 +73,8 @@ public sealed class ItemTypeTests
 
         var storedServer = reopened.Entries.Single(entry => entry.Id == serverId);
         Assert.True(storedServer.Favorite);
-        Assert.Equal(keyId, storedServer.SshKeyId);
+        Assert.Null(storedServer.SshKeyId);
+        Assert.Equal(keyId, storedServer.Accounts[0].SshKeyId);
         Assert.Equal("2222", storedServer.Field(FieldKeys.Port));
         Assert.Equal(["机房", "堡垒机口令"], storedServer.CustomFields.Select(field => field.Name));
         Assert.True(storedServer.CustomFields[1].Sensitive);
@@ -89,10 +90,11 @@ public sealed class ItemTypeTests
     public void Kind_CannotChangeAfterCreation()
     {
         using var session = TestVault.CreateUnlocked(TestVault.NewPath());
-        session.Upsert(new VaultEntry { Name = "a", Username = "ada" });
+        session.Upsert(new VaultEntry { Name = "a", Accounts = [new VaultAccount { Username = "ada", Password = "pw" }] });
         var entry = Assert.Single(session.Entries);
         entry.Kind = VaultItemKind.ApiCredential;
         entry.SetField(FieldKeys.Token, "t");
+        entry.Accounts.Clear();
         Assert.Throws<InvalidOperationException>(() => session.Upsert(entry));
         Assert.Equal(VaultItemKind.Login, Assert.Single(session.Entries).Kind);
     }
@@ -114,7 +116,7 @@ public sealed class ItemTypeTests
         session.Upsert(key);
         var keyId = Assert.Single(session.Entries).Id;
 
-        var login = new VaultEntry { Name = "login", Username = "ada", SshKeyId = keyId };
+        var login = new VaultEntry { Name = "login", Accounts = [new VaultAccount { Username = "ada", Password = "pw" }], SshKeyId = keyId };
         session.Upsert(login);
         Assert.Null(session.Entries.Single(entry => entry.Name == "login").SshKeyId);
 
@@ -123,7 +125,10 @@ public sealed class ItemTypeTests
         Assert.True(session.Remove(keyId));
         var unlinked = session.Entries.Single(entry => entry.Kind == VaultItemKind.Server);
         Assert.Null(unlinked.SshKeyId);
-        Assert.Equal(FieldKeys.AuthPassword, unlinked.Field(FieldKeys.Auth));
+        Assert.Null(unlinked.Accounts[0].SshKeyId);
+        Assert.NotEqual(FieldKeys.AuthSshKey, unlinked.Accounts[0].Auth);
+        Assert.Throws<ArgumentException>(() => session.Upsert(unlinked));
+        unlinked.Accounts[0].Password = "pw";
         session.Upsert(unlinked);
     }
 
@@ -139,8 +144,8 @@ public sealed class ItemTypeTests
         rdp.SetField(FieldKeys.Protocol, "rdp");
         rdp.SetField(FieldKeys.Auth, FieldKeys.AuthSshKey);
         rdp.SshKeyId = Assert.Single(session.Entries).Id;
-        Assert.False(ItemTemplates.UsesKeyAuth(rdp));
-        Assert.Contains(ItemTemplates.Fields(rdp), spec => spec.Key == FieldKeys.Password);
+        Assert.False(ItemTemplates.SupportsKeyAuth(rdp));
+        Assert.True(ItemTemplates.AccountNeedsPassword(rdp, rdp.Accounts[0]));
         session.Upsert(rdp);
         Assert.Null(session.Entries.Single(entry => entry.Kind == VaultItemKind.Server).SshKeyId);
     }
@@ -152,12 +157,13 @@ public sealed class ItemTypeTests
         var server = Server("10.0.0.2");
         server.SetField(FieldKeys.Auth, FieldKeys.AuthSshKey);
         server.SshKeyId = Guid.NewGuid();
-        session.ReplaceAll([server, new VaultEntry { Name = "web", Username = "ada" }]);
+        session.ReplaceAll([server, new VaultEntry { Name = "web", Accounts = [new VaultAccount { Username = "ada", Password = "pw" }] }]);
 
         Assert.Equal(2, session.Entries.Count);
         var restored = session.Entries.Single(entry => entry.Kind == VaultItemKind.Server);
         Assert.Null(restored.SshKeyId);
-        Assert.Equal(FieldKeys.AuthPassword, restored.Field(FieldKeys.Auth));
+        Assert.Null(restored.Accounts[0].SshKeyId);
+        Assert.NotEqual(FieldKeys.AuthSshKey, restored.Accounts[0].Auth);
     }
 
     [Fact]
@@ -217,7 +223,7 @@ public sealed class ItemTypeTests
     [InlineData("oss")]
     public void Database_RequiresHostAndHasNoConnectionField(string driver)
     {
-        var entry = new VaultEntry { Kind = VaultItemKind.Database, Username = "app", Password = "p@ss:w" };
+        var entry = new VaultEntry { Kind = VaultItemKind.Database, Accounts = [new VaultAccount { Username = "app", Password = "p@ss:w" }] };
         entry.SetField(FieldKeys.Driver, driver);
         Assert.NotNull(VaultItemRules.Validate(entry));
         entry.SetField(FieldKeys.Host, "db.local");
@@ -229,7 +235,7 @@ public sealed class ItemTypeTests
     [Fact]
     public void Database_SqliteRequiresFile()
     {
-        var sqlite = new VaultEntry { Kind = VaultItemKind.Database };
+        var sqlite = new VaultEntry { Kind = VaultItemKind.Database, Accounts = [new VaultAccount { Username = "a", Password = "p" }] };
         sqlite.SetField(FieldKeys.Driver, "sqlite");
         Assert.NotNull(VaultItemRules.Validate(sqlite));
         sqlite.SetField(FieldKeys.Database, @"C:\data\app.db");
@@ -258,7 +264,7 @@ public sealed class ItemTypeTests
         store.Create(path, "ada", "correct horse", "short-key");
         using (var session = store.Unlock(path, "correct horse"))
         {
-            var entry = new VaultEntry { Name = "db", Kind = VaultItemKind.Database };
+            var entry = new VaultEntry { Name = "db", Kind = VaultItemKind.Database, Accounts = [new VaultAccount { Username = "a", Password = "p" }] };
             entry.SetField(FieldKeys.Driver, "mysql");
             entry.SetField(FieldKeys.Host, "db.local");
             entry.SetField(FieldKeys.Connection, "mysql://x/y");
@@ -293,7 +299,7 @@ public sealed class ItemTypeTests
         api.SetField(FieldKeys.Secret, "s");
         Assert.Null(VaultItemRules.Validate(api));
 
-        var cluster = new VaultEntry { Kind = VaultItemKind.Cluster };
+        var cluster = new VaultEntry { Kind = VaultItemKind.Cluster, Accounts = [new VaultAccount { Username = "root", Password = "pw" }] };
         Assert.Contains("节点", VaultItemRules.Validate(cluster));
         cluster.Nodes.Add(new ClusterNode { Host = "a", Port = "9669" });
         cluster.Nodes.Add(new ClusterNode { Host = "", Port = "9669" });
@@ -303,10 +309,10 @@ public sealed class ItemTypeTests
         Assert.Contains("端口", VaultItemRules.Validate(cluster));
         cluster.Nodes[1].Port = "";
         Assert.Null(VaultItemRules.Validate(cluster));
-        cluster.SetField(FieldKeys.Auth, FieldKeys.AuthSshKey);
+        cluster.Accounts[0].Auth = FieldKeys.AuthSshKey;
         Assert.Contains("SSH 密钥", VaultItemRules.Validate(cluster));
 
-        var login = new VaultEntry { Name = "a" };
+        var login = new VaultEntry { Name = "a", Accounts = [new VaultAccount { Username = "a", Password = "b" }] };
         login.CustomFields.Add(new VaultCustomField { Name = "PIN" });
         login.CustomFields.Add(new VaultCustomField { Name = " pin " });
         Assert.Contains("重复", VaultItemRules.Validate(login));
@@ -317,14 +323,14 @@ public sealed class ItemTypeTests
         login.CustomFields.RemoveAt(1);
         login.Note = new string('n', VaultItemRules.MaxValueLength + 1);
         Assert.Contains("过长", VaultItemRules.Validate(login));
-        Assert.Null(VaultItemRules.Validate(new VaultEntry()));
+        Assert.Null(VaultItemRules.Validate(new VaultEntry { Accounts = [new VaultAccount { Username = "a", Password = "b" }] }));
     }
 
     [Fact]
     public void Search_MatchesTechnicalFields_ButNotSecrets()
     {
         var server = Server("10.20.30.40");
-        server.Password = "hunter2";
+        server.Accounts[0].Password = "hunter2";
         server.CustomFields.Add(new VaultCustomField { Name = "机房", Value = "杭州" });
         server.CustomFields.Add(new VaultCustomField { Name = "PIN", Value = "998877", Sensitive = true });
         var cluster = new VaultEntry { Name = "图数据库", Kind = VaultItemKind.Cluster };
@@ -349,9 +355,9 @@ public sealed class ItemTypeTests
     [Fact]
     public void AutofillAndAudit_OnlyConsiderLoginSecrets()
     {
-        var login = new VaultEntry { Id = Guid.NewGuid(), Name = "web", Url = "https://example.com", Username = "ada", Password = "same" };
-        var api = new VaultEntry { Id = Guid.NewGuid(), Name = "api", Kind = VaultItemKind.ApiCredential, Url = "https://example.com", Username = "ada" };
-        var server = new VaultEntry { Id = Guid.NewGuid(), Name = "srv", Kind = VaultItemKind.Server, Url = "https://example.com", Username = "ada", Password = "same" };
+        var login = new VaultEntry { Id = Guid.NewGuid(), Name = "web", Url = "https://example.com", Accounts = [new VaultAccount { Username = "ada", Password = "same" }] };
+        var api = new VaultEntry { Id = Guid.NewGuid(), Name = "api", Kind = VaultItemKind.ApiCredential, Url = "https://example.com" };
+        var server = new VaultEntry { Id = Guid.NewGuid(), Name = "srv", Kind = VaultItemKind.Server, Url = "https://example.com", Accounts = [new VaultAccount { Username = "ada", Password = "same" }] };
 
         var matches = AutofillMatcher.Match([login, api, server], new AutofillRequest { Origin = AutofillOrigin.Browser, Url = "https://example.com/login" });
         Assert.Equal(login.Id, Assert.Single(matches).Id);
@@ -359,8 +365,9 @@ public sealed class ItemTypeTests
         var keyServer = server.Clone();
         keyServer.Id = Guid.NewGuid();
         keyServer.SetField(FieldKeys.Protocol, "ssh");
-        keyServer.SetField(FieldKeys.Auth, FieldKeys.AuthSshKey);
-        keyServer.Password = "";
+        keyServer.Accounts[0].Auth = FieldKeys.AuthSshKey;
+        keyServer.Accounts[0].SshKeyId = Guid.NewGuid();
+        keyServer.Accounts[0].Password = "";
         var findings = VaultAudit.Analyze([login, api, keyServer]);
         Assert.DoesNotContain(findings, finding => finding.EntryId == api.Id || finding.EntryId == keyServer.Id);
     }
@@ -450,8 +457,8 @@ public sealed class ItemTypeTests
         Assert.Equal(VaultItemKind.Server, first.Kind);
         Assert.Equal("ssh", first.Field(FieldKeys.Protocol));
         Assert.Equal("22", first.Field(FieldKeys.Port));
-        Assert.Equal(FieldKeys.AuthPassword, first.Field(FieldKeys.Auth));
-        Assert.Equal("pw1", first.Password);
+        Assert.NotEqual(FieldKeys.AuthSshKey, first.Accounts[0].Auth);
+        Assert.Equal("pw1", first.Accounts[0].Password);
         Assert.Equal(["运维", "生产"], first.Tags);
         Assert.True(first.Favorite);
         Assert.Empty(first.CustomFields);
@@ -513,7 +520,7 @@ public sealed class ItemTypeTests
 
     private static VaultEntry Server(string host)
     {
-        var entry = new VaultEntry { Name = "srv", Kind = VaultItemKind.Server, Username = "root" };
+        var entry = new VaultEntry { Name = "srv", Kind = VaultItemKind.Server, Accounts = [new VaultAccount { Username = "root", Password = "pw" }] };
         entry.SetField(FieldKeys.Protocol, "ssh");
         entry.SetField(FieldKeys.Port, "22");
         entry.SetField(FieldKeys.Host, host);

@@ -1,3 +1,4 @@
+using KeepPassword.Core.Security;
 using KeepPassword.Core.Totp;
 using KeepPassword.Core.Vault;
 
@@ -52,16 +53,20 @@ public sealed class TotpPageViewModel : ViewModelBase
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var previous = Rows.ToDictionary(row => row.Name + "|" + row.Secret, row => row);
         var next = new List<TotpRowView>();
-        foreach (var entry in _session.Entries.Where(entry => !string.IsNullOrWhiteSpace(entry.TotpSecret))
-                     .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase))
+        var accounts = _session.Entries
+            .SelectMany(entry => entry.Accounts
+                .Where(account => !string.IsNullOrWhiteSpace(account.TotpSecret))
+                .Select(account => (Name: VaultAudit.AccountTitle(entry, account), Secret: account.TotpSecret!)))
+            .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, secret) in accounts)
         {
-            var key = entry.Name + "|" + entry.TotpSecret;
+            var key = name + "|" + secret;
             if (!previous.TryGetValue(key, out var row))
             {
-                row = new TotpRowView { Name = string.IsNullOrWhiteSpace(entry.Name) ? "未命名" : entry.Name, Secret = entry.TotpSecret };
+                row = new TotpRowView { Name = name, Secret = secret };
             }
 
-            if (TotpGenerator.TryGenerateFromBase32(entry.TotpSecret, now, out var code))
+            if (TotpGenerator.TryGenerateFromBase32(secret, now, out var code))
             {
                 row.Code = code;
                 row.Remaining = TotpGenerator.RemainingSeconds(now);

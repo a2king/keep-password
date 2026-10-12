@@ -12,7 +12,7 @@ public static class AutofillMatcher
         var matches = new List<AutofillCandidate>();
         foreach (var entry in entries)
         {
-            if (entry.Kind != VaultItemKind.Login || (string.IsNullOrEmpty(entry.Username) && string.IsNullOrEmpty(entry.Password)))
+            if (entry.Kind != VaultItemKind.Login)
             {
                 continue;
             }
@@ -30,13 +30,23 @@ public static class AutofillMatcher
                 continue;
             }
 
-            matches.Add(new AutofillCandidate
+            foreach (var account in entry.Accounts)
             {
-                Id = entry.Id,
-                Name = string.IsNullOrWhiteSpace(entry.Name) ? host : entry.Name,
-                Username = entry.Username,
-                Domain = host
-            });
+                if (string.IsNullOrEmpty(account.Username) && string.IsNullOrEmpty(account.Password))
+                {
+                    continue;
+                }
+
+                matches.Add(new AutofillCandidate
+                {
+                    Id = entry.Id,
+                    AccountId = account.Id,
+                    Name = string.IsNullOrWhiteSpace(entry.Name) ? host : entry.Name,
+                    Username = account.Username,
+                    AccountNote = account.Note.Trim(),
+                    Domain = host
+                });
+            }
         }
 
         return matches

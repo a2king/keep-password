@@ -74,10 +74,16 @@ public static class CsvImporter
                 Id = Guid.NewGuid(),
                 Name = Field(row, columns, "name"),
                 Url = Field(row, columns, "url"),
-                Username = Field(row, columns, "username"),
-                Password = Field(row, columns, "password"),
                 Note = Field(row, columns, "note"),
-                TotpSecret = TotpSecret(Field(row, columns, "otp"))
+                Accounts =
+                [
+                    new VaultAccount
+                    {
+                        Username = Field(row, columns, "username"),
+                        Password = Field(row, columns, "password"),
+                        TotpSecret = TotpSecret(Field(row, columns, "otp"))
+                    }
+                ]
             });
         }
 

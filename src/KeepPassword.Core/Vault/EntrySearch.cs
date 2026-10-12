@@ -12,7 +12,8 @@ public static class EntrySearch
         FieldKeys.Environment,
         FieldKeys.Product,
         FieldKeys.KeyType,
-        FieldKeys.Fingerprint
+        FieldKeys.Fingerprint,
+        FieldKeys.ClientId
     ];
 
     public static IReadOnlyList<VaultEntry> Query(IEnumerable<VaultEntry> entries, string? query)
@@ -29,7 +30,7 @@ public static class EntrySearch
     public static bool Matches(VaultEntry entry, string needle) =>
         Contains(entry.Name, needle)
         || Contains(entry.Url, needle)
-        || Contains(entry.Username, needle)
+        || entry.Accounts.Any(account => Contains(account.Username, needle) || Contains(account.Note, needle))
         || Contains(entry.Note, needle)
         || Contains(entry.Space, needle)
         || entry.Tags.Any(tag => Contains(tag, needle))
