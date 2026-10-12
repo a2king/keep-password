@@ -399,6 +399,35 @@ public sealed class ItemTypeTests
     }
 
     [Fact]
+    public void CsvMapper_SplitsSemicolonTagsIntoSeparateLabels()
+    {
+        var table = CsvImporter.ReadTable(
+            "名称,类型,主机,端口,用户名,密码,标签\n" +
+            "爬虫库,mysql,10.0.0.1,3306,sjfx,pw,本地;生产;只读\n" +
+            "数仓,mysql,10.0.0.2,3306,dw,pw,\" 生产 ； 爬虫 ;;生产\"\n" +
+            "单标签,mysql,10.0.0.3,3306,a,pw,本地\n" +
+            "逗号,mysql,10.0.0.4,3306,a,pw,\"北京,上海|杭州\"\n");
+        var targets = CsvMapper.GuessAll(table.Headers, VaultItemKind.Database);
+        Assert.Equal(CsvMapper.Tags, targets[6]);
+
+        var plan = CsvMapper.Build(table, VaultItemKind.Database, targets, new HashSet<int>());
+        Assert.Equal(4, plan.Valid);
+        Assert.Equal(["本地", "生产", "只读"], plan.Entries[0].Tags);
+        Assert.Equal(["生产", "爬虫"], plan.Entries[1].Tags);
+        Assert.Equal(["本地"], plan.Entries[2].Tags);
+        Assert.Equal(["北京,上海|杭州"], plan.Entries[3].Tags);
+
+        using var session = TestVault.CreateUnlocked(TestVault.NewPath());
+        foreach (var entry in plan.Entries)
+        {
+            session.Upsert(entry);
+        }
+
+        Assert.Equal(["本地", "生产", "只读", "爬虫", "北京,上海|杭州"], session.Tags);
+        Assert.Equal(["本地", "生产", "只读"], session.Entries.Single(entry => entry.Name == "爬虫库").Tags);
+    }
+
+    [Fact]
     public void CsvMapper_BuildsServersWithIgnoredAndInvalidRows()
     {
         var table = CsvImporter.ReadTable(

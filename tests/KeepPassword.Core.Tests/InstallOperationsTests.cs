@@ -36,6 +36,45 @@ public class InstallOperationsTests
     }
 
     [Fact]
+    public void Install_ReportsSingleMonotonicProgressWithFileLog()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "keep-password-tests", Guid.NewGuid().ToString("n"));
+        var zipPath = Path.Combine(root, "payload.zip");
+        Directory.CreateDirectory(root);
+        using (var zip = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            foreach (var name in new[] { "KeepPassword.exe", "lib/a.dll", "lib/b.dll" })
+            {
+                using var writer = new StreamWriter(zip.CreateEntry(name).Open());
+                writer.Write(new string('x', 2048));
+            }
+        }
+
+        var reports = new List<InstallProgress>();
+        var progress = new InlineProgress(reports.Add);
+        var extract = Path.Combine(root, "extract");
+        using (var stream = File.OpenRead(zipPath))
+        {
+            InstallOperations.ExtractZip(stream, extract, progress);
+        }
+
+        InstallOperations.InstallFromDirectory(extract, Path.Combine(root, "target"), new InstallOptions { RegisterWithSystem = false }, progress);
+
+        var percents = reports.Select(item => item.Percent).ToList();
+        Assert.Equal(percents.OrderBy(value => value), percents);
+        Assert.Equal(100, percents[^1]);
+        Assert.True(percents[0] <= InstallOperations.ExtractEnd);
+        Assert.Equal(3, reports.Count(item => item.Log?.StartsWith("解压", StringComparison.Ordinal) == true));
+        Assert.Equal(3, reports.Count(item => item.Log?.StartsWith("复制", StringComparison.Ordinal) == true));
+        Assert.Contains(reports, item => item.Log == "解压  lib/a.dll  (2.0 KB)");
+    }
+
+    private sealed class InlineProgress(Action<InstallProgress> report) : IProgress<InstallProgress>
+    {
+        public void Report(InstallProgress value) => report(value);
+    }
+
+    [Fact]
     public void ResolveExistingInstall_RequiresInstalledExecutable()
     {
         var install = Path.Combine(Path.GetTempPath(), "keep-password-tests", Guid.NewGuid().ToString("n"), "Keep Password");

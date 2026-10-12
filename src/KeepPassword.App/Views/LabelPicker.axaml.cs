@@ -93,7 +93,7 @@ public partial class LabelPicker : UserControl
         }
         else if (change.Property == WatermarkProperty)
         {
-            Input.Watermark = Watermark;
+            UpdateWatermark();
         }
         else if (change.Property == IconProperty && Icon is not null)
         {
@@ -121,7 +121,7 @@ public partial class LabelPicker : UserControl
             return;
         }
 
-        Dropdown.MinWidth = Box.Bounds.Width;
+        Dropdown.Width = Box.Bounds.Width;
         RebuildOptions();
         Dropdown.IsOpen = true;
     }
@@ -182,7 +182,11 @@ public partial class LabelPicker : UserControl
         }
 
         var exact = Items?.FirstOrDefault(item => LabelName.Comparer.Equals(item.Name, filter));
-        if (exact is not null)
+        if (exact is { IsSelected: true } && Multiple)
+        {
+            Input.Text = "";
+        }
+        else if (exact is not null)
         {
             Choose(exact.Name);
         }
@@ -235,7 +239,15 @@ public partial class LabelPicker : UserControl
 
     private void RebuildChips()
     {
-        Chips.Children.Clear();
+        for (var i = Flow.Children.Count - 1; i >= 0; i--)
+        {
+            if (Flow.Children[i] != Glyph && Flow.Children[i] != Input)
+            {
+                Flow.Children.RemoveAt(i);
+            }
+        }
+
+        var index = Flow.Children.IndexOf(Input);
         foreach (var item in Items?.Where(item => item.IsSelected) ?? [])
         {
             var remove = new Button { Content = "×", Tag = item.Name };
@@ -259,11 +271,14 @@ public partial class LabelPicker : UserControl
                 }
             };
             chip.Classes.Add("picker-chip");
-            Chips.Children.Add(chip);
+            Flow.Children.Insert(index++, chip);
         }
 
-        Chips.IsVisible = Chips.Children.Count > 0;
+        UpdateWatermark();
     }
+
+    private void UpdateWatermark() =>
+        Input.Watermark = Items?.Any(item => item.IsSelected) == true ? null : Watermark;
 
     private void RebuildOptions()
     {
@@ -271,6 +286,7 @@ public partial class LabelPicker : UserControl
         var filter = Filter;
         var items = Items ?? [];
         _filtered = items
+            .Where(item => !(Multiple && item.IsSelected))
             .Where(item => filter.Length == 0 || item.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))
             .ToList();
         if (_highlight >= _filtered.Count)
@@ -328,7 +344,7 @@ public partial class LabelPicker : UserControl
 
         if (Options.Children.Count == 0)
         {
-            var empty = new TextBlock { Text = "输入名称即可创建", Margin = new Thickness(10, 8), FontSize = 12.5 };
+            var empty = new TextBlock { Text = items.Count > 0 ? "已全部选择，输入名称可创建新的" : "输入名称即可创建", Margin = new Thickness(10, 8), FontSize = 12.5 };
             empty.Classes.Add("muted");
             Options.Children.Add(empty);
         }

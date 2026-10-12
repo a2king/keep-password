@@ -28,15 +28,15 @@
             <TextBox Text="{Binding Account}" views:AsciiInput.IsEnabled="True" Watermark="例如 ada" IsVisible="{Binding IsCreate}" Classes="mono" />
 
             <TextBlock Text="主密码" Classes="label" />
-            <TextBox x:Name="MasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Watermark="请输入主密码" Classes="mono" FontSize="15" />
+            <TextBox x:Name="MasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="请输入主密码" Classes="mono" FontSize="15" />
 
             <StackPanel IsVisible="{Binding IsCreate}">
               <TextBlock Text="确认主密码" Classes="label" />
-              <TextBox x:Name="ConfirmMasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
+              <TextBox x:Name="ConfirmMasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
               <TextBlock Text="短密钥" Classes="label" />
-              <TextBox x:Name="ShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Watermark="固定短密钥" Classes="mono" FontSize="15" />
+              <TextBox x:Name="ShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="固定短密钥" Classes="mono" FontSize="15" />
               <TextBlock Text="确认短密钥" Classes="label" />
-              <TextBox x:Name="ConfirmShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
+              <TextBox x:Name="ConfirmShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
               <CheckBox Content="启用安全问题恢复（安全性显著降低）" IsChecked="{Binding EnableRecovery}" Margin="0,12,0,0" />
               <StackPanel IsVisible="{Binding EnableRecovery}" Margin="0,8,0,0">
                 <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8">
@@ -45,13 +45,13 @@
                 <CheckBox Content="我已理解：知道答案的人可以重置并读取保险库" IsChecked="{Binding RiskAcknowledged}" Margin="0,4,0,8" />
                 <TextBlock Text="问题 1" Classes="label" />
                 <TextBox Text="{Binding Question1}" />
-                <TextBox x:Name="Answer1Box" PasswordChar="•" Watermark="答案 1" Margin="0,4,0,0" />
+                <TextBox x:Name="Answer1Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 1" Margin="0,4,0,0" />
                 <TextBlock Text="问题 2" Classes="label" />
                 <TextBox Text="{Binding Question2}" />
-                <TextBox x:Name="Answer2Box" PasswordChar="•" Watermark="答案 2" Margin="0,4,0,0" />
+                <TextBox x:Name="Answer2Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 2" Margin="0,4,0,0" />
                 <TextBlock Text="问题 3" Classes="label" />
                 <TextBox Text="{Binding Question3}" />
-                <TextBox x:Name="Answer3Box" PasswordChar="•" Watermark="答案 3" Margin="0,4,0,0" />
+                <TextBox x:Name="Answer3Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 3" Margin="0,4,0,0" />
                 <TextBlock Text="答案不区分大小写，多余空格会被忽略。" Classes="muted" TextWrapping="Wrap" Margin="0,8,0,0" />
               </StackPanel>
             </StackPanel>
@@ -64,13 +64,13 @@
                 </Border>
                 <CheckBox Content="我理解重置会显著降低安全性，仍要继续" IsChecked="{Binding RiskAcknowledged}" Margin="0,4,0,8" />
                 <TextBlock Text="{Binding RecoveryQuestion1}" Classes="label" TextWrapping="Wrap" />
-                <TextBox x:Name="RecoverAnswer1Box" PasswordChar="•" />
+                <TextBox x:Name="RecoverAnswer1Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" />
                 <TextBlock Text="{Binding RecoveryQuestion2}" Classes="label" TextWrapping="Wrap" />
-                <TextBox x:Name="RecoverAnswer2Box" PasswordChar="•" />
+                <TextBox x:Name="RecoverAnswer2Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" />
                 <TextBlock Text="{Binding RecoveryQuestion3}" Classes="label" TextWrapping="Wrap" />
-                <TextBox x:Name="RecoverAnswer3Box" PasswordChar="•" />
+                <TextBox x:Name="RecoverAnswer3Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" />
                 <TextBlock Text="确认新主密码" Classes="label" />
-                <TextBox x:Name="RecoverConfirmBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
+                <TextBox x:Name="RecoverConfirmBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
                 <Button Classes="ghost" Content="取消重置" Click="OnCancelRecovery" HorizontalAlignment="Left" Margin="0,10,0,0" />
               </StackPanel>
             </StackPanel>

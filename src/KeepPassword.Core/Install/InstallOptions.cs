@@ -15,13 +15,16 @@ public sealed record ExistingInstall(string Directory, string? Version, bool Has
 
 public sealed class InstallProgress
 {
-    public InstallProgress(double percent, string message)
+    public InstallProgress(double percent, string message, string? log = null)
     {
         Percent = Math.Clamp(percent, 0, 100);
         Message = message;
+        Log = log;
     }
 
     public double Percent { get; }
 
     public string Message { get; }
+
+    public string? Log { get; }
 }

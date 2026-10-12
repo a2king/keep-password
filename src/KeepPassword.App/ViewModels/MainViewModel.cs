@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using Avalonia.Media;
+using KeepPassword.App.Views;
 using KeepPassword.Core.Security;
 using KeepPassword.Core.Totp;
 using KeepPassword.Core.Vault;
@@ -56,9 +58,11 @@ public sealed class EntryItemView : ViewModelBase
 
     public bool Favorite { get; init; }
 
-    public string Labels { get; init; } = "";
+    public IReadOnlyList<string> Tags { get; init; } = [];
 
-    public bool HasLabels => Labels.Length > 0;
+    public IImage? Logo { get; init; }
+
+    public bool HasLogo => Logo is not null;
 
     public string Initial
     {
@@ -753,7 +757,6 @@ public sealed class MainViewModel : ViewModelBase
     {
         var login = entry.Kind == VaultItemKind.Login;
         var title = login ? AddressOf(entry) : (string.IsNullOrWhiteSpace(entry.Name) ? VaultItemKinds.DisplayName(entry.Kind) : entry.Name.Trim());
-        var summary = ItemTemplates.Summary(entry);
         string subtitle;
         if (login)
         {
@@ -761,7 +764,7 @@ public sealed class MainViewModel : ViewModelBase
         }
         else
         {
-            var parts = new[] { summary, entry.Username }.Where(text => !string.IsNullOrWhiteSpace(text)).ToList();
+            var parts = new[] { CaptionOf(entry), entry.Username }.Where(text => !string.IsNullOrWhiteSpace(text)).ToList();
             subtitle = parts.Count == 0 ? VaultItemKinds.DisplayName(entry.Kind) : string.Join(" · ", parts);
         }
 
@@ -772,9 +775,18 @@ public sealed class MainViewModel : ViewModelBase
             Username = subtitle,
             KindBadge = VaultItemKinds.Badge(entry.Kind),
             Favorite = entry.Favorite,
-            Labels = string.Join(" · ", entry.Tags)
+            Tags = entry.Tags.ToList(),
+            Logo = entry.Kind == VaultItemKind.Database ? DatabaseIcons.Find(entry.Field(FieldKeys.Driver)) : null
         };
     }
+
+    private static string CaptionOf(VaultEntry entry) => entry.Kind switch
+    {
+        VaultItemKind.Server => ItemTemplates.Protocol(entry.Field(FieldKeys.Protocol)).Name,
+        VaultItemKind.Database => ItemTemplates.Driver(entry.Field(FieldKeys.Driver)).Name,
+        VaultItemKind.ApiCredential => entry.Field(FieldKeys.Environment),
+        _ => ItemTemplates.Summary(entry)
+    };
 
     private void ApplyFilters()
     {

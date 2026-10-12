@@ -10,7 +10,7 @@
         WindowStartupLocation="CenterScreen"
         Topmost="True"
         Background="{DynamicResource Kp.Bg}"
-        Icon="/Assets/logo.png">
+        Icon="/Assets/app.ico">
   <Border Classes="card" Margin="20">
     <DockPanel>
       <StackPanel DockPanel.Dock="Top">
@@ -28,7 +28,7 @@
 
       <StackPanel DockPanel.Dock="Bottom">
         <TextBlock Text="短密钥" Classes="label" />
-        <TextBox x:Name="ShortKeyBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" Classes="mono" FontSize="15" />
+        <TextBox x:Name="ShortKeyBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
         <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,8,0,0" x:Name="ErrorBox" IsVisible="False">
           <TextBlock x:Name="ErrorText" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
         </Border>

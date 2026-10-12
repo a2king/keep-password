@@ -9,6 +9,11 @@ namespace KeepPassword.Core.Install;
 
 public static class InstallOperations
 {
+    public const double ExtractStart = 5;
+    public const double ExtractEnd = 55;
+    private const double CleanupEnd = 58;
+    private const double CopyEnd = 92;
+
     public static void ExtractZip(
         Stream zipStream,
         string destinationRoot,
@@ -17,10 +22,10 @@ public static class InstallOperations
         Directory.CreateDirectory(destinationRoot);
         using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
         var entries = archive.Entries.Where(entry => !string.IsNullOrEmpty(entry.Name)).ToList();
-        var total = Math.Max(entries.Count, 1);
-        for (var i = 0; i < entries.Count; i++)
+        var total = Math.Max(entries.Sum(entry => Math.Max(entry.Length, 1)), 1);
+        long done = 0;
+        foreach (var entry in entries)
         {
-            var entry = entries[i];
             var target = SafeEntryPath(destinationRoot, entry.FullName);
             var folder = Path.GetDirectoryName(target);
             if (!string.IsNullOrEmpty(folder))
@@ -29,9 +34,23 @@ public static class InstallOperations
             }
 
             entry.ExtractToFile(target, overwrite: true);
-            progress?.Report(new InstallProgress((i + 1) * 50.0 / total, "正在解压 " + entry.Name));
+            done += Math.Max(entry.Length, 1);
+            progress?.Report(new InstallProgress(
+                Scale(ExtractStart, ExtractEnd, done, total),
+                "正在解压安装文件…",
+                $"解压  {entry.FullName.Replace('\\', '/')}  ({FormatSize(entry.Length)})"));
         }
     }
+
+    private static double Scale(double start, double end, long done, long total) =>
+        start + (end - start) * done / total;
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        >= 1024 * 1024 => $"{bytes / 1024.0 / 1024.0:0.0} MB",
+        >= 1024 => $"{bytes / 1024.0:0.0} KB",
+        _ => $"{bytes} B"
+    };
 
     public static string SafeEntryPath(string destinationRoot, string entryName)
     {
@@ -71,7 +90,7 @@ public static class InstallOperations
 
         Directory.CreateDirectory(targetRoot);
         var desired = EnumerateRelativeFiles(sourceRoot).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        progress?.Report(new InstallProgress(52, "正在清理旧版本…"));
+        progress?.Report(new InstallProgress(ExtractEnd, "正在清理旧版本…", "检查旧版本残留文件"));
 
         if (Directory.Exists(targetRoot))
         {
@@ -83,6 +102,7 @@ public static class InstallOperations
                 }
 
                 TryDeleteFile(Path.Combine(targetRoot, existing));
+                progress?.Report(new InstallProgress(ExtractEnd, "正在清理旧版本…", "删除  " + existing.Replace('\\', '/')));
             }
 
             foreach (var directory in Directory.EnumerateDirectories(targetRoot, "*", SearchOption.AllDirectories)
@@ -97,10 +117,12 @@ public static class InstallOperations
         }
 
         var files = desired.OrderBy(item => item, StringComparer.OrdinalIgnoreCase).ToList();
-        var total = Math.Max(files.Count, 1);
-        for (var i = 0; i < files.Count; i++)
+        var sizes = files.ToDictionary(item => item, item => Math.Max(new FileInfo(Path.Combine(sourceRoot, item)).Length, 1), StringComparer.OrdinalIgnoreCase);
+        var total = Math.Max(sizes.Values.Sum(), 1);
+        long done = 0;
+        progress?.Report(new InstallProgress(CleanupEnd, "正在复制程序文件…", "安装到  " + targetRoot));
+        foreach (var relative in files)
         {
-            var relative = files[i];
             var from = Path.Combine(sourceRoot, relative);
             var to = Path.Combine(targetRoot, relative);
             var folder = Path.GetDirectoryName(to);
@@ -110,16 +132,17 @@ public static class InstallOperations
             }
 
             File.Copy(from, to, overwrite: true);
-            progress?.Report(new InstallProgress(55 + (i + 1) * 35.0 / total, "正在复制 " + Path.GetFileName(relative)));
+            done += sizes[relative];
+            progress?.Report(new InstallProgress(Scale(CleanupEnd, CopyEnd, done, total), "正在复制程序文件…", "复制  " + relative.Replace('\\', '/')));
         }
 
         if (OperatingSystem.IsWindows() && options.RegisterWithSystem)
         {
-            progress?.Report(new InstallProgress(93, "正在写入卸载信息…"));
+            progress?.Report(new InstallProgress(CopyEnd, "正在写入卸载信息…", "写入卸载信息（当前用户注册表）"));
             WriteWindowsUninstallInfo(targetRoot);
             if (options.CreateStartMenuShortcut)
             {
-                progress?.Report(new InstallProgress(96, "正在创建开始菜单快捷方式…"));
+                progress?.Report(new InstallProgress(95, "正在创建快捷方式…", "创建开始菜单快捷方式"));
                 CreateWindowsShortcut(StartMenuShortcutPath(), targetRoot);
             }
             else
@@ -129,7 +152,7 @@ public static class InstallOperations
 
             if (options.CreateDesktopShortcut)
             {
-                progress?.Report(new InstallProgress(98, "正在创建桌面快捷方式…"));
+                progress?.Report(new InstallProgress(98, "正在创建快捷方式…", "创建桌面快捷方式"));
                 CreateWindowsShortcut(DesktopShortcutPath(), targetRoot);
             }
             else
@@ -138,7 +161,7 @@ public static class InstallOperations
             }
         }
 
-        progress?.Report(new InstallProgress(100, "安装完成"));
+        progress?.Report(new InstallProgress(100, "安装完成", $"安装完成，共 {files.Count} 个文件"));
     }
 
     public static ExistingInstall? FindExistingInstall()

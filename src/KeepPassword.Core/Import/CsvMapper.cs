@@ -98,7 +98,7 @@ public static class CsvMapper
 
         targets.Add(new ImportTarget(Note, "备注"));
         targets.Add(new ImportTarget(Space, "空间分类"));
-        targets.Add(new ImportTarget(Tags, "账号标签（逗号或分号分隔）"));
+        targets.Add(new ImportTarget(Tags, "账号标签（多个用 ; 分隔）"));
         targets.Add(new ImportTarget(Favorite, "收藏（是/否）"));
         return targets;
     }
@@ -238,7 +238,7 @@ public static class CsvMapper
                 entry.Space = LabelName.Normalize(value);
                 return null;
             case Tags:
-                entry.Tags = LabelName.NormalizeAll(value.Split([',', ';', '，', '；', '|'], StringSplitOptions.RemoveEmptyEntries));
+                entry.Tags = LabelName.NormalizeAll(value.Split([';', '；'], StringSplitOptions.RemoveEmptyEntries));
                 return null;
             case Favorite:
                 entry.Favorite = value.Trim().ToLowerInvariant() is "1" or "true" or "yes" or "y" or "是" or "收藏";

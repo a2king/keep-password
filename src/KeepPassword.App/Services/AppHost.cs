@@ -180,7 +180,7 @@ public sealed class AppHost : IDisposable
             menu.Items.Add(new NativeMenuItemSeparator());
             menu.Items.Add(exit);
 
-            using var iconStream = AssetLoader.Open(new Uri("avares://KeepPassword/Assets/tray.png"));
+            using var iconStream = AssetLoader.Open(new Uri("avares://KeepPassword/Assets/app.ico"));
             var tray = new TrayIcon
             {
                 Icon = new WindowIcon(iconStream),

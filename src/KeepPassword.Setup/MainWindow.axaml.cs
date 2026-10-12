@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
+using System.Text;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -10,7 +12,14 @@ namespace KeepPassword.Setup;
 
 public partial class MainWindow : Window
 {
+    private readonly object _progressLock = new();
+    private readonly ConcurrentQueue<string> _pendingLogs = new();
+    private readonly StringBuilder _logText = new();
     private string? _installRoot;
+    private string? _launchAfterClose;
+    private DispatcherTimer? _flushTimer;
+    private double _percent;
+    private string _stage = "准备中";
 
     public MainWindow()
     {
@@ -91,18 +100,17 @@ public partial class MainWindow : Window
 
         ShowPage(progress: true);
         StepTitle.Text = "第 2 步 / 共 3 步 · 安装";
-        SetProgress(1, "正在读取安装包…");
+        var progress = new InstallReporter(this);
+        _flushTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(60), DispatcherPriority.Background, (_, _) => FlushProgress());
+        _flushTimer.Start();
 
         try
         {
-            var progress = new Progress<InstallProgress>(item =>
-            {
-                Dispatcher.UIThread.Post(() => SetProgress(item.Percent, item.Message));
-            });
-
             await Task.Run(() =>
             {
-                using var payload = OpenVerifiedPayload();
+                progress.Report(new InstallProgress(0, "正在校验安装包…", "读取并校验安装包完整性"));
+                using var payload = OpenVerifiedPayload(progress);
+                progress.Report(new InstallProgress(InstallOperations.ExtractStart, "正在解压安装文件…", "安装包校验通过"));
                 var extract = Path.Combine(Path.GetTempPath(), "keep-password-setup-" + Guid.NewGuid().ToString("n"));
                 Directory.CreateDirectory(extract);
                 try
@@ -122,23 +130,12 @@ public partial class MainWindow : Window
                 }
             });
 
-            if (options.LaunchAfterInstall)
-            {
-                var exe = Path.Combine(target, InstallConstants.AppExecutableName());
-                if (File.Exists(exe))
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = exe,
-                        WorkingDirectory = target,
-                        UseShellExecute = true
-                    });
-                }
-            }
-
+            StopFlush();
+            var exe = Path.Combine(target, InstallConstants.AppExecutableName());
+            _launchAfterClose = options.LaunchAfterInstall && File.Exists(exe) ? exe : null;
             FinishTitle.Text = "安装完成";
             FinishText.Text = "Keep Password 已安装到：" + target +
-                              (options.LaunchAfterInstall ? "\n程序正在启动。" : "\n可从开始菜单或桌面快捷方式打开。");
+                              (_launchAfterClose is not null ? "\n点击「完成」关闭安装程序后将自动启动。" : "\n可从开始菜单或桌面快捷方式打开。");
             FinishError.IsVisible = false;
             FinishButton.Content = "完成";
             ShowPage(finish: true);
@@ -146,6 +143,8 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            StopFlush();
+            _launchAfterClose = null;
             FinishTitle.Text = "安装失败";
             FinishText.Text = "安装未能完成。请关闭占用程序后重试，或更换安装目录。";
             FinishError.Text = ex.Message;
@@ -163,14 +162,87 @@ public partial class MainWindow : Window
         FinishPage.IsVisible = finish;
     }
 
-    private void SetProgress(double percent, string message)
+    protected override void OnClosed(EventArgs e)
     {
-        ProgressBar.Value = percent;
-        PercentText.Text = ((int)percent) + "%";
-        ProgressText.Text = message;
+        base.OnClosed(e);
+        if (_launchAfterClose is not { } exe)
+        {
+            return;
+        }
+
+        _launchAfterClose = null;
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = exe,
+                WorkingDirectory = Path.GetDirectoryName(exe),
+                UseShellExecute = true
+            });
+        }
+        catch (Exception)
+        {
+        }
     }
 
-    private static Stream OpenVerifiedPayload()
+    private void StopFlush()
+    {
+        _flushTimer?.Stop();
+        _flushTimer = null;
+        FlushProgress();
+    }
+
+    private void FlushProgress()
+    {
+        double percent;
+        string stage;
+        lock (_progressLock)
+        {
+            percent = _percent;
+            stage = _stage;
+        }
+
+        ProgressBar.Value = percent;
+        PercentText.Text = (int)percent + "%";
+        ProgressText.Text = stage;
+
+        var appended = false;
+        while (_pendingLogs.TryDequeue(out var line))
+        {
+            if (_logText.Length > 0)
+            {
+                _logText.Append('\n');
+            }
+
+            _logText.Append(line);
+            appended = true;
+        }
+
+        if (appended)
+        {
+            LogText.Text = _logText.ToString();
+            LogScroller.ScrollToEnd();
+        }
+    }
+
+    private sealed class InstallReporter(MainWindow owner) : IProgress<InstallProgress>
+    {
+        public void Report(InstallProgress value)
+        {
+            lock (owner._progressLock)
+            {
+                owner._percent = Math.Max(owner._percent, value.Percent);
+                owner._stage = value.Message;
+            }
+
+            if (!string.IsNullOrEmpty(value.Log))
+            {
+                owner._pendingLogs.Enqueue(value.Log);
+            }
+        }
+    }
+
+    private static Stream OpenVerifiedPayload(IProgress<InstallProgress> progress)
     {
         var payload = OpenPayload();
         var expected = ReadExpectedHash();
@@ -180,10 +252,22 @@ public partial class MainWindow : Window
             throw new InvalidDataException("安装包缺少完整性校验值。");
         }
 
-        var buffer = new MemoryStream();
-        payload.CopyTo(buffer);
+        var length = payload.CanSeek ? payload.Length : 0;
+        var buffer = new MemoryStream(length > 0 ? (int)length : 0);
+        var chunk = new byte[1024 * 1024];
+        int read;
+        while ((read = payload.Read(chunk, 0, chunk.Length)) > 0)
+        {
+            buffer.Write(chunk, 0, read);
+            if (length > 0)
+            {
+                progress.Report(new InstallProgress(3.0 * buffer.Length / length, "正在校验安装包…"));
+            }
+        }
+
         payload.Dispose();
         buffer.Position = 0;
+        progress.Report(new InstallProgress(3, "正在校验安装包…", $"读取安装包 {buffer.Length / 1024.0 / 1024.0:0.0} MB，计算 SHA-256"));
         PayloadIntegrity.Verify(buffer, expected);
         buffer.Position = 0;
         return buffer;

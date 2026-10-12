@@ -52,12 +52,67 @@
           <SolidColorBrush x:Key="Kp.TextMuted" Color="#64748B" />
           <SolidColorBrush x:Key="Kp.Danger" Color="#DC2626" />
         <SolidColorBrush x:Key="Kp.Star" Color="#F5A524" />
+        <SolidColorBrush x:Key="Tag.0.Bg" Color="#FFF0F6" />
+        <SolidColorBrush x:Key="Tag.0.Border" Color="#FFADD2" />
+        <SolidColorBrush x:Key="Tag.0.Fg" Color="#C41D7F" />
+        <SolidColorBrush x:Key="Tag.1.Bg" Color="#FFF1F0" />
+        <SolidColorBrush x:Key="Tag.1.Border" Color="#FFA39E" />
+        <SolidColorBrush x:Key="Tag.1.Fg" Color="#CF1322" />
+        <SolidColorBrush x:Key="Tag.2.Bg" Color="#FFF2E8" />
+        <SolidColorBrush x:Key="Tag.2.Border" Color="#FFBB96" />
+        <SolidColorBrush x:Key="Tag.2.Fg" Color="#D4380D" />
+        <SolidColorBrush x:Key="Tag.3.Bg" Color="#FFF7E6" />
+        <SolidColorBrush x:Key="Tag.3.Border" Color="#FFD591" />
+        <SolidColorBrush x:Key="Tag.3.Fg" Color="#D46B08" />
+        <SolidColorBrush x:Key="Tag.4.Bg" Color="#FFFBE6" />
+        <SolidColorBrush x:Key="Tag.4.Border" Color="#FFE58F" />
+        <SolidColorBrush x:Key="Tag.4.Fg" Color="#D48806" />
+        <SolidColorBrush x:Key="Tag.5.Bg" Color="#FCFFE6" />
+        <SolidColorBrush x:Key="Tag.5.Border" Color="#EAFF8F" />
+        <SolidColorBrush x:Key="Tag.5.Fg" Color="#7CB305" />
+        <SolidColorBrush x:Key="Tag.6.Bg" Color="#F6FFED" />
+        <SolidColorBrush x:Key="Tag.6.Border" Color="#B7EB8F" />
+        <SolidColorBrush x:Key="Tag.6.Fg" Color="#389E0D" />
+        <SolidColorBrush x:Key="Tag.7.Bg" Color="#E6FFFB" />
+        <SolidColorBrush x:Key="Tag.7.Border" Color="#87E8DE" />
+        <SolidColorBrush x:Key="Tag.7.Fg" Color="#08979C" />
+        <SolidColorBrush x:Key="Tag.8.Bg" Color="#E6F4FF" />
+        <SolidColorBrush x:Key="Tag.8.Border" Color="#91CAFF" />
+        <SolidColorBrush x:Key="Tag.8.Fg" Color="#0958D9" />
+        <SolidColorBrush x:Key="Tag.9.Bg" Color="#F0F5FF" />
+        <SolidColorBrush x:Key="Tag.9.Border" Color="#ADC6FF" />
+        <SolidColorBrush x:Key="Tag.9.Fg" Color="#1D39C4" />
+        <SolidColorBrush x:Key="Tag.10.Bg" Color="#F9F0FF" />
+        <SolidColorBrush x:Key="Tag.10.Border" Color="#D3ADF7" />
+        <SolidColorBrush x:Key="Tag.10.Fg" Color="#531DAB" />
+        <SolidColorBrush x:Key="Kp.LogoTile" Color="#F3F5F8" />
           <SolidColorBrush x:Key="Kp.DangerHover" Color="#B91C1C" />
           <SolidColorBrush x:Key="Kp.DangerSoft" Color="#FEF2F2" />
           <SolidColorBrush x:Key="Kp.Warning" Color="#D97706" />
           <SolidColorBrush x:Key="Kp.Success" Color="#16A34A" />
           <SolidColorBrush x:Key="Kp.Selection" Color="#EFF6FF" />
           <SolidColorBrush x:Key="Kp.SelectionBorder" Color="#BFDBFE" />
+
+        <!-- 覆盖 Fluent 下拉框配色，与应用主题一致 -->
+        <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#F1F5F9" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#BFDBFE" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#2563EB" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#64748B" />
+        <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#E2E8F0" />
+        <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#0F172A" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#F1F5F9" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPointerOver" Color="#0F172A" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="#E2E8F0" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPressed" Color="#0F172A" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#EFF6FF" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelected" Color="#2563EB" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#DBEAFE" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver" Color="#1D4ED8" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="#BFDBFE" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed" Color="#1D4ED8" />
           <SolidColorBrush x:Key="Kp.CardShadow" Color="#0D0F172A" />
           <SolidColorBrush x:Key="Kp.BadgeBg" Color="#E0E7FF" />
           <SolidColorBrush x:Key="Kp.BadgeFg" Color="#3730A3" />
@@ -84,12 +139,67 @@
           <SolidColorBrush x:Key="Kp.TextMuted" Color="#94A3B8" />
           <SolidColorBrush x:Key="Kp.Danger" Color="#EF4444" />
         <SolidColorBrush x:Key="Kp.Star" Color="#FBBF24" />
+        <SolidColorBrush x:Key="Tag.0.Bg" Color="#1FE0529C" />
+        <SolidColorBrush x:Key="Tag.0.Border" Color="#59E0529C" />
+        <SolidColorBrush x:Key="Tag.0.Fg" Color="#E0529C" />
+        <SolidColorBrush x:Key="Tag.1.Bg" Color="#1FE84749" />
+        <SolidColorBrush x:Key="Tag.1.Border" Color="#59E84749" />
+        <SolidColorBrush x:Key="Tag.1.Fg" Color="#E84749" />
+        <SolidColorBrush x:Key="Tag.2.Bg" Color="#1FE87040" />
+        <SolidColorBrush x:Key="Tag.2.Border" Color="#59E87040" />
+        <SolidColorBrush x:Key="Tag.2.Fg" Color="#E87040" />
+        <SolidColorBrush x:Key="Tag.3.Bg" Color="#1FE89A3C" />
+        <SolidColorBrush x:Key="Tag.3.Border" Color="#59E89A3C" />
+        <SolidColorBrush x:Key="Tag.3.Fg" Color="#E89A3C" />
+        <SolidColorBrush x:Key="Tag.4.Bg" Color="#1FE8B339" />
+        <SolidColorBrush x:Key="Tag.4.Border" Color="#59E8B339" />
+        <SolidColorBrush x:Key="Tag.4.Fg" Color="#E8B339" />
+        <SolidColorBrush x:Key="Tag.5.Bg" Color="#1FA9D134" />
+        <SolidColorBrush x:Key="Tag.5.Border" Color="#59A9D134" />
+        <SolidColorBrush x:Key="Tag.5.Fg" Color="#A9D134" />
+        <SolidColorBrush x:Key="Tag.6.Bg" Color="#1F6ABE39" />
+        <SolidColorBrush x:Key="Tag.6.Border" Color="#596ABE39" />
+        <SolidColorBrush x:Key="Tag.6.Fg" Color="#6ABE39" />
+        <SolidColorBrush x:Key="Tag.7.Bg" Color="#1F33BCB7" />
+        <SolidColorBrush x:Key="Tag.7.Border" Color="#5933BCB7" />
+        <SolidColorBrush x:Key="Tag.7.Fg" Color="#33BCB7" />
+        <SolidColorBrush x:Key="Tag.8.Bg" Color="#1F3C89E8" />
+        <SolidColorBrush x:Key="Tag.8.Border" Color="#593C89E8" />
+        <SolidColorBrush x:Key="Tag.8.Fg" Color="#3C89E8" />
+        <SolidColorBrush x:Key="Tag.9.Bg" Color="#1F5273E0" />
+        <SolidColorBrush x:Key="Tag.9.Border" Color="#595273E0" />
+        <SolidColorBrush x:Key="Tag.9.Fg" Color="#5273E0" />
+        <SolidColorBrush x:Key="Tag.10.Bg" Color="#1F854ECA" />
+        <SolidColorBrush x:Key="Tag.10.Border" Color="#59854ECA" />
+        <SolidColorBrush x:Key="Tag.10.Fg" Color="#854ECA" />
+        <SolidColorBrush x:Key="Kp.LogoTile" Color="#E4E9F0" />
           <SolidColorBrush x:Key="Kp.DangerHover" Color="#F87171" />
           <SolidColorBrush x:Key="Kp.DangerSoft" Color="#3F1517" />
           <SolidColorBrush x:Key="Kp.Warning" Color="#F59E0B" />
           <SolidColorBrush x:Key="Kp.Success" Color="#10B981" />
           <SolidColorBrush x:Key="Kp.Selection" Color="#1A2742" />
           <SolidColorBrush x:Key="Kp.SelectionBorder" Color="#2563EB" />
+
+        <!-- 覆盖 Fluent 下拉框配色，与应用主题一致 -->
+        <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#161E2C" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#2563EB" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#151C28" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#3B82F6" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#151C28" />
+        <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#94A3B8" />
+        <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#151C28" />
+        <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#252F42" />
+        <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#F1F5F9" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#1E2736" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPointerOver" Color="#F1F5F9" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="#252F42" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPressed" Color="#F1F5F9" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#172554" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelected" Color="#93C5FD" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#1E3A8A" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver" Color="#BFDBFE" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="#1E40AF" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed" Color="#DBEAFE" />
           <SolidColorBrush x:Key="Kp.CardShadow" Color="#40000000" />
           <SolidColorBrush x:Key="Kp.BadgeBg" Color="#1E2B4A" />
           <SolidColorBrush x:Key="Kp.BadgeFg" Color="#93C5FD" />
@@ -263,6 +373,13 @@
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.SelectionBorder}" />
     </Style>
 
+    <Style Selector="Border.kind-tile">
+      <Setter Property="Background" Value="{DynamicResource Kp.BadgeBg}" />
+    </Style>
+    <Style Selector="Border.kind-tile.logo">
+      <Setter Property="Background" Value="{DynamicResource Kp.LogoTile}" />
+    </Style>
+
     <!-- 分类与账号卡片 -->
     <Style Selector="Button.filter-card, Button.account-card">
       <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
@@ -349,6 +466,25 @@
       <Setter Property="Padding" Value="12,6,8,6" />
       <Setter Property="FontSize" Value="13.5" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="MaxDropDownHeight" Value="178" />
+    </Style>
+    <Style Selector="ComboBox:dropdownopen /template/ Border#Background">
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />
+    </Style>
+    <Style Selector="ComboBox /template/ Border#PopupBorder">
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="4" />
+      <Setter Property="Margin" Value="0,4,0,0" />
+      <Setter Property="BoxShadow" Value="0 6 16 0 #26000000" />
+    </Style>
+    <Style Selector="ComboBoxItem">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="10,7" />
+      <Setter Property="Margin" Value="0,1" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected">
+      <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="TextBox:focus">
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />

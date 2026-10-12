@@ -6,7 +6,7 @@
         SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterScreen"
-        Icon="/Assets/logo.png">
+        Icon="/Assets/app.ico">
   <Panel>
     <Border>
       <Border.Background>

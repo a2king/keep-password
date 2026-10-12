@@ -39,7 +39,8 @@
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="12" />
       <Setter Property="Padding" Value="10,2,4,2" />
-      <Setter Property="Margin" Value="0,2,6,2" />
+      <Setter Property="Margin" Value="0,3,6,3" />
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="Button.picker-chip-remove">
       <Setter Property="Background" Value="Transparent" />
@@ -63,7 +64,9 @@
       <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="Padding" Value="10,0" />
+      <Setter Property="Height" Value="34" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Focusable" Value="False" />
@@ -86,13 +89,10 @@
 
   <Panel>
     <Border x:Name="Box" Classes="picker-box">
-      <DockPanel>
-        <WrapPanel x:Name="Chips" DockPanel.Dock="Top" IsVisible="False" Margin="0,2,0,0" />
-        <Grid ColumnDefinitions="Auto,*">
-          <PathIcon x:Name="Glyph" Data="{StaticResource Icon.Tag}" Width="13" Height="13" Margin="4,0,2,0" Foreground="{DynamicResource Kp.TextMuted}" VerticalAlignment="Center" />
-          <TextBox x:Name="Input" Grid.Column="1" Classes="picker-input" />
-        </Grid>
-      </DockPanel>
+      <WrapPanel x:Name="Flow" VerticalAlignment="Center">
+        <PathIcon x:Name="Glyph" Data="{StaticResource Icon.Tag}" Width="13" Height="13" Margin="4,0,6,0" Foreground="{DynamicResource Kp.TextMuted}" VerticalAlignment="Center" />
+        <TextBox x:Name="Input" Classes="picker-input" MinWidth="120" VerticalAlignment="Center" />
+      </WrapPanel>
     </Border>
 
     <Popup x:Name="Dropdown"
@@ -107,7 +107,7 @@
               CornerRadius="8"
               Padding="4"
               BoxShadow="0 6 16 0 #26000000">
-        <ScrollViewer MaxHeight="240">
+        <ScrollViewer MaxHeight="288">
           <StackPanel x:Name="Options" Spacing="1" />
         </ScrollViewer>
       </Border>

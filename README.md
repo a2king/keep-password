@@ -81,7 +81,7 @@ GitHub,https://github.com,ada,"p,ass",工作账号
 邮箱,https://mail.example.com,ada@example.com,hunter2,个人
 ```
 
-逗号和 Tab 都可以。密码里如果有逗号，用双引号包起来。导入后按主机名归类，也能被搜索。
+逗号和 Tab 都可以。密码里如果有逗号，用双引号包起来。标签列有多个标签时用 `;` 分隔（全角 `；` 也可以），例如 `生产;只读`。导入后按主机名归类，也能被搜索。
 
 ## 验证码
 
@@ -103,6 +103,30 @@ TOTP，RFC 6238，SHA-1，6 位，30 秒。密钥用 Base32 手填。可以写�
 ```bash
 dotnet test
 dotnet run --project src/KeepPassword.App
+```
+
+### Windows 本地调试
+
+.NET 8 SDK 如果装在用户目录 `%LOCALAPPDATA%\dotnet`（没加进系统 PATH），每个新开的 PowerShell 终端先执行一次：
+
+```powershell
+$env:PATH = "$env:LOCALAPPDATA\dotnet;" + $env:PATH
+```
+
+然后在仓库根目录编译、测试、启动：
+
+```powershell
+dotnet build KeepPassword.sln -c Release --nologo
+dotnet test KeepPassword.sln -c Release --nologo --no-build
+dotnet run --project src\KeepPassword.App -c Release
+```
+
+也可以直接运行编译产物 `src\KeepPassword.App\bin\Release\net8.0\KeepPassword.exe`。如果已经装了正式版并在运行（包括托盘），先退出再启动本地版本。
+
+打 Windows 安装包：
+
+```powershell
+pwsh -NoProfile -File artifacts\package.ps1
 ```
 
 Windows 用户请直接用上面的安装包或便携包，**不要**再单独安装 .NET。
