@@ -8,6 +8,7 @@ public sealed class UnlockViewModel : ViewModelBase
     private string _path;
     private string _account = "";
     private string _accountLabel = "";
+    private string _accountName = "";
     private string _masterPassword = "";
     private string _confirmMaster = "";
     private string _shortKey = "";
@@ -76,7 +77,7 @@ public sealed class UnlockViewModel : ViewModelBase
 
             if (ShowPairingShort)
             {
-                return "请输入主密码。之后打开只需短密钥。";
+                return "首次在本机解锁，请输入主密码。之后打开只需短密钥。";
             }
 
             return "使用主密码解锁。下次仍可改用短密钥。";
@@ -106,6 +107,28 @@ public sealed class UnlockViewModel : ViewModelBase
     public bool ShowUseMaster => ShowShortUnlock;
 
     public bool ShowUseShort => !IsCreate && !IsRecovering && HasShortUnlock && _useMaster;
+
+    public bool IsQuick => !IsCreate && !IsRecovering;
+
+    public bool ShowHint => IsCreate || IsRecovering || ShowPairingShort;
+
+    public string MasterLabel => IsRecovering ? "新主密码" : "主密码";
+
+    public string MasterWatermark => IsCreate ? "设置主密码" : IsRecovering ? "输入新主密码" : "输入主密码";
+
+    public string AccountName
+    {
+        get => _accountName;
+        private set
+        {
+            if (Set(ref _accountName, value))
+            {
+                OnPropertyChanged(nameof(Initial));
+            }
+        }
+    }
+
+    public string Initial => AccountName.Length > 0 ? AccountName[..1].ToUpperInvariant() : "?";
 
     public string SubmitText => IsRecovering ? "重置并解锁" : IsCreate ? "创建并解锁" : "解锁";
 
@@ -359,6 +382,7 @@ public sealed class UnlockViewModel : ViewModelBase
         if (IsCreate || !_store.Exists(_path))
         {
             AccountLabel = "";
+            AccountName = "";
             HasShortUnlock = false;
             NotifyMode();
             return;
@@ -366,7 +390,8 @@ public sealed class UnlockViewModel : ViewModelBase
 
         try
         {
-            AccountLabel = "账号 " + _store.ReadAccount(_path);
+            AccountName = _store.ReadAccount(_path);
+            AccountLabel = "账号 " + AccountName;
             RecoveryAvailable = _store.HasRecovery(_path);
             HasShortUnlock = _store.HasShortUnlock(_path);
         }
@@ -389,6 +414,10 @@ public sealed class UnlockViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowPairingShort));
         OnPropertyChanged(nameof(ShowUseMaster));
         OnPropertyChanged(nameof(ShowUseShort));
+        OnPropertyChanged(nameof(IsQuick));
+        OnPropertyChanged(nameof(ShowHint));
+        OnPropertyChanged(nameof(MasterLabel));
+        OnPropertyChanged(nameof(MasterWatermark));
     }
 
     private static string Friendly(Exception ex)

@@ -6,89 +6,182 @@
              x:DataType="vm:UnlockViewModel"
              KeyDown="OnKeyDown"
              Background="{DynamicResource Kp.Bg}">
-  <Panel>
-    <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Disabled">
+  <UserControl.Styles>
+    <Style Selector="Border.unlock-input">
+      <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="MinHeight" Value="42" />
+    </Style>
+    <Style Selector="Border.unlock-input:focus-within">
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />
+    </Style>
+    <Style Selector="TextBox.bare">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="MinHeight" Value="40" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.bare:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="TextBox.bare:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.go">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Width" Value="40" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="CornerRadius" Value="0,7,7,0" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.go /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.go:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.AccentSoft}" />
+    </Style>
+    <Style Selector="Button.link">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.TextMuted}" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.link /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.link:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Accent}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid ColumnDefinitions="224,*">
+    <Border Background="{DynamicResource Kp.UnlockSide}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="0,0,1,0">
+      <TextBlock Text="Keep Password" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Kp.Text}" Margin="16,9,0,0" VerticalAlignment="Top" HorizontalAlignment="Left" />
+    </Border>
+
+    <ScrollViewer x:Name="Scroller" Grid.Column="1" HorizontalScrollBarVisibility="Disabled">
       <Panel MinHeight="{Binding Bounds.Height, ElementName=Scroller}">
-        <Border Classes="card" Margin="36" MaxWidth="440" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <StackPanel Spacing="0">
-            <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,0,0,20">
-              <Border Width="48" Height="48" CornerRadius="12" Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1">
-                <Image Source="/Assets/logo.png" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center" />
-              </Border>
-              <StackPanel VerticalAlignment="Center" Spacing="2">
-                <TextBlock Text="Keep Password" Classes="h1" FontSize="22" />
-                <TextBlock Text="{Binding Title}" Classes="muted" />
-              </StackPanel>
-            </StackPanel>
+        <StackPanel Width="320" Margin="128,40,40,40" HorizontalAlignment="Left" VerticalAlignment="Center">
+          <Border Width="60" Height="60" CornerRadius="12" Background="{DynamicResource Kp.AccentSoft}" HorizontalAlignment="Left" IsVisible="{Binding !IsCreate}">
+            <TextBlock Text="{Binding Initial}" FontSize="26" FontWeight="SemiBold" Foreground="{DynamicResource Kp.Accent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <TextBlock Text="{Binding AccountName}" Classes="muted" Margin="2,8,0,14" IsVisible="{Binding !IsCreate}" />
 
-            <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,12" LineHeight="18" />
+          <TextBlock Text="创建保险库" Classes="h1" Margin="0,0,0,8" IsVisible="{Binding IsCreate}" />
+          <TextBlock Text="{Binding Hint}" Classes="muted" TextWrapping="Wrap" LineHeight="18" Margin="2,0,0,12" IsVisible="{Binding ShowHint}" />
 
-            <TextBlock Text="{Binding AccountLabel}" Classes="label" IsVisible="{Binding !IsCreate}" />
-            <TextBlock Text="账号" Classes="label" IsVisible="{Binding IsCreate}" />
-            <TextBox Text="{Binding Account}" views:AsciiInput.IsEnabled="True" Watermark="例如 ada" IsVisible="{Binding IsCreate}" Classes="mono" />
-
-            <TextBlock Text="主密码" Classes="label" IsVisible="{Binding ShowMaster}" />
-            <TextBox x:Name="MasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="请输入主密码" Classes="mono" FontSize="15" IsVisible="{Binding ShowMaster}" />
-
-            <TextBlock Text="短密钥" Classes="label" IsVisible="{Binding ShowShortField}" />
-            <TextBox x:Name="UnlockShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="请输入短密钥" Classes="mono" FontSize="15" IsVisible="{Binding ShowShortField}" />
-            <Button Classes="ghost" Content="改用主密码解锁" Click="OnUseMaster" IsVisible="{Binding ShowUseMaster}" HorizontalAlignment="Left" Margin="0,8,0,0" />
-            <Button Classes="ghost" Content="改用短密钥解锁" Click="OnUseShort" IsVisible="{Binding ShowUseShort}" HorizontalAlignment="Left" Margin="0,8,0,0" />
-
-            <StackPanel IsVisible="{Binding IsCreate}">
-              <TextBlock Text="确认主密码" Classes="label" />
-              <TextBox x:Name="ConfirmMasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
-              <TextBlock Text="短密钥" Classes="label" />
-              <TextBox x:Name="ShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="固定短密钥" Classes="mono" FontSize="15" />
-              <TextBlock Text="确认短密钥" Classes="label" />
-              <TextBox x:Name="ConfirmShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
-              <CheckBox Content="启用安全问题恢复（安全性显著降低）" IsChecked="{Binding EnableRecovery}" Margin="0,12,0,0" />
-              <StackPanel IsVisible="{Binding EnableRecovery}" Margin="0,8,0,0">
-                <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8">
-                  <TextBlock Text="{Binding RecoveryWarning}" TextWrapping="Wrap" Foreground="{DynamicResource Kp.Danger}" />
-                </Border>
-                <CheckBox Content="我已理解：知道答案的人可以重置并读取保险库" IsChecked="{Binding RiskAcknowledged}" Margin="0,4,0,8" />
-                <TextBlock Text="问题 1" Classes="label" />
-                <TextBox Text="{Binding Question1}" />
-                <TextBox x:Name="Answer1Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 1" Margin="0,4,0,0" />
-                <TextBlock Text="问题 2" Classes="label" />
-                <TextBox Text="{Binding Question2}" />
-                <TextBox x:Name="Answer2Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 2" Margin="0,4,0,0" />
-                <TextBlock Text="问题 3" Classes="label" />
-                <TextBox Text="{Binding Question3}" />
-                <TextBox x:Name="Answer3Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 3" Margin="0,4,0,0" />
-                <TextBlock Text="答案不区分大小写，多余空格会被忽略。" Classes="muted" TextWrapping="Wrap" Margin="0,8,0,0" />
-              </StackPanel>
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding RecoveryAvailable}" Margin="0,8,0,0">
-              <Button Classes="ghost" Content="忘记主密码，使用安全问题重置" Click="OnBeginRecovery" IsVisible="{Binding !IsRecovering}" HorizontalAlignment="Left" />
-              <StackPanel IsVisible="{Binding IsRecovering}">
-                <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8">
-                  <TextBlock Text="{Binding RecoveryWarning}" TextWrapping="Wrap" Foreground="{DynamicResource Kp.Danger}" />
-                </Border>
-                <CheckBox Content="我理解重置会显著降低安全性，仍要继续" IsChecked="{Binding RiskAcknowledged}" Margin="0,4,0,8" />
-                <TextBlock Text="{Binding RecoveryQuestion1}" Classes="label" TextWrapping="Wrap" />
-                <TextBox x:Name="RecoverAnswer1Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" />
-                <TextBlock Text="{Binding RecoveryQuestion2}" Classes="label" TextWrapping="Wrap" />
-                <TextBox x:Name="RecoverAnswer2Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" />
-                <TextBlock Text="{Binding RecoveryQuestion3}" Classes="label" TextWrapping="Wrap" />
-                <TextBox x:Name="RecoverAnswer3Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" />
-                <TextBlock Text="确认新主密码" Classes="label" />
-                <TextBox x:Name="RecoverConfirmBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
-                <Button Classes="ghost" Content="取消重置" Click="OnCancelRecovery" HorizontalAlignment="Left" Margin="0,10,0,0" />
-              </StackPanel>
-            </StackPanel>
-
-            <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,12,0,0" IsVisible="{Binding HasError}">
-              <TextBlock Text="{Binding Error}" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
-            </Border>
-            <TextBlock Text="正在处理…" Classes="muted" Margin="0,12,0,0" IsVisible="{Binding IsBusy}" HorizontalAlignment="Center" />
-
-            <Button Classes="accent" Content="{Binding SubmitText}" Margin="0,20,0,0" HorizontalAlignment="Stretch" Click="OnSubmit" IsEnabled="{Binding !IsBusy}" />
+          <StackPanel IsVisible="{Binding IsCreate}">
+            <TextBlock Text="账号" Classes="label" Margin="0,0,0,6" />
+            <TextBox Text="{Binding Account}" views:AsciiInput.IsEnabled="True" Watermark="例如 ada" Classes="mono" />
           </StackPanel>
-        </Border>
+
+          <StackPanel IsVisible="{Binding IsRecovering}">
+            <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8">
+              <TextBlock Text="{Binding RecoveryWarning}" TextWrapping="Wrap" Foreground="{DynamicResource Kp.Danger}" />
+            </Border>
+            <CheckBox Content="我理解重置会显著降低安全性，仍要继续" IsChecked="{Binding RiskAcknowledged}" Margin="0,4,0,0" />
+            <TextBlock Text="{Binding RecoveryQuestion1}" Classes="label" TextWrapping="Wrap" />
+            <TextBox x:Name="RecoverAnswer1Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" />
+            <TextBlock Text="{Binding RecoveryQuestion2}" Classes="label" TextWrapping="Wrap" />
+            <TextBox x:Name="RecoverAnswer2Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" />
+            <TextBlock Text="{Binding RecoveryQuestion3}" Classes="label" TextWrapping="Wrap" />
+            <TextBox x:Name="RecoverAnswer3Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" />
+          </StackPanel>
+
+          <TextBlock Text="{Binding MasterLabel}" Classes="label" IsVisible="{Binding !IsQuick}" />
+          <Border x:Name="InputBox" Classes="unlock-input">
+            <Border.RenderTransform>
+              <TranslateTransform />
+            </Border.RenderTransform>
+            <Grid ColumnDefinitions="*,Auto,Auto">
+              <TextBox x:Name="MasterBox"
+                       Classes="bare mono"
+                       views:AsciiInput.IsEnabled="True"
+                       PasswordChar="•"
+                       views:PasswordReveal.IsEnabled="True"
+                       Watermark="{Binding MasterWatermark}"
+                       IsVisible="{Binding ShowMaster}" />
+              <TextBox x:Name="UnlockShortBox"
+                       Classes="bare mono"
+                       views:AsciiInput.IsEnabled="True"
+                       PasswordChar="•"
+                       views:PasswordReveal.IsEnabled="True"
+                       Watermark="输入短密钥"
+                       IsVisible="{Binding ShowShortField}" />
+              <Rectangle Grid.Column="1" Width="1" Height="22" Fill="{DynamicResource Kp.Border}" IsVisible="{Binding IsQuick}" />
+              <Button Grid.Column="2" Classes="go" ToolTip.Tip="解锁" Click="OnSubmit" IsEnabled="{Binding !IsBusy}" IsVisible="{Binding IsQuick}">
+                <Path Data="M 3,9 H 15 M 10,4 L 15,9 L 10,14"
+                      Width="18"
+                      Height="18"
+                      Stroke="{DynamicResource Kp.Accent}"
+                      StrokeThickness="2"
+                      StrokeLineCap="Round"
+                      StrokeJoin="Round" />
+              </Button>
+            </Grid>
+          </Border>
+
+          <TextBlock Text="{Binding Error}" Foreground="{DynamicResource Kp.Danger}" FontSize="12.5" TextWrapping="Wrap" Margin="2,8,0,0" IsVisible="{Binding HasError}" />
+
+          <WrapPanel Margin="2,12,0,0" IsVisible="{Binding IsQuick}">
+            <Button Classes="link" Content="改用主密码" Margin="0,0,18,4" Click="OnUseMaster" IsVisible="{Binding ShowUseMaster}" />
+            <Button Classes="link" Content="改用短密钥" Margin="0,0,18,4" Click="OnUseShort" IsVisible="{Binding ShowUseShort}" />
+            <Button Classes="link" Content="忘记主密码？" Margin="0,0,18,4" Click="OnBeginRecovery" IsVisible="{Binding RecoveryAvailable}" />
+          </WrapPanel>
+
+          <StackPanel IsVisible="{Binding IsCreate}">
+            <TextBlock Text="确认主密码" Classes="label" />
+            <TextBox x:Name="ConfirmMasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" />
+            <TextBlock Text="短密钥" Classes="label" />
+            <TextBox x:Name="ShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="之后每次用它解锁" Classes="mono" />
+            <TextBlock Text="确认短密钥" Classes="label" />
+            <TextBox x:Name="ConfirmShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" />
+            <CheckBox Content="启用安全问题恢复（安全性显著降低）" IsChecked="{Binding EnableRecovery}" Margin="0,12,0,0" />
+            <StackPanel IsVisible="{Binding EnableRecovery}" Margin="0,8,0,0">
+              <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8">
+                <TextBlock Text="{Binding RecoveryWarning}" TextWrapping="Wrap" Foreground="{DynamicResource Kp.Danger}" />
+              </Border>
+              <CheckBox Content="我已理解：知道答案的人可以重置并读取保险库" IsChecked="{Binding RiskAcknowledged}" Margin="0,4,0,8" />
+              <TextBlock Text="问题 1" Classes="label" />
+              <TextBox Text="{Binding Question1}" />
+              <TextBox x:Name="Answer1Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 1" Margin="0,4,0,0" />
+              <TextBlock Text="问题 2" Classes="label" />
+              <TextBox Text="{Binding Question2}" />
+              <TextBox x:Name="Answer2Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 2" Margin="0,4,0,0" />
+              <TextBlock Text="问题 3" Classes="label" />
+              <TextBox Text="{Binding Question3}" />
+              <TextBox x:Name="Answer3Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 3" Margin="0,4,0,0" />
+              <TextBlock Text="答案不区分大小写，多余空格会被忽略。" Classes="muted" TextWrapping="Wrap" Margin="0,8,0,0" />
+            </StackPanel>
+          </StackPanel>
+
+          <StackPanel IsVisible="{Binding IsRecovering}">
+            <TextBlock Text="确认新主密码" Classes="label" />
+            <TextBox x:Name="RecoverConfirmBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" />
+          </StackPanel>
+
+          <StackPanel IsVisible="{Binding !IsQuick}" Margin="0,20,0,0" Spacing="10">
+            <Button Classes="accent" Content="{Binding SubmitText}" HorizontalAlignment="Stretch" Click="OnSubmit" IsEnabled="{Binding !IsBusy}" />
+            <Button Classes="link" Content="取消重置" HorizontalAlignment="Center" Click="OnCancelRecovery" IsVisible="{Binding IsRecovering}" />
+          </StackPanel>
+        </StackPanel>
       </Panel>
     </ScrollViewer>
-  </Panel>
+
+    <views:LockBadge x:Name="Badge" Grid.ColumnSpan="2" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="154,0,0,0" />
+  </Grid>
 </UserControl>

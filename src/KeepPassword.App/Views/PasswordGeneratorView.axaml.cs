@@ -27,6 +27,14 @@ public partial class PasswordGeneratorView : UserControl
         ApplyKind(PasswordGeneratorKind.Random, resetValue: true);
     }
 
+    public void EnsureGenerated()
+    {
+        if (string.IsNullOrEmpty(_password))
+        {
+            Generate();
+        }
+    }
+
     public void ClearSecret()
     {
         _password = "";

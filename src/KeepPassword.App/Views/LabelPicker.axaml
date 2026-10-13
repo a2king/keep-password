@@ -21,8 +21,10 @@
     <Style Selector="TextBox.picker-input">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="MinHeight" Value="28" />
-      <Setter Property="Padding" Value="4,4" />
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="4,2" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="LetterSpacing" Value="0" />
     </Style>
     <Style Selector="TextBox.picker-input:pointerover /template/ Border#PART_BorderElement">
       <Setter Property="Background" Value="Transparent" />
@@ -100,6 +102,7 @@
            Placement="BottomEdgeAlignedLeft"
            VerticalOffset="4"
            IsLightDismissEnabled="True"
+           OverlayDismissEventPassThrough="True"
            OverlayInputPassThroughElement="{Binding #Box}">
       <Border Background="{DynamicResource Kp.Surface}"
               BorderBrush="{DynamicResource Kp.Border}"

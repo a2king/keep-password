@@ -764,7 +764,12 @@ public sealed class MainViewModel : ViewModelBase
             KindBadge = VaultItemKinds.Badge(entry.Kind),
             Favorite = entry.Favorite,
             Tags = entry.Tags.ToList(),
-            Logo = entry.Kind == VaultItemKind.Database ? DatabaseIcons.Find(entry.Field(FieldKeys.Driver)) : null
+            Logo = entry.Kind switch
+            {
+                VaultItemKind.Database => DatabaseIcons.Find(entry.Field(FieldKeys.Driver)),
+                VaultItemKind.Server => ServerIcons.Find(entry.Field(FieldKeys.Protocol)),
+                _ => null
+            }
         };
     }
 

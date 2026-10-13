@@ -66,6 +66,13 @@ public static class DatabaseIcons
             return null;
         }
 
+        var image = Build(layers);
+        Cache[driver] = image;
+        return image;
+    }
+
+    internal static IImage Build((string Fill, string Path)[] layers)
+    {
         var group = new DrawingGroup();
         foreach (var (fill, path) in layers)
         {
@@ -76,8 +83,6 @@ public static class DatabaseIcons
             });
         }
 
-        var image = new DrawingImage(group);
-        Cache[driver] = image;
-        return image;
+        return new DrawingImage(group);
     }
 }

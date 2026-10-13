@@ -23,6 +23,8 @@ public abstract class SecretFieldView : ViewModelBase
 
     public bool Multiline { get; }
 
+    public bool UseMono => Sensitive && Multiline;
+
     public TextWrapping Wrapping => Multiline ? TextWrapping.Wrap : TextWrapping.NoWrap;
 
     public string Value

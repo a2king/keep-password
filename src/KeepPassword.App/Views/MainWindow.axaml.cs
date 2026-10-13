@@ -113,11 +113,13 @@ public partial class MainWindow : Window
         _session = session;
         VaultRoot.DataContext = new MainViewModel(session, _platformAutofill);
         ShowPage(ItemsPage);
+        VaultRoot.Opacity = 0;
         VaultRoot.IsVisible = true;
         UpdateAccountColumns();
         UnlockRoot.ClearSecrets();
         UnlockRoot.IsVisible = false;
         _totpTimer.Start();
+        _ = Tween.RunAsync(TimeSpan.FromMilliseconds(240), t => VaultRoot.Opacity = t, Tween.CubicOut);
     }
 
     public void PrepareClose() => AllowClose = true;
@@ -424,7 +426,11 @@ public partial class MainWindow : Window
 
     private void OnNavItems(object? sender, RoutedEventArgs e) => ShowPage(ItemsPage);
 
-    private void OnNavGenerator(object? sender, RoutedEventArgs e) => ShowPage(GeneratorPage);
+    private void OnNavGenerator(object? sender, RoutedEventArgs e)
+    {
+        ShowPage(GeneratorPage);
+        GeneratorRoot.EnsureGenerated();
+    }
 
     private void OnTotp(object? sender, RoutedEventArgs e)
     {
@@ -509,6 +515,23 @@ public partial class MainWindow : Window
     }
 
     private void OnLock(object? sender, RoutedEventArgs e) => LockRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnTitleBarPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        if (e.ClickCount == 2)
+        {
+            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        }
+        else
+        {
+            BeginMoveDrag(e);
+        }
+    }
 
     private void OnCycleTheme(object? sender, RoutedEventArgs e)
     {

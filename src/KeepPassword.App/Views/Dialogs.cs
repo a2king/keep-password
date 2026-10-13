@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -18,9 +19,13 @@ public static class Dialogs
         var window = new Window
         {
             Title = title,
-            Width = 440,
+            Width = 488,
             SizeToContent = SizeToContent.Height,
             CanResize = false,
+            ShowInTaskbar = false,
+            SystemDecorations = SystemDecorations.None,
+            Background = Brushes.Transparent,
+            TransparencyLevelHint = [WindowTransparencyLevel.Transparent],
             WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
 
@@ -68,12 +73,36 @@ public static class Dialogs
         };
         buttons.Children.Add(ok);
 
-        window.Content = new Border
+        var card = new Border
         {
             Classes = { "card" },
-            Margin = new Thickness(20),
+            Margin = new Thickness(24, 16, 24, 32),
+            BoxShadow = BoxShadows.Parse("0 8 24 0 #33000000"),
             Child = new StackPanel { Children = { titleBlock, text, buttons } }
         };
+        card.PointerPressed += (_, e) =>
+        {
+            if (e.GetCurrentPoint(card).Properties.IsLeftButtonPressed)
+            {
+                window.BeginMoveDrag(e);
+            }
+        };
+        window.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                window.Close();
+            }
+            else if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                accepted = true;
+                window.Close();
+            }
+        };
+        window.Opened += (_, _) => ok.Focus();
+        window.Content = card;
 
         if (owner.IsVisible)
         {

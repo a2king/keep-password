@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="KeepPassword.App.Views.LockBadge"
+             Width="140"
+             Height="140"
+             IsHitTestVisible="False">
+  <Panel x:Name="Root" Width="112" Height="112">
+    <Border CornerRadius="56" BoxShadow="0 4 14 0 #33000000">
+      <Border.Background>
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+          <GradientStop Offset="0" Color="#FFFFFF" />
+          <GradientStop Offset="1" Color="#D5DBE5" />
+        </LinearGradientBrush>
+      </Border.Background>
+    </Border>
+    <Ellipse Width="112" Height="112" Stroke="#C3CAD6" StrokeThickness="1" />
+
+    <Ellipse Width="92" Height="92">
+      <Ellipse.Fill>
+        <LinearGradientBrush StartPoint="20%,0%" EndPoint="80%,100%">
+          <GradientStop Offset="0" Color="#2F5BFF" />
+          <GradientStop Offset="1" Color="#60A5FA" />
+        </LinearGradientBrush>
+      </Ellipse.Fill>
+    </Ellipse>
+    <Path x:Name="SpinArc"
+          Width="112"
+          Height="112"
+          Stretch="None"
+          Data="M 56,15.5 A 40.5,40.5 0 0 1 96.5,56"
+          Stroke="#D9FFFFFF"
+          StrokeThickness="3"
+          StrokeLineCap="Round"
+          IsVisible="False" />
+
+    <Ellipse Width="70" Height="70" Stroke="#B9C3D3" StrokeThickness="1">
+      <Ellipse.Fill>
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+          <GradientStop Offset="0" Color="#F7F9FC" />
+          <GradientStop Offset="1" Color="#DCE3EE" />
+        </LinearGradientBrush>
+      </Ellipse.Fill>
+    </Ellipse>
+    <Canvas Width="70" Height="70">
+      <Path x:Name="Shackle"
+            Data="M 25,34 V 26 A 10,10 0 0 1 45,26 V 34"
+            Stroke="#1E293B"
+            StrokeThickness="5"
+            StrokeLineCap="Round" />
+      <Border Canvas.Left="18" Canvas.Top="32" Width="34" Height="26" CornerRadius="6" Background="#0F172A" />
+      <Panel x:Name="Keyhole" Canvas.Left="29" Canvas.Top="37" Width="12" Height="16">
+        <Ellipse Width="7" Height="7" Fill="#E2E8F0" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,1,0,0" />
+        <Border Width="3" Height="8" CornerRadius="1.5" Background="#E2E8F0" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,6,0,0" />
+      </Panel>
+    </Canvas>
+  </Panel>
+</UserControl>

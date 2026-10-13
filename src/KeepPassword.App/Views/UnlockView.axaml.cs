@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using KeepPassword.App.ViewModels;
 using KeepPassword.Core.Vault;
@@ -9,6 +10,8 @@ namespace KeepPassword.App.Views;
 
 public partial class UnlockView : UserControl
 {
+    private bool _animating;
+
     public event Action<VaultSession>? Unlocked;
 
     public UnlockView()
@@ -20,6 +23,9 @@ public partial class UnlockView : UserControl
     {
         ClearSecrets();
         DataContext = new UnlockViewModel(store, vaultFile);
+        Opacity = 1;
+        Badge.Reset();
+        _animating = false;
     }
 
     public void FocusMaster()
@@ -69,18 +75,43 @@ public partial class UnlockView : UserControl
 
     private async Task SubmitAsync()
     {
-        if (View is null)
+        if (View is not { IsBusy: false } view || _animating)
         {
             return;
         }
 
         CopyPasswords();
-        if (!await View.SubmitAsync() || View.Session is not { } session)
+        Badge.StartSpin();
+        var ok = await view.SubmitAsync();
+        if (!ok || view.Session is not { } session)
         {
+            Badge.StopSpin();
+            if (view.HasError)
+            {
+                await Task.WhenAll(Badge.PlayRejectAsync(), ShakeAsync());
+            }
+
+            FocusMaster();
             return;
         }
 
+        _animating = true;
+        await Badge.PlayTurnAsync();
+        await Task.WhenAll(
+            Badge.PlayPopAsync(),
+            Tween.RunAsync(TimeSpan.FromMilliseconds(280), t => Opacity = 1 - t, Tween.CubicOut));
+        _animating = false;
         Unlocked?.Invoke(session);
+    }
+
+    private Task ShakeAsync()
+    {
+        if (InputBox.RenderTransform is not TranslateTransform shift)
+        {
+            return Task.CompletedTask;
+        }
+
+        return Tween.RunAsync(TimeSpan.FromMilliseconds(380), t => shift.X = Math.Sin(t * Math.PI * 6) * 8 * (1 - t));
     }
 
     private void OnUseMaster(object? sender, RoutedEventArgs e)
@@ -97,9 +128,20 @@ public partial class UnlockView : UserControl
         UnlockShortBox.Focus();
     }
 
-    private void OnBeginRecovery(object? sender, RoutedEventArgs e) => View?.BeginRecovery();
+    private void OnBeginRecovery(object? sender, RoutedEventArgs e)
+    {
+        View?.BeginRecovery();
+        UnlockShortBox.Text = "";
+        MasterBox.Text = "";
+    }
 
-    private void OnCancelRecovery(object? sender, RoutedEventArgs e) => View?.CancelRecovery();
+    private void OnCancelRecovery(object? sender, RoutedEventArgs e)
+    {
+        View?.CancelRecovery();
+        MasterBox.Text = "";
+        RecoverConfirmBox.Text = "";
+        FocusMaster();
+    }
 
     private void CopyPasswords()
     {

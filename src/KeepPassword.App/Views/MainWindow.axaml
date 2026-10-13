@@ -11,12 +11,16 @@
         MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Kp.Bg}"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="PreferSystemChrome"
+        ExtendClientAreaTitleBarHeightHint="32"
+        Padding="{Binding $self.OffScreenMargin}"
         Icon="/Assets/app.ico">
   <Window.Resources>
     <DataTemplate x:Key="FieldBody" x:DataType="vm:FieldEditorView">
       <StackPanel>
         <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Text="{Binding Label}" Classes="muted" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Label}" Classes="field-label" VerticalAlignment="Center" />
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
             <Button Classes="icon" ToolTip.Tip="生成密码" IsVisible="{Binding CanGenerate}" Tag="{Binding}" Click="OnGenerateField">
               <PathIcon Data="{StaticResource Icon.Generator}" />
@@ -38,7 +42,8 @@
                  AcceptsReturn="{Binding Multiline}"
                  TextWrapping="{Binding Wrapping}"
                  IsVisible="{Binding ShowEditor}"
-                 Classes="mono inline"
+                 Classes="inline"
+                 Classes.mono="{Binding UseMono}"
                  MaxHeight="220" />
         <TextBlock Text="{Binding MaskedText}" IsVisible="{Binding ShowMasked}" Classes="muted" Margin="0,6,0,0" />
       </StackPanel>
@@ -48,7 +53,7 @@
   <Grid x:Name="VaultRoot" x:DataType="vm:MainViewModel" ColumnDefinitions="88,*" IsVisible="False">
     <!-- 左侧极客现代导航侧栏 -->
     <Border Background="{DynamicResource Kp.Sidebar}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="0,0,1,0">
-      <DockPanel Margin="0,16,0,12">
+      <DockPanel Margin="0,24,0,12">
         <StackPanel DockPanel.Dock="Top" Spacing="6">
           <Image Source="/Assets/logo.png" Width="40" Height="40" HorizontalAlignment="Center" Margin="0,4,0,12" />
           <Button x:Name="NavItems" Classes="nav active" Click="OnNavItems" ToolTip.Tip="保险库条目">
@@ -112,7 +117,7 @@
 
     <Grid Grid.Column="1">
       <Grid x:Name="ItemsPage" ColumnDefinitions="*,Auto">
-        <Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="20,16,20,12">
+        <Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="20,44,20,12">
           <!-- 顶部：搜索 + 操作 + 空间下拉 -->
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,14">
             <Grid ColumnDefinitions="Auto,*">
@@ -292,7 +297,7 @@
                 BorderBrush="{DynamicResource Kp.Border}"
                 BorderThickness="1,0,0,0"
                 IsVisible="{Binding HasDetail}">
-          <Grid RowDefinitions="Auto,*,Auto" Margin="28,20,28,18">
+          <Grid RowDefinitions="Auto,*,Auto" Margin="28,44,28,18">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,12">
               <Border Classes="count-badge" VerticalAlignment="Center">
                 <TextBlock Text="{Binding KindName}" />
@@ -311,14 +316,14 @@
                 <StackPanel Spacing="2" Margin="0,0,20,0">
                   <Border Classes="field">
                     <StackPanel>
-                      <TextBlock Text="条目名称" Classes="muted" FontWeight="SemiBold" />
+                      <TextBlock Text="条目名称" Classes="field-label" />
                       <TextBox Text="{Binding Name}" Classes="inline" />
                     </StackPanel>
                   </Border>
 
                   <Border Classes="field">
                     <StackPanel>
-                      <TextBlock Text="空间分类" Classes="muted" FontWeight="SemiBold" />
+                      <TextBlock Text="空间分类" Classes="field-label" />
                       <views:LabelPicker x:Name="SpacePicker"
                                          Items="{Binding SpaceChoices}"
                                          Icon="{StaticResource Icon.Folder}"
@@ -330,7 +335,7 @@
 
                   <Border Classes="field">
                     <StackPanel>
-                      <TextBlock Text="账号标签" Classes="muted" FontWeight="SemiBold" />
+                      <TextBlock Text="账号标签" Classes="field-label" />
                       <views:LabelPicker x:Name="TagPicker"
                                          Items="{Binding TagChoices}"
                                          Multiple="True"
@@ -342,7 +347,7 @@
 
                   <Border Classes="field" IsVisible="{Binding ShowProtocol}">
                     <StackPanel>
-                      <TextBlock Text="协议" Classes="muted" FontWeight="SemiBold" />
+                      <TextBlock Text="协议" Classes="field-label" />
                       <ComboBox ItemsSource="{Binding Protocols}" SelectedItem="{Binding SelectedProtocol}" HorizontalAlignment="Stretch" Margin="0,6,0,0">
                         <ComboBox.ItemTemplate>
                           <DataTemplate x:DataType="vault:ServerProtocol">
@@ -355,7 +360,7 @@
 
                   <Border Classes="field" IsVisible="{Binding ShowDriver}">
                     <StackPanel>
-                      <TextBlock Text="数据库类型" Classes="muted" FontWeight="SemiBold" />
+                      <TextBlock Text="数据库类型" Classes="field-label" />
                       <ComboBox ItemsSource="{Binding Drivers}" SelectedItem="{Binding SelectedDriver}" HorizontalAlignment="Stretch" Margin="0,6,0,0">
                         <ComboBox.ItemTemplate>
                           <DataTemplate x:DataType="vault:DatabaseDriver">
@@ -378,7 +383,7 @@
 
                   <Border Classes="field" IsVisible="{Binding ShowSshInfo}">
                     <StackPanel Spacing="6">
-                      <TextBlock Text="密钥信息" Classes="muted" FontWeight="SemiBold" />
+                      <TextBlock Text="密钥信息" Classes="field-label" />
                       <Grid ColumnDefinitions="56,*,Auto" RowDefinitions="Auto,Auto">
                         <TextBlock Text="类型" Classes="muted" VerticalAlignment="Center" />
                         <TextBlock Grid.Column="1" Text="{Binding SshKeyType}" Classes="mono" VerticalAlignment="Center" />
@@ -396,7 +401,7 @@
                   <Border Classes="field" IsVisible="{Binding ShowNodes}">
                     <StackPanel>
                       <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Text="集群节点（全部共用下方账号凭据）" Classes="muted" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Text="集群节点（全部共用下方账号凭据）" Classes="field-label" VerticalAlignment="Center" />
                         <Button Grid.Column="1" Classes="soft" Padding="10,4" FontSize="12" Content="+ 添加节点" Click="OnAddNode" />
                       </Grid>
                       <ItemsControl ItemsSource="{Binding Nodes}" Margin="0,8,0,0">
@@ -428,7 +433,7 @@
 
                   <Border Classes="field" IsVisible="{Binding HasCustomFields}">
                     <StackPanel>
-                      <TextBlock Text="其他字段（旧版本保留的数据）" Classes="muted" FontWeight="SemiBold" />
+                      <TextBlock Text="其他字段（旧版本保留的数据）" Classes="field-label" />
                       <ItemsControl ItemsSource="{Binding CustomFields}" Margin="0,6,0,0">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:CustomFieldEditorView">
@@ -463,14 +468,14 @@
 
                   <Border Classes="field">
                     <StackPanel>
-                      <TextBlock Text="备注" Classes="muted" FontWeight="SemiBold" />
+                      <TextBlock Text="备注" Classes="field-label" />
                       <TextBox Text="{Binding Note}" Classes="inline" AcceptsReturn="True" MinHeight="68" TextWrapping="Wrap" />
                     </StackPanel>
                   </Border>
 
                   <Border Classes="field" IsVisible="{Binding ShowAccounts}">
                     <StackPanel>
-                      <TextBlock Text="{Binding AccountsTitle}" Classes="muted" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding AccountsTitle}" Classes="field-label" />
                       <ItemsControl ItemsSource="{Binding Accounts}" Margin="0,8,0,0">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:AccountEditorView">
@@ -484,7 +489,7 @@
                                 </Grid>
                                 <ContentControl Content="{Binding UsernameField}" ContentTemplate="{StaticResource FieldBody}" ClipToBounds="False" />
                                 <StackPanel IsVisible="{Binding ShowAuth}" Spacing="6">
-                                  <TextBlock Text="认证方式" Classes="muted" FontWeight="SemiBold" />
+                                  <TextBlock Text="认证方式" Classes="field-label" />
                                   <StackPanel Orientation="Horizontal">
                                     <Button Classes="chip" Classes.selected="{Binding UsePasswordAuth}" Content="密码" Tag="{Binding}" Click="OnAccountAuthPassword" />
                                     <Button Classes="chip" Classes.selected="{Binding UseKeyAuth}" Content="SSH 密钥" Tag="{Binding}" Click="OnAccountAuthKey" />
@@ -510,7 +515,7 @@
                                 <ContentControl Content="{Binding TotpField}" ContentTemplate="{StaticResource FieldBody}" ClipToBounds="False" IsVisible="{Binding ShowTotp}" />
                                 <TextBlock Text="{Binding TotpPreview}" IsVisible="{Binding HasTotpPreview}" Classes="mono" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource Kp.Accent}" LetterSpacing="2" />
                                 <StackPanel>
-                                  <TextBlock Text="账号说明" Classes="muted" FontWeight="SemiBold" />
+                                  <TextBlock Text="账号说明" Classes="field-label" />
                                   <TextBox Text="{Binding Note}" Classes="inline" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="40" Watermark="例如：只读权限，仅用于报表查询" />
                                 </StackPanel>
                               </StackPanel>
@@ -546,27 +551,28 @@
         </Border>
       </Grid>
 
-      <Border x:Name="GeneratorPage" IsVisible="False" Background="{DynamicResource Kp.Bg}">
+      <Border x:Name="GeneratorPage" IsVisible="False" Background="{DynamicResource Kp.Bg}" Padding="0,32,0,0">
         <views:PasswordGeneratorView x:Name="GeneratorRoot" />
       </Border>
 
-      <Border x:Name="TotpPage" IsVisible="False" Background="{DynamicResource Kp.Bg}">
+      <Border x:Name="TotpPage" IsVisible="False" Background="{DynamicResource Kp.Bg}" Padding="0,32,0,0">
         <views:TotpView x:Name="TotpRoot" />
       </Border>
 
-      <Border x:Name="AuditPage" IsVisible="False" Background="{DynamicResource Kp.Bg}">
+      <Border x:Name="AuditPage" IsVisible="False" Background="{DynamicResource Kp.Bg}" Padding="0,32,0,0">
         <views:AuditView x:Name="AuditRoot" />
       </Border>
 
-      <Border x:Name="BreachPage" IsVisible="False" Background="{DynamicResource Kp.Bg}">
+      <Border x:Name="BreachPage" IsVisible="False" Background="{DynamicResource Kp.Bg}" Padding="0,32,0,0">
         <views:BreachView x:Name="BreachRoot" />
       </Border>
 
-      <Border x:Name="SettingsPage" IsVisible="False" Background="{DynamicResource Kp.Bg}">
+      <Border x:Name="SettingsPage" IsVisible="False" Background="{DynamicResource Kp.Bg}" Padding="0,32,0,0">
         <views:SettingsView x:Name="SettingsRoot" />
       </Border>
     </Grid>
   </Grid>
   <views:UnlockView x:Name="UnlockRoot" />
+  <Border Height="32" VerticalAlignment="Top" Background="Transparent" PointerPressed="OnTitleBarPressed" />
   </Panel>
 </Window>
