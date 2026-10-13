@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 
 namespace KeepPassword.App.Views;
 
@@ -14,7 +15,24 @@ public static class Dialogs
     public static Task<bool> ConfirmAsync(Window owner, string title, string message) =>
         ShowAsync(owner, title, message, confirm: true);
 
-    private static async Task<bool> ShowAsync(Window owner, string title, string message, bool confirm)
+    public static Task<bool> ConfirmAsync(Window owner, string title, string message, string okText) =>
+        ShowAsync(owner, title, message, confirm: true, okText);
+
+    /// <summary>返回所选项的下标，取消时返回 -1。</summary>
+    public static async Task<int> ChooseAsync(Window owner, string title, string message, IReadOnlyList<string> options, string okText)
+    {
+        var list = new ListBox
+        {
+            ItemsSource = options,
+            SelectedIndex = 0,
+            MaxHeight = 240,
+            Margin = new Thickness(0, 0, 0, 20)
+        };
+        var accepted = await ShowAsync(owner, title, message, confirm: true, okText, list);
+        return accepted ? list.SelectedIndex : -1;
+    }
+
+    private static async Task<bool> ShowAsync(Window owner, string title, string message, bool confirm, string? okText = null, Control? extra = null)
     {
         var window = new Window
         {
@@ -45,7 +63,7 @@ public static class Dialogs
             TextWrapping = TextWrapping.Wrap,
             LineHeight = 20,
             FontSize = 13.5,
-            Margin = new Thickness(0, 0, 0, 20)
+            Margin = new Thickness(0, 0, 0, extra is null ? 20 : 12)
         };
         text.Classes.Add("muted");
 
@@ -64,7 +82,7 @@ public static class Dialogs
             buttons.Children.Add(cancel);
         }
 
-        var ok = new Button { Content = confirm ? "确定" : "知道了", MinWidth = 76 };
+        var ok = new Button { Content = okText ?? (confirm ? "确定" : "知道了"), MinWidth = 76 };
         ok.Classes.Add("accent");
         ok.Click += (_, _) =>
         {
@@ -73,15 +91,27 @@ public static class Dialogs
         };
         buttons.Children.Add(ok);
 
+        var content = new StackPanel { Children = { titleBlock, text } };
+        if (extra is not null)
+        {
+            content.Children.Add(extra);
+        }
+
+        content.Children.Add(buttons);
         var card = new Border
         {
             Classes = { "card" },
             Margin = new Thickness(24, 16, 24, 32),
             BoxShadow = BoxShadows.Parse("0 8 24 0 #33000000"),
-            Child = new StackPanel { Children = { titleBlock, text, buttons } }
+            Child = content
         };
         card.PointerPressed += (_, e) =>
         {
+            if (extra is not null && e.Source is Visual source && (source == extra || extra.IsVisualAncestorOf(source)))
+            {
+                return;
+            }
+
             if (e.GetCurrentPoint(card).Properties.IsLeftButtonPressed)
             {
                 window.BeginMoveDrag(e);

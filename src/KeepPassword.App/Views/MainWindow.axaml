@@ -25,6 +25,9 @@
             <Button Classes="icon" ToolTip.Tip="生成密码" IsVisible="{Binding CanGenerate}" Tag="{Binding}" Click="OnGenerateField">
               <PathIcon Data="{StaticResource Icon.Generator}" />
             </Button>
+            <Button Classes="icon" ToolTip.Tip="扫描屏幕上的二维码" IsVisible="{Binding CanScan}" Tag="{Binding}" Click="OnScanTotpField">
+              <PathIcon Data="{StaticResource Icon.QrScan}" />
+            </Button>
             <Button Classes="icon" ToolTip.Tip="{Binding RevealText}" IsVisible="{Binding CanReveal}" Tag="{Binding}" Click="OnRevealField">
               <Panel>
                 <PathIcon Data="{StaticResource Icon.Eye}" IsVisible="{Binding !Revealed}" />
@@ -117,12 +120,15 @@
 
     <Grid Grid.Column="1">
       <Grid x:Name="ItemsPage" ColumnDefinitions="*,Auto">
-        <Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="20,44,20,12">
+        <Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="20,44,20,12" Background="Transparent" PointerPressed="OnListBlankPressed">
           <!-- 顶部：搜索 + 操作 + 空间下拉 -->
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,14">
             <Grid ColumnDefinitions="Auto,*">
-              <TextBox Grid.ColumnSpan="2" Text="{Binding Search}" Watermark="搜索名称、标签、账号、备注、网址、主机、节点" Padding="34,8,12,8" />
+              <TextBox x:Name="SearchBox" Grid.ColumnSpan="2" Text="{Binding Search}" Watermark="搜索名称、标签、账号、备注、网址、主机、节点" Padding="34,8,36,8" KeyDown="OnSearchKeyDown" />
               <PathIcon Data="{StaticResource Icon.Search}" Width="15" Height="15" Foreground="{DynamicResource Kp.TextMuted}" Margin="12,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+              <Button Grid.Column="1" Classes="icon" ToolTip.Tip="清除搜索 (Esc)" IsVisible="{Binding HasSearch}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,5,0" Click="OnClearSearch">
+                <PathIcon Data="{StaticResource Icon.Clear}" Width="14" Height="14" />
+              </Button>
             </Grid>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="10,0,0,0">
               <Button Classes="soft" Content="导入 CSV" Click="OnImport" />
@@ -188,27 +194,25 @@
 
           <!-- 标签卡片 -->
           <TextBlock Grid.Row="2" Text="标签" Classes="label" Margin="2,0,0,8" />
-          <ScrollViewer Grid.Row="3" MaxHeight="128" Margin="0,0,0,10">
-            <ItemsControl ItemsSource="{Binding TagFilters}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <WrapPanel />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:FilterItemView">
-                  <Button Classes="filter-card" Classes.selected="{Binding IsSelected}" Tag="{Binding Key}" Click="OnTagFilter" Width="168" Margin="0,0,8,8">
-                    <Grid ColumnDefinitions="*,Auto">
-                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                      <Border Grid.Column="1" Classes="count-badge" Margin="8,0,0,0">
-                        <TextBlock Text="{Binding Count}" />
-                      </Border>
-                    </Grid>
-                  </Button>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
+          <ItemsControl Grid.Row="3" ItemsSource="{Binding TagFilters}" Margin="0,0,0,10">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:FilterItemView">
+                <Button Classes="filter-card" Classes.selected="{Binding IsSelected}" Tag="{Binding Key}" Click="OnTagFilter" Width="168" Margin="0,0,8,8">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <Border Grid.Column="1" Classes="count-badge" Margin="8,0,0,0">
+                      <TextBlock Text="{Binding Count}" />
+                    </Border>
+                  </Grid>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
 
           <!-- 账号卡片 -->
           <Grid Grid.Row="4" RowDefinitions="Auto,*">

@@ -66,10 +66,10 @@ public sealed class TotpPageViewModel : ViewModelBase
                 row = new TotpRowView { Name = name, Secret = secret };
             }
 
-            if (TotpGenerator.TryGenerateFromBase32(secret, now, out var code))
+            if (TotpGenerator.TryGenerate(secret, now, out var code, out var remaining))
             {
                 row.Code = code;
-                row.Remaining = TotpGenerator.RemainingSeconds(now);
+                row.Remaining = remaining;
             }
             else
             {

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Avalonia.Media;
+using KeepPassword.App.Services;
 using KeepPassword.App.Views;
 using KeepPassword.Core.Security;
 using KeepPassword.Core.Totp;
@@ -139,10 +140,13 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (Set(ref _search, value))
             {
+                OnPropertyChanged(nameof(HasSearch));
                 ApplyFilters();
             }
         }
     }
+
+    public bool HasSearch => !string.IsNullOrEmpty(_search);
 
     public IReadOnlyList<FilterItemView> SpaceFilters { get; private set; } = [];
 
@@ -374,7 +378,9 @@ public sealed class MainViewModel : ViewModelBase
     public void NewTotp()
     {
         NewItem(VaultItemKind.Login);
-        Status = "独立验证码只需填写名称和账号中的验证码密钥。";
+        Status = QrScreenScanner.IsSupported
+            ? "独立验证码只需填写名称和验证码密钥；点密钥旁的扫码图标可识别屏幕上的二维码。"
+            : "独立验证码只需填写名称和账号中的验证码密钥。";
     }
 
     public AccountEditorView? AddAccount()

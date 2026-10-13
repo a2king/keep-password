@@ -1,4 +1,5 @@
 using System.Text;
+using KeepPassword.Core.Totp;
 using KeepPassword.Core.Vault;
 
 namespace KeepPassword.Core.Import;
@@ -176,6 +177,11 @@ public static class CsvImporter
         if (string.IsNullOrWhiteSpace(value))
         {
             return null;
+        }
+
+        if (OtpAuthUri.TryParse(value, out var settings))
+        {
+            return settings.IsDefault ? settings.Secret : value.Trim();
         }
 
         var secretIndex = value.IndexOf("secret=", StringComparison.OrdinalIgnoreCase);

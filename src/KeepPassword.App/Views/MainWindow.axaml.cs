@@ -7,6 +7,7 @@ using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
 using KeepPassword.Core.Import;
 using KeepPassword.Core.Security;
+using KeepPassword.Core.Totp;
 using KeepPassword.Core.Vault;
 
 namespace KeepPassword.App.Views;
@@ -20,6 +21,7 @@ public partial class MainWindow : Window
     private VaultLocation? _location;
     private Action<bool>? _pauseWatcher;
     private bool _platformAutofill;
+    private bool _scanning;
 
     public bool AllowClose { get; set; }
 
@@ -144,7 +146,17 @@ public partial class MainWindow : Window
         View.Load(id);
     }
 
-    private async void OnCloseDetail(object? sender, RoutedEventArgs e)
+    private async void OnCloseDetail(object? sender, RoutedEventArgs e) => await CloseDetailAsync();
+
+    private async void OnListBlankPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (View is { HasDetail: true } && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            await CloseDetailAsync();
+        }
+    }
+
+    private async Task CloseDetailAsync()
     {
         if (View is null || !await ConfirmDiscardAsync())
         {
@@ -215,6 +227,106 @@ public partial class MainWindow : Window
             }
         }
     }
+
+    private void OnClearSearch(object? sender, RoutedEventArgs e)
+    {
+        if (View is not null)
+        {
+            View.Search = "";
+        }
+
+        SearchBox.Focus();
+    }
+
+    private void OnSearchKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && View is { HasSearch: true })
+        {
+            View.Search = "";
+            e.Handled = true;
+        }
+    }
+
+    private async void OnScanTotpField(object? sender, RoutedEventArgs e)
+    {
+        if (_scanning || sender is not Button { Tag: FieldEditorView field } || View is not { } view)
+        {
+            return;
+        }
+
+        QrScanResult result;
+        _scanning = true;
+        try
+        {
+            view.Status = "正在扫描屏幕上的二维码…";
+            result = await QrScreenScanner.ScanAsync(this);
+        }
+        catch (Exception ex)
+        {
+            view.Status = "扫描失败。";
+            await Dialogs.AlertAsync(this, "扫描失败", ex.Message);
+            return;
+        }
+        finally
+        {
+            _scanning = false;
+        }
+
+        if (result.Codes.Count == 0)
+        {
+            view.Status = "未识别到验证码二维码。";
+            var message = result.HasMigration
+                ? "这是 Google Authenticator 的批量导出二维码，暂不支持。请在原网站重新显示单个账号的二维码，或手动输入 Base32 密钥。"
+                : result.IgnoredCount > 0
+                    ? "屏幕上的二维码不是验证码二维码（需要 otpauth://totp 链接）。"
+                    : "没有在屏幕上找到二维码。请让二维码完整显示在任意显示器上，不要被其它窗口遮挡，然后再扫描一次。";
+            await Dialogs.AlertAsync(this, "未识别到验证码", message);
+            return;
+        }
+
+        var overwrite = field.Value.Trim().Length > 0 ? "\n\n当前已填写的密钥会被替换。" : "";
+        ScannedTotp chosen;
+        if (result.Codes.Count == 1)
+        {
+            chosen = result.Codes[0];
+            var message = $"{chosen.Settings.DisplayName}\n{DescribeTotp(chosen.Settings)}{overwrite}";
+            if (!await Dialogs.ConfirmAsync(this, "识别到验证码", message, "填入"))
+            {
+                view.Status = "已取消填入。";
+                return;
+            }
+        }
+        else
+        {
+            var options = result.Codes.Select(code => $"{code.Settings.DisplayName}（{DescribeTotp(code.Settings)}）").ToList();
+            var index = await Dialogs.ChooseAsync(this, "识别到多个验证码", "选择要填入的验证码：" + overwrite, options, "填入");
+            if (index < 0)
+            {
+                view.Status = "已取消填入。";
+                return;
+            }
+
+            chosen = result.Codes[index];
+        }
+
+        field.Value = chosen.StoredSecret;
+        var settings = chosen.Settings;
+        var account = view.Accounts.FirstOrDefault(item => item.TotpField == field);
+        if (account is not null && settings.Account.Length > 0 && string.IsNullOrWhiteSpace(account.UsernameField.Value))
+        {
+            account.UsernameField.Value = settings.Account;
+        }
+
+        if (string.IsNullOrWhiteSpace(view.Name))
+        {
+            view.Name = settings.Issuer.Length > 0 ? settings.Issuer : settings.Account;
+        }
+
+        view.Status = $"已填入「{settings.DisplayName}」的验证码密钥，保存后生效。";
+    }
+
+    private static string DescribeTotp(TotpSettings settings) =>
+        $"{settings.Digits} 位 · {settings.PeriodSeconds} 秒 · {settings.Algorithm.ToString().ToUpperInvariant()}";
 
     private void OnRevealField(object? sender, RoutedEventArgs e)
     {

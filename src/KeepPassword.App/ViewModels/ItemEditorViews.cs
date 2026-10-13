@@ -1,4 +1,5 @@
 using Avalonia.Media;
+using KeepPassword.App.Services;
 using KeepPassword.Core.Totp;
 using KeepPassword.Core.Vault;
 
@@ -98,6 +99,8 @@ public sealed class FieldEditorView : SecretFieldView
     public string Placeholder => Spec.Placeholder;
 
     public bool CanGenerate { get; }
+
+    public bool CanScan => Key == FieldKeys.Totp && QrScreenScanner.IsSupported;
 
     public bool CanReveal => Sensitive;
 }
@@ -301,8 +304,8 @@ public sealed class AccountEditorView : ViewModelBase
         }
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        TotpPreview = TotpGenerator.TryGenerateFromBase32(secret, now, out var code)
-            ? $"{code}    剩余 {TotpGenerator.RemainingSeconds(now)} 秒"
+        TotpPreview = TotpGenerator.TryGenerate(secret, now, out var code, out var remaining)
+            ? $"{code}    剩余 {remaining} 秒"
             : "密钥无法识别";
         OnPropertyChanged(nameof(HasTotpPreview));
     }
