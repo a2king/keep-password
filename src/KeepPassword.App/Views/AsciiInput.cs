@@ -7,7 +7,8 @@ using Avalonia.Interactivity;
 namespace KeepPassword.App.Views;
 
 /// <summary>
-/// 密码类输入框：聚焦时把输入法切到英文，失焦或窗口失活时还原，并丢弃键入的非 ASCII 字符。
+/// 密码类输入框：聚焦时把中日韩输入法切到英文模式（不换键盘布局），其他非英文键盘才切换到英文布局；
+/// 失焦或窗口失活时还原，并丢弃键入的非 ASCII 字符。
 /// </summary>
 public static class AsciiInput
 {
@@ -137,6 +138,9 @@ public static class AsciiInput
     private static class WindowsIme
     {
         private const int LangEnglish = 0x09;
+        private const int LangChinese = 0x04;
+        private const int LangJapanese = 0x11;
+        private const int LangKorean = 0x12;
         private const uint WmImeControl = 0x0283;
         private const int ImcGetConversionMode = 0x0001;
         private const int ImcSetConversionMode = 0x0002;
@@ -153,9 +157,14 @@ public static class AsciiInput
                 return new State(layout, false, IntPtr.Zero, IntPtr.Zero, false);
             }
 
-            if (FindEnglishLayout() is { } english && ActivateKeyboardLayout(english, 0) != IntPtr.Zero)
+            if (!HasImeMode(layout))
             {
-                return new State(layout, true, IntPtr.Zero, IntPtr.Zero, false);
+                if (FindEnglishLayout() is { } english && ActivateKeyboardLayout(english, 0) != IntPtr.Zero)
+                {
+                    return new State(layout, true, IntPtr.Zero, IntPtr.Zero, false);
+                }
+
+                return new State(layout, false, IntPtr.Zero, IntPtr.Zero, false);
             }
 
             var imeWindow = ImmGetDefaultIMEWnd(hwnd);
@@ -185,6 +194,8 @@ public static class AsciiInput
         }
 
         private static bool IsEnglish(IntPtr layout) => ((long)layout & 0x3FF) == LangEnglish;
+
+        private static bool HasImeMode(IntPtr layout) => ((long)layout & 0x3FF) is LangChinese or LangJapanese or LangKorean;
 
         private static IntPtr? FindEnglishLayout()
         {

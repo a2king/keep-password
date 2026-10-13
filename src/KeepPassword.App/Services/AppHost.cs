@@ -23,11 +23,12 @@ public sealed class AppHost : IDisposable
     private readonly AutofillGate _gate = new();
     private readonly AutoLockMonitor _autoLock;
     private readonly Mutex _mutex;
+    private readonly EventWaitHandle _activate;
     private VaultSession? _session;
     private MainWindow? _main;
     private bool _trayReady;
     private bool _locking;
-    private bool _exiting;
+    private volatile bool _exiting;
 
     public AppHost(IClassicDesktopStyleApplicationLifetime desktop)
     {
@@ -38,6 +39,7 @@ public sealed class AppHost : IDisposable
         _watcher = new AutofillWatcher(_detector, OnWindowsFieldAsync);
         _autoLock = new AutoLockMonitor(LockVault);
         _mutex = new Mutex(true, "KeepPassword.SingleInstance", out var created);
+        _activate = new EventWaitHandle(false, EventResetMode.AutoReset, "KeepPassword.Activate");
         if (!created)
         {
             _exiting = true;
@@ -48,10 +50,12 @@ public sealed class AppHost : IDisposable
     {
         if (_exiting)
         {
+            _activate.Set();
             _desktop.Shutdown();
             return;
         }
 
+        StartActivationListener();
         InstallTray();
         _server.Start();
         try
@@ -89,6 +93,7 @@ public sealed class AppHost : IDisposable
         _server.Dispose();
         _session?.Dispose();
         _mutex.Dispose();
+        _activate.Dispose();
     }
 
     private void OnMainClosing(object? sender, WindowClosingEventArgs e)
@@ -98,20 +103,20 @@ public sealed class AppHost : IDisposable
             return;
         }
 
-        e.Cancel = true;
-        if (_session is { IsUnlocked: true })
+        if (e.CloseReason == WindowCloseReason.OSShutdown)
         {
-            if (_trayReady)
-            {
-                _main.Hide();
-                return;
-            }
-
-            LockVault();
+            Dispatcher.UIThread.Post(Shutdown);
             return;
         }
 
-        Dispatcher.UIThread.Post(Shutdown);
+        e.Cancel = true;
+        if (_trayReady)
+        {
+            _main.Hide();
+            return;
+        }
+
+        _main.WindowState = WindowState.Minimized;
     }
 
     private void LockVault()
@@ -196,6 +201,31 @@ public sealed class AppHost : IDisposable
         {
             _trayReady = false;
         }
+    }
+
+    private void StartActivationListener()
+    {
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                while (!_exiting)
+                {
+                    if (_activate.WaitOne(500) && !_exiting)
+                    {
+                        Dispatcher.UIThread.Post(ShowFromTray);
+                    }
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "KeepPassword.Activate"
+        };
+        thread.Start();
     }
 
     private void ShowFromTray()

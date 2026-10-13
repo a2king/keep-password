@@ -101,6 +101,11 @@ public partial class MainWindow : Window
     public void BringToFront()
     {
         Show();
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
         Activate();
         if (!VaultRoot.IsVisible)
         {
