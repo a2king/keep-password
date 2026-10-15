@@ -39,7 +39,11 @@ public abstract class FindingsView : UserControl
 
     protected void ClearBody() => _body.Children.Clear();
 
-    protected void AddBlock(Control control) => _body.Children.Add(control);
+    protected void AddBlock(Control control)
+    {
+        Motion.SetRevealOnShow(control, true);
+        _body.Children.Add(control);
+    }
 
     protected void AddNotice(string text)
     {

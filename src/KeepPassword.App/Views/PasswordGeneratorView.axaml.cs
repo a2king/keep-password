@@ -48,7 +48,11 @@ public partial class PasswordGeneratorView : UserControl
 
     private void OnPin(object? sender, RoutedEventArgs e) => ApplyKind(PasswordGeneratorKind.Pin, resetValue: true);
 
-    private void OnRefresh(object? sender, RoutedEventArgs e) => Generate();
+    private void OnRefresh(object? sender, RoutedEventArgs e)
+    {
+        Generate();
+        _ = Motion.EnterAsync(ResultBox, 0);
+    }
 
     private async void OnCopy(object? sender, RoutedEventArgs e)
     {
@@ -58,6 +62,7 @@ public partial class PasswordGeneratorView : UserControl
         }
 
         CopyStatus.Text = "已复制。若 30 秒后剪贴板仍是该内容，会自动清除。";
+        _ = Motion.EnterAsync(CopyStatus, 3);
         await SecretClipboard.CopyAsync(clipboard, _password);
     }
 
@@ -119,6 +124,7 @@ public partial class PasswordGeneratorView : UserControl
         LengthValue.Text = ((int)LengthSlider.Value).ToString();
         _adjusting = false;
         Generate();
+        _ = Motion.EnterAsync(ResultBox, 0);
     }
 
     private static void SetSegment(Button button, bool selected)

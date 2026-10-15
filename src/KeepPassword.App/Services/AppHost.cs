@@ -291,7 +291,8 @@ public sealed class AppHost : IDisposable
         {
             Origin = AutofillOrigin.WindowsApplication,
             WindowTitle = field.WindowTitle,
-            TargetProcess = field.ProcessName
+            TargetProcess = field.ProcessName,
+            PasswordOnly = !field.HasUsernameField
         };
         await PromptAndFillAsync(request, field, CancellationToken.None);
     }
@@ -318,7 +319,16 @@ public sealed class AppHost : IDisposable
                     return AutofillResponse.Error("目标窗口权限更高，已取消输入。");
                 }
 
-                _filler.TryFill(field, response.Username, response.Password);
+                if (!_filler.TryFill(field, response.Username, response.Password))
+                {
+                    const string message = "无法填入原密码框。目标窗口可能已关闭、焦点已改变，或输入控件不支持自动填充。请重新聚焦密码框后重试，也可以从保险库复制密码。";
+                    if (_main is not null)
+                    {
+                        await Dialogs.AlertAsync(_main, "自动填充失败", message);
+                    }
+
+                    return AutofillResponse.Error(message);
+                }
             }
 
             return response;

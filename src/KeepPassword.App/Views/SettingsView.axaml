@@ -66,6 +66,22 @@
           </StackPanel>
         </Border>
 
+        <Border Classes="section">
+          <StackPanel>
+            <TextBlock Text="界面动画" Classes="h2" Margin="0,0,0,4" />
+            <TextBlock Text="流畅动画提供平滑的展开和切换；也可以跟随系统设置或减少动画。"
+                       Classes="muted" TextWrapping="Wrap" Margin="0,0,0,12" />
+            <Border Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1" CornerRadius="10" Padding="4">
+              <Grid ColumnDefinitions="*,*,*">
+                <Button x:Name="MotionFullBtn" Classes="theme-segment" Content="流畅动画" Click="OnMotionFull" />
+                <Button x:Name="MotionSystemBtn" Grid.Column="1" Classes="theme-segment" Content="跟随系统" Click="OnMotionSystem" Margin="4,0" />
+                <Button x:Name="MotionReducedBtn" Grid.Column="2" Classes="theme-segment" Content="减少动画" Click="OnMotionReduced" />
+              </Grid>
+            </Border>
+            <TextBlock x:Name="MotionStatus" Classes="muted" TextWrapping="Wrap" Margin="0,10,0,0" />
+          </StackPanel>
+        </Border>
+
         <!-- 空间分类与账号标签 -->
         <Border Classes="section">
           <StackPanel>
@@ -116,10 +132,10 @@
             <TextBox x:Name="ConfirmBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
             <TextBlock Text="当前主密码" Classes="label" />
             <TextBox x:Name="MasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
-            <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,10,0,0" IsVisible="False" x:Name="ErrorBox">
+            <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,10,0,0" IsVisible="False" x:Name="ErrorBox" views:Motion.RevealOnShow="True">
               <TextBlock x:Name="ErrorText" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
             </Border>
-            <TextBlock x:Name="BusyText" Text="正在验证主密码…" Classes="muted" Margin="0,8,0,0" IsVisible="False" />
+            <TextBlock x:Name="BusyText" Text="正在验证主密码…" Classes="muted" Margin="0,8,0,0" IsVisible="False" views:Motion.RevealOnShow="True" />
             <TextBlock x:Name="KeyStatus" Classes="muted" Margin="0,8,0,0" TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
               <Button Classes="ghost" Content="清空" Click="OnCancel" />
@@ -132,7 +148,7 @@
         <Border Classes="section">
           <StackPanel>
             <TextBlock Text="更换主密码" Classes="h2" Margin="0,0,0,4" />
-            <TextBlock Text="将使用新生成的强随机盐重新加密整个保险库。请务必牢记新密码。" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
+            <TextBlock x:Name="MasterChangeHint" Text="更换主密码不会改变加密密钥，之前保存的密钥文件仍然有效。" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
             <TextBlock Text="当前主密码" Classes="label" />
             <TextBox x:Name="CurrentMasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
             <TextBlock Text="新主密码" Classes="label" />
@@ -143,11 +159,19 @@
           </StackPanel>
         </Border>
 
+        <Border Classes="section">
+          <StackPanel Spacing="8">
+            <TextBlock Text="加密密钥" Classes="h2" />
+            <TextBlock x:Name="EncryptionKeyStatus" TextWrapping="Wrap" Classes="muted" />
+            <Button x:Name="SavePendingKeyButton" Classes="soft" Content="保存加密密钥文件…" HorizontalAlignment="Left" Click="OnSavePendingKey" />
+          </StackPanel>
+        </Border>
+
         <!-- 加密备份 -->
         <Border Classes="section">
           <StackPanel>
             <TextBlock Text="加密备份与还原" Classes="h2" Margin="0,0,0,4" />
-            <TextBlock Text="只导出经过强加密的保险库备份文件，不包含任何明文。还原时需要备份当时的主密码。"
+            <TextBlock Text="备份经过加密。还原时需要该备份对应的加密密钥文件或完整密钥，更换主密码不影响密钥。"
                        TextWrapping="Wrap" Classes="muted" Margin="0,0,0,10" />
             <StackPanel Orientation="Horizontal" Spacing="10">
               <Button Classes="soft" Click="OnExport">
@@ -169,7 +193,7 @@
         <Border Classes="section">
           <StackPanel>
             <TextBlock Text="明文导出" Classes="h2" Margin="0,0,0,4" />
-            <TextBlock Text="把全部条目导出成 CSV，一个账号一行。文件包含明文密码、验证码密钥和私钥，请自行保管。登录、服务器、数据库、API 凭据和集群服务可以按类型重新导入。"
+            <TextBlock Text="验证当前保险库的加密密钥后，将全部条目导出成 CSV，一个账号一行。文件包含明文密码、验证码密钥和私钥，请自行保管。"
                        TextWrapping="Wrap" Classes="muted" Margin="0,0,0,10" />
             <Button Classes="soft" Click="OnExportCsv" HorizontalAlignment="Left">
               <StackPanel Orientation="Horizontal" Spacing="6">

@@ -22,6 +22,7 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         ThemeManager.Initialize();
+        MotionPreferences.Initialize();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {

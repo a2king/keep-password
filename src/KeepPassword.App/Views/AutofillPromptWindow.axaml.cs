@@ -8,24 +8,37 @@ namespace KeepPassword.App.Views;
 public partial class AutofillPromptWindow : Window
 {
     private readonly Func<string, bool>? _verifyShortKey;
+    private IReadOnlyList<AutofillCandidate> _matches = [];
 
     public AutofillDecision? Decision { get; private set; }
 
-    public AutofillPromptWindow() => InitializeComponent();
+    public AutofillPromptWindow()
+    {
+        InitializeComponent();
+        Motion.AttachWindow(this);
+    }
 
     public AutofillPromptWindow(AutofillRequest request, IReadOnlyList<AutofillCandidate> matches, Func<string, bool> verifyShortKey)
         : this()
     {
         _verifyShortKey = verifyShortKey;
+        _matches = matches;
+        var desktop = request.Origin == AutofillOrigin.WindowsApplication;
         var context = string.IsNullOrWhiteSpace(request.Url) ? request.WindowTitle : request.Url;
         ContextText.Text = string.IsNullOrWhiteSpace(context) ? "来源：未知页面" : "来源：" + context;
         var host = DomainGrouping.HostOf(request.Url);
         var site = DomainGrouping.TryRegistrableDomain(host, out var registrable) ? registrable : "无法识别的域名";
         var process = string.IsNullOrWhiteSpace(request.TargetProcess) ? "" : "，进程 " + request.TargetProcess;
-        TargetText.Text = "目标站点：" + site + process;
-        MatchList.ItemsSource = matches;
+        TargetText.Text = desktop
+            ? "目标程序：" + (request.TargetProcess ?? "未知程序") + (request.PasswordOnly ? "；本次仅填密码。" : "；本次填入用户名和密码。")
+            : "目标站点：" + site + process;
+        GuidanceText.Text = desktop
+            ? "程序窗口无法验证服务地址。请自行核对当前连接或登录页面，选择账号并输入短密钥。"
+            : "确认目标与条目来源一致后输入短密钥以授权填入。";
+        SearchBox.TextChanged += (_, _) => FilterMatches();
+        MatchList.ItemsSource = _matches;
         MatchList.SelectionChanged += (_, _) => UpdateEntry(request);
-        if (matches.Count > 0)
+        if (!desktop && matches.Count > 0)
         {
             MatchList.SelectedIndex = 0;
         }
@@ -33,11 +46,31 @@ public partial class AutofillPromptWindow : Window
         UpdateEntry(request);
     }
 
+    private void FilterMatches()
+    {
+        var selected = MatchList.SelectedItem as AutofillCandidate;
+        var query = SearchBox.Text?.Trim() ?? "";
+        var visible = _matches.Where(item => query.Length == 0
+            || item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || item.Username.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || item.Domain.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || item.KindName.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+        MatchList.ItemsSource = visible;
+        MatchList.SelectedItem = selected is not null && visible.Contains(selected) ? selected : null;
+    }
+
     private void UpdateEntry(AutofillRequest request)
     {
         if (MatchList.SelectedItem is not AutofillCandidate selected)
         {
             EntryText.Text = "尚未选择条目。";
+            return;
+        }
+
+        if (request.Origin == AutofillOrigin.WindowsApplication)
+        {
+            var address = selected.Domain.Length > 0 ? selected.Domain : "未设置主机地址";
+            EntryText.Text = $"所选：{selected.KindName} · {address}。请确认是当前目标使用的账号。";
             return;
         }
 

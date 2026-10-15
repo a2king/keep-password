@@ -27,16 +27,9 @@ public static class EncryptedBackup
             Directory.CreateDirectory(directory);
         }
 
-        var temp = target + ".tmp";
-        File.Copy(source, temp, overwrite: true);
-        FileProtection.RestrictToCurrentUser(temp);
-        File.Move(temp, target, overwrite: true);
-        FileProtection.RestrictToCurrentUser(target);
+        VaultStore.ExportEncryptedBackup(source, target);
     }
 
-    public static IReadOnlyList<VaultEntry> ReadEntries(string backupPath, string masterPassword)
-    {
-        using var session = new VaultStore().Unlock(backupPath, masterPassword);
-        return session.Entries;
-    }
+    public static IReadOnlyList<VaultEntry> ReadEntries(string backupPath, string encryptionKey) =>
+        VaultStore.ReadEntriesWithKey(backupPath, encryptionKey);
 }

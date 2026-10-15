@@ -4,6 +4,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using KeepPassword.App.ViewModels;
+using KeepPassword.App.Services;
 using KeepPassword.Core.Vault;
 
 namespace KeepPassword.App.Views;
@@ -11,12 +12,14 @@ namespace KeepPassword.App.Views;
 public partial class UnlockView : UserControl
 {
     private bool _animating;
+    private CancellationTokenSource _animation = new();
 
     public event Action<VaultSession>? Unlocked;
 
     public UnlockView()
     {
         InitializeComponent();
+        DetachedFromVisualTree += (_, _) => CancelAnimation();
     }
 
     public void Bind(VaultStore store, string vaultFile)
@@ -45,19 +48,38 @@ public partial class UnlockView : UserControl
 
     public void ClearSecrets()
     {
+        CancelAnimation();
+        ClearInputValues();
+        DataContext = null;
+    }
+
+    private void ClearInputValues()
+    {
         MasterBox.Text = "";
         ConfirmMasterBox.Text = "";
         ShortBox.Text = "";
         ConfirmShortBox.Text = "";
         UnlockShortBox.Text = "";
-        Answer1Box.Text = "";
-        Answer2Box.Text = "";
-        Answer3Box.Text = "";
+        RecoveryKeyBox.Text = "";
         RecoverAnswer1Box.Text = "";
         RecoverAnswer2Box.Text = "";
         RecoverAnswer3Box.Text = "";
         RecoverConfirmBox.Text = "";
-        DataContext = null;
+    }
+
+    private void CancelAnimation()
+    {
+        _animation.Cancel();
+        _animation.Dispose();
+        _animation = new CancellationTokenSource();
+        Badge.Reset();
+        Motion.ResetTree(this);
+        if (InputBox.RenderTransform is TranslateTransform shift)
+        {
+            shift.X = 0;
+        }
+        Opacity = 1;
+        _animating = false;
     }
 
     private UnlockViewModel? View => DataContext as UnlockViewModel;
@@ -81,37 +103,85 @@ public partial class UnlockView : UserControl
         }
 
         CopyPasswords();
+        var token = _animation.Token;
         Badge.StartSpin();
         var ok = await view.SubmitAsync();
-        if (!ok || view.Session is not { } session)
+        if (token.IsCancellationRequested || View != view)
         {
-            Badge.StopSpin();
-            if (view.HasError)
-            {
-                await Task.WhenAll(Badge.PlayRejectAsync(), ShakeAsync());
-            }
-
-            FocusMaster();
+            view.Session?.Dispose();
             return;
         }
 
-        _animating = true;
-        await Badge.PlayTurnAsync();
-        await Task.WhenAll(
-            Badge.PlayPopAsync(),
-            Tween.RunAsync(TimeSpan.FromMilliseconds(280), t => Opacity = 1 - t, Tween.CubicOut));
-        _animating = false;
-        Unlocked?.Invoke(session);
+        try
+        {
+            if (!ok || view.Session is not { } session)
+            {
+                Badge.StopSpin();
+                if (view.HasError)
+                {
+                    _animating = true;
+                    await Task.WhenAll(Badge.PlayRejectAsync(), ShakeAsync(token));
+                }
+
+                if (!token.IsCancellationRequested && View == view)
+                {
+                    _animating = false;
+                    FocusMaster();
+                }
+                return;
+            }
+
+            _animating = true;
+            ClearInputValues();
+            if (session.NeedsKeyFileSave)
+            {
+                using var setupCancellation = token.Register(session.Lock);
+                Badge.StopSpin();
+                if (TopLevel.GetTopLevel(this) is not Window owner
+                    || !await EncryptionKeyDialog.SaveNewAsync(owner, session))
+                {
+                    view.CancelKeySetup();
+                    MasterBox.Text = "";
+                    ConfirmMasterBox.Text = "";
+                    ShortBox.Text = "";
+                    ConfirmShortBox.Text = "";
+                    _animating = false;
+                    return;
+                }
+            }
+            token.ThrowIfCancellationRequested();
+            await Badge.PlayTurnAsync();
+            token.ThrowIfCancellationRequested();
+            await Task.WhenAll(
+                Badge.PlayPopAsync(),
+                Tween.RunAsync(Motion.IsEnabled ? TimeSpan.FromMilliseconds(180) : TimeSpan.Zero,
+                    t => Opacity = 1 - t, Tween.CubicOut, token));
+            token.ThrowIfCancellationRequested();
+            if (View == view)
+            {
+                _animating = false;
+                Unlocked?.Invoke(session);
+            }
+            else
+            {
+                session.Dispose();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            view.Session?.Dispose();
+        }
     }
 
-    private Task ShakeAsync()
+    private Task ShakeAsync(CancellationToken token)
     {
         if (InputBox.RenderTransform is not TranslateTransform shift)
         {
             return Task.CompletedTask;
         }
 
-        return Tween.RunAsync(TimeSpan.FromMilliseconds(380), t => shift.X = Math.Sin(t * Math.PI * 6) * 8 * (1 - t));
+        return Tween.RunAsync(Motion.IsEnabled ? TimeSpan.FromMilliseconds(300) : TimeSpan.Zero,
+            t => shift.X = Math.Sin(t * Math.PI * 6) * 8 * (1 - t), cancellationToken: token);
     }
 
     private void OnUseMaster(object? sender, RoutedEventArgs e)
@@ -119,6 +189,7 @@ public partial class UnlockView : UserControl
         View?.UseMasterPassword();
         UnlockShortBox.Text = "";
         MasterBox.Focus();
+        _ = Motion.EnterAsync(UnlockForm, 4);
     }
 
     private void OnUseShort(object? sender, RoutedEventArgs e)
@@ -126,6 +197,7 @@ public partial class UnlockView : UserControl
         View?.UseShortKey();
         MasterBox.Text = "";
         UnlockShortBox.Focus();
+        _ = Motion.EnterAsync(UnlockForm, 4);
     }
 
     private void OnBeginRecovery(object? sender, RoutedEventArgs e)
@@ -133,6 +205,7 @@ public partial class UnlockView : UserControl
         View?.BeginRecovery();
         UnlockShortBox.Text = "";
         MasterBox.Text = "";
+        _ = Motion.EnterAsync(UnlockForm, 4);
     }
 
     private void OnCancelRecovery(object? sender, RoutedEventArgs e)
@@ -140,7 +213,9 @@ public partial class UnlockView : UserControl
         View?.CancelRecovery();
         MasterBox.Text = "";
         RecoverConfirmBox.Text = "";
+        RecoveryKeyBox.Text = "";
         FocusMaster();
+        _ = Motion.EnterAsync(UnlockForm, 4);
     }
 
     private void CopyPasswords()
@@ -160,11 +235,20 @@ public partial class UnlockView : UserControl
             View.Answer2 = RecoverAnswer2Box.Text ?? "";
             View.Answer3 = RecoverAnswer3Box.Text ?? "";
         }
-        else
+        View.EncryptionKey = RecoveryKeyBox.Text ?? "";
+    }
+
+    private async void OnChooseRecoveryKey(object? sender, RoutedEventArgs e)
+    {
+        if (View is not { } view || TopLevel.GetTopLevel(this) is not Window owner) return;
+        try
         {
-            View.Answer1 = Answer1Box.Text ?? "";
-            View.Answer2 = Answer2Box.Text ?? "";
-            View.Answer3 = Answer3Box.Text ?? "";
+            var path = await SafeStoragePickers.PickOpenFileAsync(owner, "选择加密密钥文件", [EncryptionKeyDialog.KeyFileType]);
+            if (View == view && !string.IsNullOrWhiteSpace(path)) RecoveryKeyBox.Text = VaultKeyFile.Read(path);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or CredentialRejectedException)
+        {
+            if (View == view) view.Error = ex.Message;
         }
     }
 }

@@ -18,6 +18,8 @@ public sealed class AutofillRequest
 
     public string? TargetProcess { get; init; }
 
+    public bool PasswordOnly { get; init; }
+
     public string? ClientToken { get; init; }
 }
 
@@ -34,6 +36,8 @@ public sealed class AutofillCandidate
     public string AccountNote { get; init; } = "";
 
     public required string Domain { get; init; }
+
+    public string KindName { get; init; } = "";
 }
 
 public sealed class DetectedPasswordField
@@ -47,6 +51,8 @@ public sealed class DetectedPasswordField
     public nint PasswordHandle { get; init; }
 
     public nint UsernameHandle { get; init; }
+
+    public bool HasUsernameField { get; init; }
 
     public string ProcessName { get; init; } = "";
 

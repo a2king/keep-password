@@ -116,6 +116,56 @@ public class CacheDirectoryTests
         Assert.Equal("Light", CacheDirectory.GetTheme(settings));
     }
 
+    [Fact]
+    public void MotionMode_MissingSettingsAndLegacySettings_DefaultToFull()
+    {
+        var root = NewRoot();
+        var settings = Path.Combine(root, "config", "settings.json");
+
+        Assert.Equal("Full", CacheDirectory.GetMotionMode(settings));
+        CacheDirectory.SetTheme(settings, "Dark");
+        Assert.Equal("Full", CacheDirectory.GetMotionMode(settings));
+    }
+
+    [Theory]
+    [InlineData("Full")]
+    [InlineData("System")]
+    [InlineData("Reduced")]
+    public void MotionMode_PersistsAndSurvivesThemeAndDirectoryChanges(string mode)
+    {
+        var root = NewRoot();
+        var settings = Path.Combine(root, "config", "settings.json");
+        var source = Path.Combine(root, "cache1");
+        var destination = Path.Combine(root, "cache2");
+        var finalDestination = Path.Combine(root, "cache3");
+        Directory.CreateDirectory(source);
+        CacheDirectory.SetTheme(settings, "Dark");
+        CacheDirectory.Switch(settings, source, destination);
+
+        CacheDirectory.SetMotionMode(settings, mode);
+        Assert.Equal(mode, CacheDirectory.GetMotionMode(settings));
+        Assert.Equal("Dark", CacheDirectory.GetTheme(settings));
+        Assert.Equal(Path.GetFullPath(destination), CacheDirectory.Resolve(settings, source));
+
+        CacheDirectory.SetTheme(settings, "Light");
+        CacheDirectory.Switch(settings, destination, finalDestination);
+        Assert.Equal(mode, CacheDirectory.GetMotionMode(settings));
+        Assert.Equal("Light", CacheDirectory.GetTheme(settings));
+        Assert.Equal(Path.GetFullPath(finalDestination), CacheDirectory.Resolve(settings, source));
+    }
+
+    [Fact]
+    public void MotionMode_InvalidValue_FallsBackToFull()
+    {
+        var root = NewRoot();
+        var settings = Path.Combine(root, "settings.json");
+        File.WriteAllText(settings, "{\"motionMode\":\"unknown\"}");
+        Assert.Equal("Full", CacheDirectory.GetMotionMode(settings));
+
+        CacheDirectory.SetMotionMode(settings, "unknown");
+        Assert.Equal("Full", CacheDirectory.GetMotionMode(settings));
+    }
+
     private static string NewRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "keep-password-tests", Guid.NewGuid().ToString("n"));

@@ -58,6 +58,7 @@ public sealed class ImportWizardWindow : Window
         _kindBox.SelectionChanged += (_, _) => RebuildMapping();
 
         _mappingError.Foreground = Brush("Kp.Danger");
+        Motion.SetRevealOnShow(_mappingError, true);
         _importButton = new Button { Content = "导入" };
         _importButton.Classes.Add("accent");
         _importButton.Click += (_, _) =>
@@ -106,6 +107,7 @@ public sealed class ImportWizardWindow : Window
         root.Children.Add(footer);
         root.Children.Add(new ScrollViewer { Content = form });
         Content = root;
+        Motion.AttachWindow(this);
 
         RebuildMapping();
     }
@@ -159,6 +161,7 @@ public sealed class ImportWizardWindow : Window
 
         _suspended = false;
         Recompute();
+        _ = Motion.EnterAsync(_mappingGrid, 4);
     }
 
     private void Recompute()

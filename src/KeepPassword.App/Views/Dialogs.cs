@@ -133,6 +133,7 @@ public static class Dialogs
         };
         window.Opened += (_, _) => ok.Focus();
         window.Content = card;
+        Motion.AttachWindow(window);
 
         if (owner.IsVisible)
         {

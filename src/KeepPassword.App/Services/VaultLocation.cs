@@ -8,9 +8,14 @@ public sealed class VaultLocation
     private readonly string _settingsFile;
 
     public VaultLocation()
+        : this(CacheDirectory.SettingsFile(), AppDataPaths.VaultDirectory())
     {
-        _settingsFile = CacheDirectory.SettingsFile();
-        Directory = CacheDirectory.Resolve(_settingsFile, AppDataPaths.VaultDirectory());
+    }
+
+    internal VaultLocation(string settingsFile, string defaultDirectory)
+    {
+        _settingsFile = settingsFile;
+        Directory = CacheDirectory.Resolve(_settingsFile, defaultDirectory);
     }
 
     public string Directory { get; private set; }

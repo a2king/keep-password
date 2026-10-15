@@ -10,6 +10,8 @@ public sealed class AutofillWatcher
     private readonly Func<DetectedPasswordField, Task> _onField;
     private string? _lastKey;
     private int _busy;
+    private bool _running;
+    private int _generation;
 
     public AutofillWatcher(IPasswordFieldDetector detector, Func<DetectedPasswordField, Task> onField)
     {
@@ -21,6 +23,8 @@ public sealed class AutofillWatcher
 
     public void Start()
     {
+        _running = true;
+        _generation++;
         _lastKey = null;
         if (_detector.IsSupported)
         {
@@ -30,19 +34,22 @@ public sealed class AutofillWatcher
 
     public void Stop()
     {
+        _running = false;
+        _generation++;
         _timer.Stop();
         _lastKey = null;
     }
 
     private async Task TickAsync()
     {
-        if (Interlocked.Exchange(ref _busy, 1) == 1)
+        if (!_running || Interlocked.Exchange(ref _busy, 1) == 1)
         {
             return;
         }
 
         try
         {
+            var generation = _generation;
             // UI Automation 扫树可能很慢；放到后台，避免拖死界面和文件对话框。
             var field = await Task.Run(() =>
             {
@@ -55,6 +62,11 @@ public sealed class AutofillWatcher
                     return null;
                 }
             });
+
+            if (!_running || generation != _generation)
+            {
+                return;
+            }
 
             if (field is null)
             {

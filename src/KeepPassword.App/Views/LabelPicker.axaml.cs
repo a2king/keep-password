@@ -47,6 +47,7 @@ public partial class LabelPicker : UserControl
         Input.KeyDown += OnInputKeyDown;
         Box.AddHandler(PointerPressedEvent, OnBoxPressed, RoutingStrategies.Tunnel);
         Dropdown.Closed += (_, _) => Input.Text = "";
+        Dropdown.Opened += (_, _) => _ = Motion.EnterAsync(DropdownCard, 4);
     }
 
     public IReadOnlyList<LabelChipView>? Items

@@ -4,9 +4,11 @@
         xmlns:autofill="using:KeepPassword.Core.Autofill"
         x:Class="KeepPassword.App.Views.AutofillPromptWindow"
         Title="自动填入"
-        Width="480"
-        Height="560"
-        CanResize="False"
+        Width="520"
+        Height="650"
+        MinWidth="480"
+        MinHeight="580"
+        CanResize="True"
         WindowStartupLocation="CenterScreen"
         Topmost="True"
         Background="{DynamicResource Kp.Bg}"
@@ -23,13 +25,14 @@
         <TextBlock x:Name="ContextText" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,4" />
         <TextBlock x:Name="TargetText" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,4" />
         <TextBlock x:Name="EntryText" TextWrapping="Wrap" Margin="0,0,0,8" FontWeight="SemiBold" />
-        <TextBlock Text="确认目标与条目来源一致后输入短密钥以授权填入。" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,8" />
+        <TextBlock x:Name="GuidanceText" Text="确认目标与条目来源一致后输入短密钥以授权填入。" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,8" />
+        <TextBox x:Name="SearchBox" Watermark="搜索名称、账号、主机或类型" Margin="0,0,0,8" />
       </StackPanel>
 
       <StackPanel DockPanel.Dock="Bottom">
         <TextBlock Text="短密钥" Classes="label" />
         <TextBox x:Name="ShortKeyBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
-        <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,8,0,0" x:Name="ErrorBox" IsVisible="False">
+        <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,8,0,0" x:Name="ErrorBox" IsVisible="False" views:Motion.RevealOnShow="True">
           <TextBlock x:Name="ErrorText" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
         </Border>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,16,0,0">
@@ -43,6 +46,7 @@
           <DataTemplate x:DataType="autofill:AutofillCandidate">
             <StackPanel Margin="2">
               <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding KindName}" Classes="muted" FontSize="12" />
               <TextBlock Classes="muted mono" FontSize="12">
                 <Run Text="{Binding Username}" />
                 <Run Text=" · " />

@@ -104,7 +104,7 @@
            IsLightDismissEnabled="True"
            OverlayDismissEventPassThrough="True"
            OverlayInputPassThroughElement="{Binding #Box}">
-      <Border Background="{DynamicResource Kp.Surface}"
+      <Border x:Name="DropdownCard" Background="{DynamicResource Kp.Surface}"
               BorderBrush="{DynamicResource Kp.Border}"
               BorderThickness="1"
               CornerRadius="8"

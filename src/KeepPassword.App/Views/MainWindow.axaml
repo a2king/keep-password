@@ -118,13 +118,13 @@
       </DockPanel>
     </Border>
 
-    <Grid Grid.Column="1">
-      <Grid x:Name="ItemsPage" ColumnDefinitions="*,Auto">
-        <Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="20,44,20,12" Background="Transparent" PointerPressed="OnListBlankPressed">
+    <Grid Grid.Column="1" ClipToBounds="True">
+      <Grid x:Name="ItemsPage" ClipToBounds="True">
+        <Grid x:Name="ItemsListPane" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="20,44,20,12" Background="Transparent" PointerPressed="OnListBlankPressed">
           <!-- 顶部：搜索 + 操作 + 空间下拉 -->
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,14">
             <Grid ColumnDefinitions="Auto,*">
-              <TextBox x:Name="SearchBox" Grid.ColumnSpan="2" Text="{Binding Search}" Watermark="搜索名称、标签、账号、备注、网址、主机、节点" Padding="34,8,36,8" KeyDown="OnSearchKeyDown" />
+              <TextBox x:Name="SearchBox" Grid.ColumnSpan="2" Text="{Binding Search}" Watermark="搜索名称、标签、账号、备注、网址、主机、节点" LetterSpacing="1" Padding="34,8,36,8" KeyDown="OnSearchKeyDown" />
               <PathIcon Data="{StaticResource Icon.Search}" Width="15" Height="15" Foreground="{DynamicResource Kp.TextMuted}" Margin="12,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
               <Button Grid.Column="1" Classes="icon" ToolTip.Tip="清除搜索 (Esc)" IsVisible="{Binding HasSearch}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,5,0" Click="OnClearSearch">
                 <PathIcon Data="{StaticResource Icon.Clear}" Width="14" Height="14" />
@@ -194,7 +194,7 @@
 
           <!-- 标签卡片 -->
           <TextBlock Grid.Row="2" Text="标签" Classes="label" Margin="2,0,0,8" />
-          <ItemsControl Grid.Row="3" ItemsSource="{Binding TagFilters}" Margin="0,0,0,10">
+          <ItemsControl x:Name="TagFiltersList" Grid.Row="3" ItemsSource="{Binding TagFilters}" Margin="0,0,0,10">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
                 <WrapPanel />
@@ -221,13 +221,14 @@
               <TextBlock Grid.Column="1" Text="{Binding EntryCountText}" Classes="muted" VerticalAlignment="Center" />
             </Grid>
             <TextBlock Grid.Row="1"
+                       views:Motion.RevealOnShow="True"
                        Text="{Binding EmptyText}"
                        IsVisible="{Binding ShowEmpty}"
                        Classes="muted"
                        TextWrapping="Wrap"
                        Margin="4,12" />
             <ScrollViewer x:Name="AccountScroller" Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
-              <ItemsControl ItemsSource="{Binding EntryRows}">
+              <ItemsControl x:Name="AccountItems" ItemsSource="{Binding EntryRows}">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate>
                     <VirtualizingStackPanel />
@@ -293,20 +294,22 @@
           <TextBlock Grid.Row="5" Text="{Binding AutofillHint}" Classes="muted" FontSize="11.5" TextWrapping="Wrap" Margin="2,8,0,0" />
         </Grid>
 
-        <!-- 右侧详情 -->
-        <Border Grid.Column="1"
+        <!-- Slide a fixed-width overlay without remeasuring the list on every frame. -->
+        <Grid x:Name="DetailHost" Width="480" HorizontalAlignment="Right"
+              Background="Transparent" ClipToBounds="True" IsVisible="False">
+        <Border x:Name="DetailPanel"
                 Width="480"
+                HorizontalAlignment="Left"
                 Classes="panel"
                 Background="{DynamicResource Kp.Bg}"
                 BorderBrush="{DynamicResource Kp.Border}"
-                BorderThickness="1,0,0,0"
-                IsVisible="{Binding HasDetail}">
-          <Grid RowDefinitions="Auto,*,Auto" Margin="28,44,28,18">
+                BorderThickness="1,0,0,0">
+          <Grid x:Name="DetailContent" RowDefinitions="Auto,*,Auto" Margin="28,44,28,18">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,12">
               <Border Classes="count-badge" VerticalAlignment="Center">
                 <TextBlock Text="{Binding KindName}" />
               </Border>
-              <TextBlock Grid.Column="1" Text="{Binding Name}" Classes="h1" TextWrapping="Wrap" Margin="10,0,8,0" VerticalAlignment="Center" />
+              <TextBlock x:Name="DetailTitle" Grid.Column="1" Text="{Binding Name}" Classes="h1" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" Margin="10,0,8,0" VerticalAlignment="Center" />
               <Button Grid.Column="2" Classes="icon" Width="32" Height="32" ToolTip.Tip="{Binding FavoriteText}" VerticalAlignment="Top" Click="OnToggleFavorite">
                 <Panel>
                   <PathIcon Data="{StaticResource Icon.StarOutline}" Width="19" Height="19" IsVisible="{Binding !Favorite}" />
@@ -316,7 +319,7 @@
               <Button Grid.Column="3" Classes="ghost" Content="关闭" VerticalAlignment="Top" Click="OnCloseDetail" />
             </Grid>
             <Panel Grid.Row="1">
-              <ScrollViewer Margin="0,0,-20,0">
+              <ScrollViewer x:Name="DetailScroller" Margin="0,0,-20,0">
                 <StackPanel Spacing="2" Margin="0,0,20,0">
                   <Border Classes="field">
                     <StackPanel>
@@ -411,7 +414,7 @@
                       <ItemsControl ItemsSource="{Binding Nodes}" Margin="0,8,0,0">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:NodeEditorView">
-                            <Border BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
+                            <Border views:Motion.RevealOnShow="{Binding AnimateOnShow}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
                               <StackPanel Spacing="6">
                                 <Grid ColumnDefinitions="*,Auto,Auto">
                                   <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -483,7 +486,7 @@
                       <ItemsControl ItemsSource="{Binding Accounts}" Margin="0,8,0,0">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:AccountEditorView">
-                            <Border BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1" CornerRadius="10" Padding="12,10" Margin="0,0,0,10">
+                            <Border views:Motion.RevealOnShow="{Binding AnimateOnShow}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1" CornerRadius="10" Padding="12,10" Margin="0,0,0,10">
                               <StackPanel Spacing="10">
                                 <Grid ColumnDefinitions="*,Auto">
                                   <TextBlock Text="账号" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -549,10 +552,11 @@
                   </StackPanel>
                 </Button>
               </StackPanel>
-              <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" Margin="0,0,12,0" />
+              <TextBlock x:Name="DetailStatus" Text="{Binding Status}" VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" Margin="0,0,12,0" />
             </DockPanel>
           </Grid>
         </Border>
+        </Grid>
       </Grid>
 
       <Border x:Name="GeneratorPage" IsVisible="False" Background="{DynamicResource Kp.Bg}" Padding="0,32,0,0">

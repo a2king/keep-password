@@ -95,7 +95,7 @@ public class SecurityPhaseTests
     }
 
     [Fact]
-    public void Recovery_RequiresRiskAcknowledgement_AndDoesNotStoreAnswers()
+    public void NewVault_RejectsSecurityQuestionRecovery()
     {
         var path = TestVault.NewPath();
         var store = TestVault.Store();
@@ -106,27 +106,15 @@ public class SecurityPhaseTests
             Answers = ["alpha-answer", "beta-answer", "gamma-answer"]
         };
         var denied = Assert.Throws<ArgumentException>(() => store.Create(path, "ada", "correct horse", "short-key", setup));
-        Assert.Contains("远弱于主密码", denied.Message);
+        Assert.Contains("加密密钥恢复", denied.Message);
 
-        store.Create(path, "ada", "correct horse", "short-key", new RecoverySetup
+        Assert.Throws<ArgumentException>(() => store.Create(path, "ada", "correct horse", "short-key", new RecoverySetup
         {
             RiskAcknowledged = true,
             Questions = setup.Questions,
             Answers = setup.Answers
-        });
-        var text = File.ReadAllText(path);
-        Assert.DoesNotContain("alpha-answer", text);
-        Assert.Contains("远弱于主密码", RecoveryRisk.Warning);
-        Assert.True(store.HasRecovery(path));
-        Assert.Throws<RecoveryFailedException>(() => store.Recover(path, ["no", "no", "no"], "other horse"));
-
-        using var recovered = store.Recover(path, ["alpha-answer", "beta-answer", "gamma-answer"], "other horse");
-        recovered.Upsert(new VaultEntry { Name = "恢复后", Accounts = [new VaultAccount { Username = "ada", Password = "kept" }], Url = "https://example.com" });
-        recovered.Save();
-        recovered.Lock();
-        using var unlocked = store.Unlock(path, "other horse");
-        Assert.Contains(unlocked.Entries, entry => entry.Name == "恢复后");
-        Assert.True(unlocked.HasRecovery);
+        }));
+        Assert.False(File.Exists(path));
     }
 
     [Fact]
@@ -204,14 +192,16 @@ public class SecurityPhaseTests
 
         var path = TestVault.NewPath();
         var backup = TestVault.NewPath();
+        string encryptionKey;
         using (var session = TestVault.CreateUnlocked(path))
         {
+            encryptionKey = session.PendingEncryptionKey;
             session.Upsert(entry);
             session.Save();
             EncryptedBackup.Export(path, backup);
         }
 
-        var restored = EncryptedBackup.ReadEntries(backup, "correct horse");
+        var restored = EncryptedBackup.ReadEntries(backup, encryptionKey);
         Assert.Equal("ada", Assert.Single(restored).Accounts[0].Username);
         Assert.DoesNotContain("s3cret", File.ReadAllText(backup));
     }
@@ -226,7 +216,7 @@ public class SecurityPhaseTests
         Assert.Contains("fill-request", content);
         Assert.DoesNotContain("host_permissions", manifest);
         Assert.Contains("fill-password", manifest);
-        Assert.Contains("\"version\": \"0.5.2\"", manifest);
+        Assert.Contains("\"version\": \"0.6.1\"", manifest);
     }
 
     [Fact]

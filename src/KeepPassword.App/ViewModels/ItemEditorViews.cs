@@ -153,6 +153,8 @@ public sealed class AccountEditorView : ViewModelBase
 
     public Guid Id { get; }
 
+    public bool AnimateOnShow { get; init; }
+
     public FieldEditorView UsernameField { get; }
 
     public FieldEditorView PasswordField { get; }
@@ -351,6 +353,8 @@ public sealed class NodeEditorView : ViewModelBase
         _index = index;
         _changed = changed;
     }
+
+    public bool AnimateOnShow { get; init; }
 
     public string Title => $"节点 {_index}";
 

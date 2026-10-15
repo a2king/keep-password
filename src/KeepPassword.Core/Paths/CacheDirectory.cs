@@ -221,6 +221,50 @@ public static class CacheDirectory
         File.Move(temp, settingsFile, overwrite: true);
     }
 
+    public static string GetMotionMode(string settingsFile)
+    {
+        if (!File.Exists(settingsFile))
+        {
+            return "Full";
+        }
+
+        try
+        {
+            var settings = JsonSerializer.Deserialize<SettingsDto>(File.ReadAllText(settingsFile), Options);
+            return settings?.MotionMode is "System" or "Reduced" ? settings.MotionMode : "Full";
+        }
+        catch (JsonException)
+        {
+            return "Full";
+        }
+    }
+
+    public static void SetMotionMode(string settingsFile, string mode)
+    {
+        var folder = Path.GetDirectoryName(settingsFile);
+        if (!string.IsNullOrEmpty(folder))
+        {
+            Directory.CreateDirectory(folder);
+        }
+
+        SettingsDto dto;
+        try
+        {
+            dto = File.Exists(settingsFile)
+                ? JsonSerializer.Deserialize<SettingsDto>(File.ReadAllText(settingsFile), Options) ?? new SettingsDto()
+                : new SettingsDto();
+        }
+        catch (JsonException)
+        {
+            dto = new SettingsDto();
+        }
+
+        dto.MotionMode = mode is "System" or "Reduced" ? mode : "Full";
+        var temp = settingsFile + ".tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(dto, Options));
+        File.Move(temp, settingsFile, overwrite: true);
+    }
+
     private static void Write(string settingsFile, string directory)
     {
         var folder = Path.GetDirectoryName(settingsFile);
@@ -285,5 +329,6 @@ public static class CacheDirectory
     {
         public string? Directory { get; set; }
         public string? Theme { get; set; }
+        public string? MotionMode { get; set; }
     }
 }

@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:KeepPassword.App.Views"
              xmlns:vm="using:KeepPassword.App.ViewModels"
              x:Class="KeepPassword.App.Views.TotpView"
              x:DataType="vm:TotpPageViewModel"
@@ -15,7 +16,7 @@
       </StackPanel>
     </StackPanel>
 
-    <TextBlock DockPanel.Dock="Top" Text="当前保险库中还没有包含验证码密钥的条目。" IsVisible="{Binding IsEmpty}" Classes="muted" Margin="0,16,0,0" HorizontalAlignment="Center" />
+    <TextBlock DockPanel.Dock="Top" Text="当前保险库中还没有包含验证码密钥的条目。" IsVisible="{Binding IsEmpty}" Classes="muted" Margin="0,16,0,0" HorizontalAlignment="Center" views:Motion.RevealOnShow="True" />
 
     <ScrollViewer>
       <ItemsControl ItemsSource="{Binding Rows}">

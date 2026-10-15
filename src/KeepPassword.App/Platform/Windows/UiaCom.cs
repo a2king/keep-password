@@ -67,7 +67,7 @@ internal interface IUIAutomationValuePattern
 internal interface IUIAutomationElement
 {
     [PreserveSig] int SetFocus();
-    [PreserveSig] int Reserved1();
+    [PreserveSig] int GetRuntimeId([MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_I4)] out int[] runtimeId);
     [PreserveSig] int Reserved2();
     [PreserveSig] int FindAll(int scope, IUIAutomationCondition condition, out IUIAutomationElementArray found);
     [PreserveSig] int Reserved4();

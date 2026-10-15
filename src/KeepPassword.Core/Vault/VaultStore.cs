@@ -6,9 +6,9 @@ using KeepPassword.Core.Crypto;
 
 namespace KeepPassword.Core.Vault;
 
-public sealed class VaultStore
+public sealed partial class VaultStore
 {
-    public const int FormatVersion = 1;
+    public const int FormatVersion = 2;
 
     private static readonly JsonSerializerOptions EnvelopeOptions = new()
     {
@@ -41,6 +41,10 @@ public sealed class VaultStore
     public VaultSession CreateSession(string path, string account, string masterPassword, string shortKey, RecoverySetup? recovery = null)
     {
         RequireSecrets(account, masterPassword, shortKey);
+        if (recovery is not null)
+        {
+            throw new ArgumentException("新保险库使用加密密钥恢复，不再使用安全问题。", nameof(recovery));
+        }
         if (File.Exists(path))
         {
             throw new InvalidOperationException("保险库已存在。");
@@ -48,18 +52,17 @@ public sealed class VaultStore
 
         var trimmed = account.Trim();
         var kdf = new KdfMaterial(Profile, RandomNumberGenerator.GetBytes(Argon2Id.SaltLength));
-        var masterKey = Argon2Id.Derive(masterPassword, kdf.Profile, kdf.Salt);
+        var masterKey = RandomNumberGenerator.GetBytes(Argon2Id.HashLength);
         var entries = new List<VaultEntry>();
-        RecoverySecrets? secrets = null;
         byte[]? wrapKey = null;
         var handedOff = false;
         try
         {
-            secrets = recovery is null ? null : RecoverySecrets.Create(recovery, Profile);
+            var passwordWrap = WrapDataKey(masterPassword, kdf, masterKey, trimmed);
             var shortKeyMaterial = HashShortKey(shortKey, Profile);
             var (wrap, key) = CreateShortWrap(shortKey, Profile, masterKey);
             wrapKey = key;
-            WriteFile(path, trimmed, kdf, shortKeyMaterial, masterKey, entries, secrets);
+            WriteFile(path, trimmed, kdf, shortKeyMaterial, masterKey, entries, passwordWrap: passwordWrap);
             try
             {
                 WriteQuickUnlock(path, kdf.Salt, wrap);
@@ -72,13 +75,13 @@ public sealed class VaultStore
             }
 
             handedOff = true;
-            return new VaultSession(path, trimmed, kdf, shortKeyMaterial, masterKey, entries, secrets, null, wrap, wrapKey);
+            return new VaultSession(path, trimmed, kdf, shortKeyMaterial, masterKey, entries, null, null, wrap, wrapKey,
+                passwordWrap: passwordWrap);
         }
         finally
         {
             if (!handedOff)
             {
-                secrets?.Zero();
                 CryptographicOperations.ZeroMemory(masterKey);
                 if (wrapKey is not null)
                 {
@@ -125,12 +128,20 @@ public sealed class VaultStore
         var kdfDto = envelope.Kdf ?? throw new InvalidDataException("保险库文件无法读取。");
         var cipher = envelope.Cipher ?? throw new InvalidDataException("保险库文件无法读取。");
         var kdf = kdfDto.ToMaterial();
-        var masterKey = Argon2Id.Derive(masterPassword, kdf.Profile, kdf.Salt);
+        byte[] masterKey;
+        try
+        {
+            masterKey = UnwrapDataKey(masterPassword, kdf, envelope.PasswordWrap, envelope.Account);
+        }
+        catch (CryptographicException)
+        {
+            throw new UnlockFailedException();
+        }
         List<VaultEntry> entries;
         VaultLabels labels;
         try
         {
-            (entries, labels) = DecryptPayload(envelope.Account, masterKey, cipher);
+            (entries, labels) = DecryptPayload(envelope.Account, masterKey, cipher, envelope.Version);
         }
         catch (CryptographicException)
         {
@@ -163,7 +174,8 @@ public sealed class VaultStore
             quick.Zero();
         }
 
-        return new VaultSession(path, envelope.Account, kdf, shortKeyDto.ToMaterial(), masterKey, entries, recovery, labels, wrap, null, device);
+        return new VaultSession(path, envelope.Account, kdf, shortKeyDto.ToMaterial(), masterKey, entries, recovery, labels, wrap, null, device,
+            envelope.PasswordWrap, envelope.KeyFileSaved);
     }
 
     public VaultSession UnlockWithShortKey(string path, string shortKey)
@@ -208,7 +220,7 @@ public sealed class VaultStore
             VaultLabels labels;
             try
             {
-                (entries, labels) = DecryptPayload(envelope.Account, masterKey, cipher);
+                (entries, labels) = DecryptPayload(envelope.Account, masterKey, cipher, envelope.Version);
             }
             catch (CryptographicException)
             {
@@ -226,7 +238,8 @@ public sealed class VaultStore
             }
 
             handedOff = true;
-            return new VaultSession(path, envelope.Account, kdf, shortKeyDto.ToMaterial(), masterKey, entries, recovery, labels, wrap, wrapKey);
+            return new VaultSession(path, envelope.Account, kdf, shortKeyDto.ToMaterial(), masterKey, entries, recovery, labels, wrap, wrapKey,
+                passwordWrap: envelope.PasswordWrap, keyFileSaved: envelope.KeyFileSaved);
         }
         finally
         {
@@ -263,7 +276,7 @@ public sealed class VaultStore
             VaultLabels labels;
             try
             {
-                (entries, labels) = DecryptPayload(envelope.Account, masterKey, cipher);
+                (entries, labels) = DecryptPayload(envelope.Account, masterKey, cipher, envelope.Version);
             }
             catch (CryptographicException)
             {
@@ -281,7 +294,8 @@ public sealed class VaultStore
             }
 
             handedOff = true;
-            return new VaultSession(path, envelope.Account, kdf, shortKey, masterKey, entries, recovery, labels, null, null, true);
+            return new VaultSession(path, envelope.Account, kdf, shortKey, masterKey, entries, recovery, labels, null, null, true,
+                envelope.PasswordWrap, envelope.KeyFileSaved);
         }
         finally
         {
@@ -300,7 +314,9 @@ public sealed class VaultStore
         byte[] masterKey,
         IReadOnlyList<VaultEntry> entries,
         RecoverySecrets? recovery = null,
-        VaultLabels? labels = null)
+        VaultLabels? labels = null,
+        CipherDto? passwordWrap = null,
+        bool keyFileSaved = false)
     {
         var payload = new PayloadDto
         {
@@ -312,13 +328,16 @@ public sealed class VaultStore
         var plaintext = JsonSerializer.SerializeToUtf8Bytes(payload, PayloadOptions);
         try
         {
-            var (nonce, ciphertext, tag) = VaultCipher.Encrypt(masterKey, plaintext, VaultCipher.AssociatedData(account));
+            var version = passwordWrap is null ? 1 : FormatVersion;
+            var (nonce, ciphertext, tag) = VaultCipher.Encrypt(masterKey, plaintext, PayloadAad(account, version));
             var envelope = new EnvelopeDto
             {
-                Version = FormatVersion,
+                Version = version,
                 Format = "keep-password-vault",
                 Account = account,
                 Kdf = KdfDto.From(kdf),
+                PasswordWrap = passwordWrap,
+                KeyFileSaved = keyFileSaved,
                 ShortKey = ShortKeyDto.From(shortKey),
                 Recovery = recovery is null ? null : RecoveryDto.From(recovery, masterKey),
                 Cipher = new CipherDto
@@ -330,23 +349,7 @@ public sealed class VaultStore
                 }
             };
 
-            var json = JsonSerializer.SerializeToUtf8Bytes(envelope, EnvelopeOptions);
-            var directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            var temp = path + ".tmp";
-            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
-            {
-                stream.Write(json);
-                stream.Flush(true);
-            }
-
-            FileProtection.RestrictToCurrentUser(temp);
-            File.Move(temp, path, overwrite: true);
-            FileProtection.RestrictToCurrentUser(path);
+            WriteEnvelope(path, envelope);
         }
         finally
         {
@@ -685,7 +688,7 @@ public sealed class VaultStore
         }
     }
 
-    private static (List<VaultEntry> Entries, VaultLabels Labels) DecryptPayload(string account, byte[] masterKey, CipherDto cipher)
+    private static (List<VaultEntry> Entries, VaultLabels Labels) DecryptPayload(string account, byte[] masterKey, CipherDto cipher, int version = 1)
     {
         if (!string.Equals(cipher.Algorithm, "aes-256-gcm", StringComparison.Ordinal))
         {
@@ -697,7 +700,7 @@ public sealed class VaultStore
             Convert.FromBase64String(cipher.Nonce),
             Convert.FromBase64String(cipher.Ciphertext),
             Convert.FromBase64String(cipher.Tag),
-            VaultCipher.AssociatedData(account));
+            PayloadAad(account, version));
 
         try
         {
@@ -713,7 +716,7 @@ public sealed class VaultStore
         }
     }
 
-    private static EnvelopeDto ReadEnvelope(string path)
+    private static EnvelopeDto ReadEnvelope(string path, bool allowBackup = false)
     {
         EnvelopeDto envelope;
         try
@@ -721,13 +724,21 @@ public sealed class VaultStore
             var json = File.ReadAllBytes(path);
             envelope = JsonSerializer.Deserialize<EnvelopeDto>(json, EnvelopeOptions)
                 ?? throw new InvalidDataException("保险库文件无法读取。");
+            if (envelope.Format == "keep-password-backup")
+            {
+                if (!allowBackup) throw new InvalidDataException("这是加密备份，请在设置中使用加密密钥还原。");
+                ValidateBackupEnvelope(envelope);
+            }
+            else
+            {
+                ValidateEnvelope(envelope);
+            }
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or FormatException)
         {
             throw new InvalidDataException("保险库文件无法读取。", ex);
         }
 
-        ValidateEnvelope(envelope);
         return envelope;
     }
 
@@ -745,6 +756,10 @@ public sealed class VaultStore
 
         var envelope = ReadEnvelope(path);
         var recovery = envelope.Recovery ?? throw new InvalidOperationException("此保险库没有启用安全问题恢复。");
+        if (envelope.Version != 1)
+        {
+            throw new InvalidOperationException("请使用永久保存的加密密钥重置主密码。");
+        }
         var material = recovery.ToMaterial();
         var recoveryKey = Argon2Id.Derive(RecoverySecrets.Secret(answers), material.Profile, material.Salt);
         byte[]? oldMaster = null;
@@ -852,13 +867,22 @@ public sealed class VaultStore
 
     private static void ValidateEnvelope(EnvelopeDto envelope)
     {
-        if (envelope.Version != FormatVersion
+        if (envelope.Version is not (1 or FormatVersion)
             || !string.Equals(envelope.Format, "keep-password-vault", StringComparison.Ordinal)
             || envelope.Kdf is null
             || envelope.ShortKey is null
             || envelope.Cipher is null)
         {
             throw new InvalidDataException("保险库文件版本不受支持。");
+        }
+
+        if (envelope.Version == FormatVersion)
+        {
+            ValidatePasswordWrap(envelope.PasswordWrap);
+        }
+        else if (envelope.PasswordWrap is not null)
+        {
+            throw new InvalidDataException("保险库文件版本与密钥格式不匹配。");
         }
 
         if (string.IsNullOrWhiteSpace(envelope.Account) || envelope.Account.Length > 256)
@@ -985,6 +1009,10 @@ public sealed class VaultStore
         public string Account { get; set; } = "";
 
         public KdfDto? Kdf { get; set; }
+
+        public CipherDto? PasswordWrap { get; set; }
+
+        public bool KeyFileSaved { get; set; }
 
         public ShortKeyDto? ShortKey { get; set; }
 
@@ -1113,7 +1141,7 @@ public sealed class VaultStore
         public CipherDto? WrappedMasterKey { get; set; }
     }
 
-    private sealed class CipherDto
+    internal sealed class CipherDto
     {
         public string Algorithm { get; set; } = "aes-256-gcm";
 

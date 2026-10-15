@@ -16,15 +16,11 @@ public sealed class UnlockViewModel : ViewModelBase
     private string _error = "";
     private bool _busy;
     private bool _isCreate;
-    private bool _enableRecovery;
     private bool _riskAcknowledged;
     private bool _isRecovering;
     private bool _recoveryAvailable;
     private bool _hasShortUnlock;
     private bool _useMaster;
-    private string _question1 = "";
-    private string _question2 = "";
-    private string _question3 = "";
     private string _answer1 = "";
     private string _answer2 = "";
     private string _answer3 = "";
@@ -62,12 +58,14 @@ public sealed class UnlockViewModel : ViewModelBase
         {
             if (IsCreate)
             {
-                return "第一次使用会在本机创建保险库。请设置账号、主密码和短密钥。之后打开只需输入短密钥。";
+                return "设置账号、主密码和短密钥后，将生成一把独立的加密密钥。请按提示永久保存密钥文件。";
             }
 
             if (IsRecovering)
             {
-                return "回答安全问题后设置新的主密码。短密钥解锁会关闭，下次用主密码打开后会重新开启。";
+                return SupportsKeyRecovery
+                    ? "使用永久保存的加密密钥设置新主密码。保险库数据和加密密钥保持不变。"
+                    : "回答原有安全问题后设置新的主密码。解锁后请在设置中更换主密码，升级为独立加密密钥。";
             }
 
             if (ShowShortUnlock)
@@ -134,11 +132,10 @@ public sealed class UnlockViewModel : ViewModelBase
 
     public string RecoveryWarning => RecoveryRisk.Warning;
 
-    public bool EnableRecovery
-    {
-        get => _enableRecovery;
-        set => Set(ref _enableRecovery, value);
-    }
+    public bool SupportsKeyRecovery { get; private set; }
+    public bool ShowKeyRecovery => IsRecovering && SupportsKeyRecovery;
+    public bool ShowLegacyRecovery => IsRecovering && !SupportsKeyRecovery;
+    public string EncryptionKey { get; set; } = "";
 
     public bool RiskAcknowledged
     {
@@ -165,9 +162,6 @@ public sealed class UnlockViewModel : ViewModelBase
         private set => Set(ref _recoveryAvailable, value);
     }
 
-    public string Question1 { get => _question1; set => Set(ref _question1, value); }
-    public string Question2 { get => _question2; set => Set(ref _question2, value); }
-    public string Question3 { get => _question3; set => Set(ref _question3, value); }
     public string Answer1 { get => _answer1; set => Set(ref _answer1, value); }
     public string Answer2 { get => _answer2; set => Set(ref _answer2, value); }
     public string Answer3 { get => _answer3; set => Set(ref _answer3, value); }
@@ -275,7 +269,7 @@ public sealed class UnlockViewModel : ViewModelBase
             return false;
         }
 
-        if ((IsCreate && EnableRecovery || IsRecovering) && !RiskAcknowledged)
+        if (ShowLegacyRecovery && !RiskAcknowledged)
         {
             Error = RecoveryRisk.Warning;
             return false;
@@ -297,7 +291,6 @@ public sealed class UnlockViewModel : ViewModelBase
         var master = MasterPassword;
         var shortKey = ShortKey;
         var answers = new[] { Answer1, Answer2, Answer3 };
-        var questions = new[] { Question1, Question2, Question3 };
         var useShort = ShowShortUnlock;
         IsBusy = true;
         try
@@ -306,23 +299,14 @@ public sealed class UnlockViewModel : ViewModelBase
             {
                 if (IsRecovering)
                 {
-                    return _store.Recover(_path, answers, master);
+                    return SupportsKeyRecovery
+                        ? _store.RecoverWithKey(_path, EncryptionKey, master)
+                        : _store.Recover(_path, answers, master);
                 }
 
                 if (IsCreate)
                 {
-                    RecoverySetup? recovery = null;
-                    if (EnableRecovery)
-                    {
-                        recovery = new RecoverySetup
-                        {
-                            RiskAcknowledged = true,
-                            Questions = questions,
-                            Answers = answers
-                        };
-                    }
-
-                    return _store.CreateSession(_path, account, master, shortKey, recovery);
+                    return _store.CreateSession(_path, account, master, shortKey);
                 }
 
                 if (useShort)
@@ -334,7 +318,7 @@ public sealed class UnlockViewModel : ViewModelBase
             });
             return true;
         }
-        catch (Exception ex) when (ex is UnlockFailedException or RecoveryFailedException or ArgumentException or InvalidOperationException or IOException or InvalidDataException)
+        catch (Exception ex) when (ex is UnlockFailedException or RecoveryFailedException or CredentialRejectedException or ArgumentException or InvalidOperationException or InvalidDataException or IOException or UnauthorizedAccessException)
         {
             Error = Friendly(ex);
             return false;
@@ -349,6 +333,7 @@ public sealed class UnlockViewModel : ViewModelBase
             Answer1 = "";
             Answer2 = "";
             Answer3 = "";
+            EncryptionKey = "";
         }
     }
 
@@ -359,7 +344,7 @@ public sealed class UnlockViewModel : ViewModelBase
             return;
         }
 
-        var questions = _store.RecoveryQuestions(_path);
+        var questions = SupportsKeyRecovery ? [] : _store.RecoveryQuestions(_path);
         RecoveryQuestion1 = questions.ElementAtOrDefault(0) ?? "";
         RecoveryQuestion2 = questions.ElementAtOrDefault(1) ?? "";
         RecoveryQuestion3 = questions.ElementAtOrDefault(2) ?? "";
@@ -375,6 +360,17 @@ public sealed class UnlockViewModel : ViewModelBase
         Answer1 = "";
         Answer2 = "";
         Answer3 = "";
+        EncryptionKey = "";
+    }
+
+    public void CancelKeySetup()
+    {
+        Session?.Dispose();
+        Session = null;
+        IsCreate = false;
+        IsRecovering = false;
+        RefreshAccount();
+        Error = "密钥文件尚未保存。下次解锁后会继续提示保存。";
     }
 
     private void RefreshAccount()
@@ -392,7 +388,8 @@ public sealed class UnlockViewModel : ViewModelBase
         {
             AccountName = _store.ReadAccount(_path);
             AccountLabel = "账号 " + AccountName;
-            RecoveryAvailable = _store.HasRecovery(_path);
+            SupportsKeyRecovery = _store.UsesIndependentKey(_path);
+            RecoveryAvailable = SupportsKeyRecovery || _store.HasRecovery(_path);
             HasShortUnlock = _store.HasShortUnlock(_path);
         }
         catch (Exception ex) when (ex is InvalidDataException or IOException)
@@ -418,6 +415,8 @@ public sealed class UnlockViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowHint));
         OnPropertyChanged(nameof(MasterLabel));
         OnPropertyChanged(nameof(MasterWatermark));
+        OnPropertyChanged(nameof(ShowKeyRecovery));
+        OnPropertyChanged(nameof(ShowLegacyRecovery));
     }
 
     private static string Friendly(Exception ex)

@@ -75,7 +75,7 @@
 
     <ScrollViewer x:Name="Scroller" Grid.Column="1" HorizontalScrollBarVisibility="Disabled">
       <Panel MinHeight="{Binding Bounds.Height, ElementName=Scroller}">
-        <StackPanel Width="320" Margin="128,40,40,40" HorizontalAlignment="Left" VerticalAlignment="Center">
+        <StackPanel x:Name="UnlockForm" Width="320" Margin="128,40,40,40" HorizontalAlignment="Left" VerticalAlignment="Center">
           <Border Width="60" Height="60" CornerRadius="12" Background="{DynamicResource Kp.AccentSoft}" HorizontalAlignment="Left" IsVisible="{Binding !IsCreate}">
             <TextBlock Text="{Binding Initial}" FontSize="26" FontWeight="SemiBold" Foreground="{DynamicResource Kp.Accent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
@@ -89,7 +89,12 @@
             <TextBox Text="{Binding Account}" views:AsciiInput.IsEnabled="True" Watermark="例如 ada" Classes="mono" />
           </StackPanel>
 
-          <StackPanel IsVisible="{Binding IsRecovering}">
+          <StackPanel IsVisible="{Binding ShowKeyRecovery}" Spacing="8">
+            <TextBlock Text="加密密钥" Classes="label" />
+            <TextBox x:Name="RecoveryKeyBox" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="粘贴完整的 KP2- 加密密钥" />
+            <Button Classes="soft" Content="选择密钥文件…" Click="OnChooseRecoveryKey" HorizontalAlignment="Left" />
+          </StackPanel>
+          <StackPanel IsVisible="{Binding ShowLegacyRecovery}">
             <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8">
               <TextBlock Text="{Binding RecoveryWarning}" TextWrapping="Wrap" Foreground="{DynamicResource Kp.Danger}" />
             </Border>
@@ -135,7 +140,7 @@
             </Grid>
           </Border>
 
-          <TextBlock Text="{Binding Error}" Foreground="{DynamicResource Kp.Danger}" FontSize="12.5" TextWrapping="Wrap" Margin="2,8,0,0" IsVisible="{Binding HasError}" />
+          <TextBlock views:Motion.RevealOnShow="True" Text="{Binding Error}" Foreground="{DynamicResource Kp.Danger}" FontSize="12.5" TextWrapping="Wrap" Margin="2,8,0,0" IsVisible="{Binding HasError}" />
 
           <WrapPanel Margin="2,12,0,0" IsVisible="{Binding IsQuick}">
             <Button Classes="link" Content="改用主密码" Margin="0,0,18,4" Click="OnUseMaster" IsVisible="{Binding ShowUseMaster}" />
@@ -150,23 +155,6 @@
             <TextBox x:Name="ShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="之后每次用它解锁" Classes="mono" />
             <TextBlock Text="确认短密钥" Classes="label" />
             <TextBox x:Name="ConfirmShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" />
-            <CheckBox Content="启用安全问题恢复（安全性显著降低）" IsChecked="{Binding EnableRecovery}" Margin="0,12,0,0" />
-            <StackPanel IsVisible="{Binding EnableRecovery}" Margin="0,8,0,0">
-              <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8">
-                <TextBlock Text="{Binding RecoveryWarning}" TextWrapping="Wrap" Foreground="{DynamicResource Kp.Danger}" />
-              </Border>
-              <CheckBox Content="我已理解：知道答案的人可以重置并读取保险库" IsChecked="{Binding RiskAcknowledged}" Margin="0,4,0,8" />
-              <TextBlock Text="问题 1" Classes="label" />
-              <TextBox Text="{Binding Question1}" />
-              <TextBox x:Name="Answer1Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 1" Margin="0,4,0,0" />
-              <TextBlock Text="问题 2" Classes="label" />
-              <TextBox Text="{Binding Question2}" />
-              <TextBox x:Name="Answer2Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 2" Margin="0,4,0,0" />
-              <TextBlock Text="问题 3" Classes="label" />
-              <TextBox Text="{Binding Question3}" />
-              <TextBox x:Name="Answer3Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="答案 3" Margin="0,4,0,0" />
-              <TextBlock Text="答案不区分大小写，多余空格会被忽略。" Classes="muted" TextWrapping="Wrap" Margin="0,8,0,0" />
-            </StackPanel>
           </StackPanel>
 
           <StackPanel IsVisible="{Binding IsRecovering}">

@@ -27,11 +27,10 @@ public static class NativeHostBridge
         try
         {
             using var client = new TcpClient();
-            var connect = client.ConnectAsync(IPAddress.Loopback, channel.Port);
-            if (!connect.Wait(TimeSpan.FromSeconds(2)))
-            {
-                return AutofillProtocol.Serialize(AutofillResponse.Error("Keep Password 客户端未运行。"));
-            }
+            // GetAwaiter preserves SocketException instead of wrapping it in
+            // AggregateException when a stale session points to a closed port.
+            client.ConnectAsync(IPAddress.Loopback, channel.Port)
+                .WaitAsync(TimeSpan.FromSeconds(2)).GetAwaiter().GetResult();
 
             client.ReceiveTimeout = 120000;
             client.SendTimeout = 15000;
@@ -39,7 +38,7 @@ public static class NativeHostBridge
             NativeMessageFraming.Write(stream, authorized);
             return NativeMessageFraming.Read(stream) ?? AutofillProtocol.Serialize(AutofillResponse.Error("客户端没有响应。"));
         }
-        catch (Exception ex) when (ex is IOException or SocketException or InvalidDataException)
+        catch (Exception ex) when (ex is IOException or SocketException or InvalidDataException or TimeoutException)
         {
             return AutofillProtocol.Serialize(AutofillResponse.Error("无法连接 Keep Password 客户端。"));
         }

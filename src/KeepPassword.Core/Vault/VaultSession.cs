@@ -3,7 +3,7 @@ using KeepPassword.Core.Crypto;
 
 namespace KeepPassword.Core.Vault;
 
-public sealed class VaultSession : IDisposable
+public sealed partial class VaultSession : IDisposable
 {
     private readonly object _gate = new();
     private string _path;
@@ -11,7 +11,7 @@ public sealed class VaultSession : IDisposable
     private VaultStore.ShortKeyMaterial _shortKey;
     private readonly List<VaultEntry> _entries;
     private readonly VaultLabels _labels;
-    private byte[] _masterKey;
+    private byte[] _dataKey;
     private VaultStore.ShortWrapMaterial? _shortWrap;
     private byte[]? _shortWrapKey;
     private bool _deviceQuick;
@@ -29,18 +29,22 @@ public sealed class VaultSession : IDisposable
         VaultLabels? labels = null,
         VaultStore.ShortWrapMaterial? shortWrap = null,
         byte[]? shortWrapKey = null,
-        bool deviceQuick = false)
+        bool deviceQuick = false,
+        VaultStore.CipherDto? passwordWrap = null,
+        bool keyFileSaved = false)
     {
         _path = path;
         Account = account;
         _kdf = kdf;
         _shortKey = shortKey;
-        _masterKey = masterKey;
+        _dataKey = masterKey;
         _entries = entries;
         _recovery = recovery;
         _shortWrap = shortWrap;
         _shortWrapKey = shortWrapKey;
         _deviceQuick = deviceQuick;
+        _passwordWrap = passwordWrap;
+        _keyFileSaved = keyFileSaved;
         _labels = labels ?? VaultLabels.From(null, null, entries);
         _unlocked = true;
     }
@@ -203,7 +207,7 @@ public sealed class VaultSession : IDisposable
         {
             lock (_gate)
             {
-                return _unlocked && (_shortWrapKey is not null || _deviceQuick);
+                return _unlocked && (_shortWrap is not null || _deviceQuick);
             }
         }
     }
@@ -413,7 +417,7 @@ public sealed class VaultSession : IDisposable
         lock (_gate)
         {
             EnsureUnlocked();
-            VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _masterKey, _entries, _recovery, _labels);
+            VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _dataKey, _entries, _recovery, _labels, _passwordWrap, _keyFileSaved);
         }
     }
 
@@ -437,53 +441,56 @@ public sealed class VaultSession : IDisposable
         lock (_gate)
         {
             EnsureUnlocked();
-            var derived = Argon2Id.Derive(currentPassword, _kdf.Profile, _kdf.Salt);
-            try
-            {
-                if (!CryptographicOperations.FixedTimeEquals(derived, _masterKey))
-                {
-                    throw new CredentialRejectedException("主密码不正确。");
-                }
-            }
-            finally
-            {
-                CryptographicOperations.ZeroMemory(derived);
-            }
+            VerifyMasterPassword(currentPassword);
 
             var salt = RandomNumberGenerator.GetBytes(Argon2Id.SaltLength);
-            var next = Argon2Id.Derive(newPassword, _kdf.Profile, salt);
-            var previous = _masterKey;
-            var previousKdf = _kdf;
-            var previousWrap = _shortWrap;
-            var nextWrap = _shortWrapKey is null || _shortWrap is null
+            var upgrading = _passwordWrap is null;
+            var next = upgrading ? RandomNumberGenerator.GetBytes(Argon2Id.HashLength) : _dataKey;
+            var previous = _dataKey;
+            var nextKdf = new VaultStore.KdfMaterial(_kdf.Profile, salt);
+            var passwordWrap = VaultStore.WrapDataKey(newPassword, nextKdf, next, Account);
+            var nextWrap = !upgrading ? _shortWrap : _shortWrapKey is null || _shortWrap is null
                 ? null
                 : VaultStore.RewrapShortUnlock(_shortWrap, _shortWrapKey, next);
             try
             {
-                _masterKey = next;
-                _kdf = new VaultStore.KdfMaterial(_kdf.Profile, salt);
-                _shortWrap = nextWrap;
-                VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _masterKey, _entries, _recovery, _labels);
+                if (upgrading)
+                {
+                    VaultStore.WriteFile(_path, Account, nextKdf, _shortKey, next, _entries, labels: _labels,
+                        passwordWrap: passwordWrap);
+                }
+                else
+                {
+                    VaultStore.UpdateKeyHeader(_path, nextKdf, passwordWrap, _keyFileSaved);
+                }
             }
             catch
             {
-                _masterKey = previous;
-                _kdf = previousKdf;
-                _shortWrap = previousWrap;
-                CryptographicOperations.ZeroMemory(next);
+                if (upgrading) CryptographicOperations.ZeroMemory(next);
                 throw;
+            }
+
+            _dataKey = next;
+            _kdf = nextKdf;
+            _passwordWrap = passwordWrap;
+            _shortWrap = nextWrap;
+            if (upgrading)
+            {
+                _keyFileSaved = false;
+                _recovery?.Zero();
+                _recovery = null;
             }
 
             try
             {
-                if (_shortWrap is not null && _shortWrapKey is not null)
+                if (_shortWrap is not null)
                 {
                     VaultStore.WriteQuickUnlock(_path, _kdf.Salt, _shortWrap);
                     _deviceQuick = false;
                 }
                 else if (_deviceQuick)
                 {
-                    if (!VaultStore.TryWriteDeviceQuickUnlock(_path, _kdf.Salt, _masterKey))
+                    if (!VaultStore.TryWriteDeviceQuickUnlock(_path, _kdf.Salt, _dataKey))
                     {
                         VaultStore.DeleteQuickUnlock(_path);
                         _deviceQuick = false;
@@ -507,7 +514,7 @@ public sealed class VaultSession : IDisposable
                 }
             }
 
-            CryptographicOperations.ZeroMemory(previous);
+            if (upgrading) CryptographicOperations.ZeroMemory(previous);
         }
     }
 
@@ -544,21 +551,10 @@ public sealed class VaultSession : IDisposable
         lock (_gate)
         {
             EnsureUnlocked();
-            var derived = Argon2Id.Derive(masterPassword, _kdf.Profile, _kdf.Salt);
-            try
-            {
-                if (!CryptographicOperations.FixedTimeEquals(derived, _masterKey))
-                {
-                    throw new CredentialRejectedException("主密码不正确。");
-                }
-            }
-            finally
-            {
-                CryptographicOperations.ZeroMemory(derived);
-            }
+            VerifyMasterPassword(masterPassword);
 
             var nextShort = VaultStore.HashShortKey(newShortKey, _shortKey.Profile);
-            var (wrap, key) = VaultStore.CreateShortWrap(newShortKey, _shortKey.Profile, _masterKey);
+            var (wrap, key) = VaultStore.CreateShortWrap(newShortKey, _shortKey.Profile, _dataKey);
             var previousShort = _shortKey;
             var previousWrap = _shortWrap;
             var previousKey = _shortWrapKey;
@@ -567,7 +563,7 @@ public sealed class VaultSession : IDisposable
             _shortWrapKey = key;
             try
             {
-                VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _masterKey, _entries, _recovery, _labels);
+                VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _dataKey, _entries, _recovery, _labels, _passwordWrap, _keyFileSaved);
             }
             catch
             {
@@ -611,7 +607,7 @@ public sealed class VaultSession : IDisposable
                 throw new ArgumentException("短密钥不正确。", nameof(shortKey));
             }
 
-            var (wrap, key) = VaultStore.CreateShortWrap(shortKey, _shortKey.Profile, _masterKey);
+            var (wrap, key) = VaultStore.CreateShortWrap(shortKey, _shortKey.Profile, _dataKey);
             var previousWrap = _shortWrap;
             var previousKey = _shortWrapKey;
             _shortWrap = wrap;
@@ -638,11 +634,16 @@ public sealed class VaultSession : IDisposable
 
     public void Lock()
     {
+        bool wasUnlocked;
         lock (_gate)
         {
+            wasUnlocked = _unlocked;
             ClearSecrets();
         }
+        if (wasUnlocked) Locked?.Invoke(this, EventArgs.Empty);
     }
+
+    public event EventHandler? Locked;
 
     public void Dispose() => Lock();
 
@@ -656,9 +657,9 @@ public sealed class VaultSession : IDisposable
 
     private void ClearSecrets()
     {
-        if (_masterKey.Length > 0)
+        if (_dataKey.Length > 0)
         {
-            CryptographicOperations.ZeroMemory(_masterKey);
+            CryptographicOperations.ZeroMemory(_dataKey);
         }
 
         if (_shortWrapKey is not null)

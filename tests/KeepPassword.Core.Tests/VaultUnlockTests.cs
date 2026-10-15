@@ -159,21 +159,23 @@ public class VaultUnlockTests
     }
 
     [Fact]
-    public void ChangingMasterWithoutShortWrap_DisablesShortUnlock()
+    public void ChangingMasterAfterPasswordUnlock_PreservesExistingShortWrap()
     {
         var path = TestVault.NewPath();
         var store = TestVault.Store();
         store.Create(path, "ada", "correct horse", "short-key");
         using (var session = store.Unlock(path, "correct horse"))
         {
-            Assert.False(session.ShortUnlockReady);
+            Assert.True(session.ShortUnlockReady);
             session.ChangeMasterPassword("correct horse", "new horse");
-            Assert.False(session.ShortUnlockReady);
+            Assert.True(session.ShortUnlockReady);
         }
 
-        Assert.False(store.HasShortUnlock(path));
+        Assert.True(store.HasShortUnlock(path));
         using var unlocked = store.Unlock(path, "new horse");
         Assert.Equal("ada", unlocked.Account);
+        using var quick = store.UnlockWithShortKey(path, "short-key");
+        Assert.Equal("ada", quick.Account);
     }
 
     [Fact]
@@ -181,15 +183,11 @@ public class VaultUnlockTests
     {
         var path = TestVault.NewPath();
         var store = TestVault.Store();
-        store.Create(path, "ada", "correct horse", "short-key", new RecoverySetup
-        {
-            RiskAcknowledged = true,
-            Questions = ["一", "二", "三"],
-            Answers = ["alpha", "beta", "gamma"]
-        });
+        using var created = store.CreateSession(path, "ada", "correct horse", "short-key");
+        var encryptionKey = created.PendingEncryptionKey;
         Assert.True(store.HasShortUnlock(path));
 
-        using (var recovered = store.Recover(path, ["alpha", "beta", "gamma"], "other horse"))
+        using (var recovered = store.RecoverWithKey(path, encryptionKey, "other horse"))
         {
             Assert.False(recovered.ShortUnlockReady);
         }

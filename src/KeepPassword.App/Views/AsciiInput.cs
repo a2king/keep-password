@@ -2,13 +2,14 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 
 namespace KeepPassword.App.Views;
 
 /// <summary>
 /// 密码类输入框：聚焦时把中日韩输入法切到英文模式（不换键盘布局），其他非英文键盘才切换到英文布局；
-/// 失焦或窗口失活时还原，并丢弃键入的非 ASCII 字符。
+/// 禁用控件的 IME 组词，键入和粘贴仅接受可打印 ASCII；失焦或窗口失活时还原输入法状态。
 /// </summary>
 public static class AsciiInput
 {
@@ -16,6 +17,7 @@ public static class AsciiInput
         AvaloniaProperty.RegisterAttached<TextBox, bool>("IsEnabled", typeof(AsciiInput));
 
     private static TextBox? _active;
+    private static TopLevel? _activeTop;
     private static WindowsIme.State? _saved;
 
     static AsciiInput()
@@ -31,17 +33,27 @@ public static class AsciiInput
     {
         if (e.NewValue is true)
         {
+            InputMethod.SetIsInputMethodEnabled(box, false);
             box.GotFocus += OnGotFocus;
             box.LostFocus += OnLostFocus;
+            box.DetachedFromVisualTree += OnDetached;
+            box.PastingFromClipboard += OnPaste;
             box.AddHandler(InputElement.TextInputEvent, OnTextInput, RoutingStrategies.Tunnel);
         }
         else
         {
+            OnLostFocus(box, new RoutedEventArgs());
+            box.ClearValue(InputMethod.IsInputMethodEnabledProperty);
             box.GotFocus -= OnGotFocus;
             box.LostFocus -= OnLostFocus;
+            box.DetachedFromVisualTree -= OnDetached;
+            box.PastingFromClipboard -= OnPaste;
             box.RemoveHandler(InputElement.TextInputEvent, OnTextInput);
         }
     }
+
+    private static void OnDetached(object? sender, VisualTreeAttachmentEventArgs e) =>
+        OnLostFocus(sender, new RoutedEventArgs());
 
     private static void OnGotFocus(object? sender, GotFocusEventArgs e)
     {
@@ -50,13 +62,9 @@ public static class AsciiInput
             return;
         }
 
-        if (_active is { } previous && TopLevel.GetTopLevel(previous) is Window old)
-        {
-            old.Activated -= OnWindowActivated;
-            old.Deactivated -= OnWindowDeactivated;
-        }
-
+        ReleaseActive();
         _active = box;
+        _activeTop = top;
         if (top is Window window)
         {
             window.Activated += OnWindowActivated;
@@ -73,14 +81,20 @@ public static class AsciiInput
             return;
         }
 
-        if (TopLevel.GetTopLevel(box) is Window window)
+        ReleaseActive();
+    }
+
+    private static void ReleaseActive()
+    {
+        if (_activeTop is Window window)
         {
             window.Activated -= OnWindowActivated;
             window.Deactivated -= OnWindowDeactivated;
         }
 
         _active = null;
-        Restore(TopLevel.GetTopLevel(box));
+        Restore(_activeTop);
+        _activeTop = null;
     }
 
     private static void OnWindowActivated(object? sender, EventArgs e)
@@ -124,14 +138,42 @@ public static class AsciiInput
             return;
         }
 
-        var kept = new string(e.Text.Where(c => c is >= ' ' and <= '~').ToArray());
-        if (kept.Length == 0)
+        if (!IsPrintableAscii(e.Text))
         {
             e.Handled = true;
         }
-        else if (kept.Length != e.Text.Length)
+    }
+
+    private static bool IsPrintableAscii(string text) => text.All(c => c is >= ' ' and <= '~');
+
+    private static async void OnPaste(object? sender, RoutedEventArgs e)
+    {
+        // TextBox.Paste bypasses TextInput. Reject the whole operation instead of silently
+        // changing a password by removing unsupported characters.
+        e.Handled = true;
+        if (sender is not TextBox { IsReadOnly: false } box || TopLevel.GetTopLevel(box) is not { Clipboard: { } clipboard } top)
         {
-            e.Text = kept;
+            return;
+        }
+
+        var before = box.Text;
+        var start = box.SelectionStart;
+        var end = box.SelectionEnd;
+        try
+        {
+            var text = await clipboard.TryGetTextAsync();
+            if (string.IsNullOrEmpty(text) || !IsPrintableAscii(text)
+                || !GetIsEnabled(box) || !box.IsFocused || !box.IsEffectivelyVisible || box.IsReadOnly
+                || TopLevel.GetTopLevel(box) != top || box.Text != before
+                || box.SelectionStart != start || box.SelectionEnd != end)
+            {
+                return;
+            }
+            box.SelectedText = text;
+        }
+        catch (Exception ex) when (ex is ExternalException or IOException or UnauthorizedAccessException)
+        {
+            // A busy/unavailable clipboard must leave the password unchanged.
         }
     }
 

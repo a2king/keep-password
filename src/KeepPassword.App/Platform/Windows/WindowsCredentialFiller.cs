@@ -28,39 +28,38 @@ public sealed class WindowsCredentialFiller : ICredentialFiller
             IUIAutomationElement? usernameElement = null;
             var releasePassword = false;
             var releaseUsername = false;
-            if (!WindowsPasswordFieldDetector.TryTakeCached(field.FieldKey, out passwordElement, out usernameElement))
+            var automation = (IUIAutomation)new CUIAutomation();
+            try
             {
-                var automation = (IUIAutomation)new CUIAutomation();
-                try
+                if (!WindowsPasswordFieldDetector.TryTakeCached(field.FieldKey, out passwordElement, out usernameElement))
                 {
                     if (field.PasswordHandle != 0 && automation.ElementFromHandle(field.PasswordHandle, out passwordElement) >= 0)
                     {
-                        releasePassword = true;
+                        releasePassword = passwordElement is not null;
                     }
 
                     if (field.UsernameHandle != 0 && automation.ElementFromHandle(field.UsernameHandle, out usernameElement) >= 0)
                     {
-                        releaseUsername = true;
+                        releaseUsername = usernameElement is not null;
                     }
                 }
-                finally
+
+                return Type(automation, field.ProcessId, usernameElement, passwordElement, username, password);
+            }
+            finally
+            {
+                if (releasePassword && passwordElement is not null)
                 {
-                    Marshal.ReleaseComObject(automation);
+                    Marshal.ReleaseComObject(passwordElement);
                 }
-            }
 
-            var filled = Type(usernameElement, passwordElement, username, password);
-            if (releasePassword)
-            {
-                Marshal.ReleaseComObject(passwordElement!);
-            }
+                if (releaseUsername && usernameElement is not null)
+                {
+                    Marshal.ReleaseComObject(usernameElement);
+                }
 
-            if (releaseUsername && usernameElement is not null)
-            {
-                Marshal.ReleaseComObject(usernameElement);
+                Marshal.ReleaseComObject(automation);
             }
-
-            return filled;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException)
         {
@@ -68,33 +67,66 @@ public sealed class WindowsCredentialFiller : ICredentialFiller
         }
     }
 
-    private static bool Type(IUIAutomationElement? usernameElement, IUIAutomationElement? passwordElement, string username, string password)
+    private static bool Type(
+        IUIAutomation automation,
+        int processId,
+        IUIAutomationElement? usernameElement,
+        IUIAutomationElement? passwordElement,
+        string username,
+        string password)
     {
-        var typed = false;
-        foreach (var step in AutofillPolicy.PlanAutoType(username, password))
+        if (!IsTarget(passwordElement, processId, isPassword: true))
         {
-            if (step.Action == AutoTypeAction.Tab)
-            {
-                typed |= WindowsTextInput.TypeTab();
-                continue;
-            }
+            return false;
+        }
 
-            var typingUsername = username.Length > 0 && step.Text == username && usernameElement is not null;
-            var target = typingUsername ? usernameElement : passwordElement;
-            if (target is null)
-            {
-                continue;
-            }
-
-            if (target.SetFocus() < 0)
+        // Each value has an explicit target. Comparing the values misroutes the
+        // password when it happens to be identical to the username.
+        if (username.Length > 0 && usernameElement is not null)
+        {
+            if (!IsTarget(usernameElement, processId, isPassword: false)
+                || !TypeInto(automation, usernameElement, username))
             {
                 return false;
             }
-
-            Thread.Sleep(30);
-            typed |= WindowsTextInput.TypeReplacing(step.Text ?? "");
         }
 
-        return typed;
+        // Password-only screens do not need a synthetic username or Tab key.
+        return TypeInto(automation, passwordElement!, password);
+    }
+
+    private static bool IsTarget(IUIAutomationElement? target, int processId, bool isPassword) =>
+        target is not null
+        && target.get_CurrentProcessId(out var actualProcessId) >= 0
+        && actualProcessId == processId
+        && target.get_CurrentIsPassword(out var actualIsPassword) >= 0
+        && (actualIsPassword != 0) == isPassword;
+
+    private static bool TypeInto(IUIAutomation automation, IUIAutomationElement target, string text)
+    {
+        if (target.SetFocus() < 0)
+        {
+            return false;
+        }
+
+        Thread.Sleep(30);
+        if (automation.GetFocusedElement(out var focused) < 0 || focused is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (automation.CompareElements(target, focused, out var same) < 0 || same == 0)
+            {
+                return false;
+            }
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(focused);
+        }
+
+        return WindowsTextInput.TypeReplacing(text);
     }
 }

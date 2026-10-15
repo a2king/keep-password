@@ -26,9 +26,11 @@ public partial class TotpView : UserControl
 
     public void Stop()
     {
-        _timer.Stop();
+        Pause();
         DataContext = null;
     }
+
+    public void Pause() => _timer.Stop();
 
     private async void OnCopy(object? sender, RoutedEventArgs e)
     {

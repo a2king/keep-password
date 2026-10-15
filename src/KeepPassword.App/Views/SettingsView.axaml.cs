@@ -17,10 +17,25 @@ public partial class SettingsView : UserControl
     public SettingsView()
     {
         InitializeComponent();
+        AnimateStatus(LabelStatus);
+        AnimateStatus(DirectoryStatus);
+        AnimateStatus(KeyStatus);
         ThemeManager.ThemeChanged += UpdateThemeButtons;
     }
 
+    private static void AnimateStatus(TextBlock status)
+    {
+        status.PropertyChanged += (_, change) =>
+        {
+            if (change.Property == TextBlock.TextProperty && !string.IsNullOrWhiteSpace(status.Text))
+            {
+                _ = Motion.EnterAsync(status, 3);
+            }
+        };
+    }
+
     public event EventHandler? VaultChanged;
+    public event EventHandler? LockRequested;
 
     private Window Host => TopLevel.GetTopLevel(this) as Window
         ?? throw new InvalidOperationException("设置页尚未挂到窗口上。");
@@ -37,7 +52,9 @@ public partial class SettingsView : UserControl
         KeyStatus.Text = "";
         ErrorBox.IsVisible = false;
         UpdateThemeButtons(ThemeManager.CurrentTheme);
+        UpdateMotionButtons();
         RebuildLabels();
+        UpdateEncryptionKeyStatus();
         Scroller.Offset = default;
     }
 
@@ -86,6 +103,8 @@ public partial class SettingsView : UserControl
             _session.Tags,
             name => entries.Count(entry => entry.Tags.Contains(name, LabelName.Comparer)),
             isSpace: false);
+        _ = Motion.EnterAsync(SpaceList, 4);
+        _ = Motion.EnterAsync(TagList, 4);
     }
 
     private void FillLabelList(StackPanel panel, IReadOnlyList<string> names, Func<string, int> count, bool isSpace)
@@ -221,6 +240,40 @@ public partial class SettingsView : UserControl
     private void OnThemeLight(object? sender, RoutedEventArgs e) => ApplyTheme(ThemeManager.LightTheme);
     private void OnThemeDark(object? sender, RoutedEventArgs e) => ApplyTheme(ThemeManager.DarkTheme);
     private void OnThemeSystem(object? sender, RoutedEventArgs e) => ApplyTheme(ThemeManager.SystemTheme);
+
+    private void OnMotionFull(object? sender, RoutedEventArgs e) => ApplyMotion(MotionPreferences.FullMode);
+    private void OnMotionSystem(object? sender, RoutedEventArgs e) => ApplyMotion(MotionPreferences.SystemMode);
+    private void OnMotionReduced(object? sender, RoutedEventArgs e) => ApplyMotion(MotionPreferences.ReducedMode);
+
+    private void ApplyMotion(string mode)
+    {
+        try
+        {
+            MotionPreferences.SetMode(mode);
+            UpdateMotionButtons();
+            _ = Motion.RefreshAsync(MotionStatus);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            MotionStatus.Text = "动画设置未能保存：" + ex.Message;
+        }
+    }
+
+    private void UpdateMotionButtons()
+    {
+        var mode = MotionPreferences.CurrentMode;
+        SetSegment(MotionFullBtn, mode == MotionPreferences.FullMode);
+        SetSegment(MotionSystemBtn, mode == MotionPreferences.SystemMode);
+        SetSegment(MotionReducedBtn, mode == MotionPreferences.ReducedMode);
+        MotionStatus.Text = mode switch
+        {
+            MotionPreferences.ReducedMode => "立即切换页面和面板，保留基础操作反馈。",
+            MotionPreferences.SystemMode => MotionPreferences.IsEnabled
+                ? "当前系统允许动画，过渡效果已开启。"
+                : "当前系统已关闭动画，过渡效果也会关闭。",
+            _ => "已开启页面、面板与弹窗的过渡动画。"
+        };
+    }
 
     private void ApplyTheme(string theme)
     {
@@ -361,15 +414,22 @@ public partial class SettingsView : UserControl
             var current = CurrentMasterBox.Text ?? "";
             var session = _session;
             await Task.Run(() => session.ChangeMasterPassword(current, next));
+            if (_session != session || !session.IsUnlocked) return;
             CurrentMasterBox.Text = "";
             NewMasterBox.Text = "";
             ConfirmMasterBox.Text = "";
             DirectoryStatus.Text = session.ShortUnlockReady
-                ? "主密码已更换，保险库已用新密钥重新加密。短密钥仍可解锁。"
-                : "主密码已更换，保险库已用新密钥重新加密。短密钥解锁已关闭，下次用主密码打开后会重新开启。";
+                ? "主密码已更换。短密钥仍可解锁，加密密钥保持不变。"
+                : "主密码已更换。下次使用新主密码解锁，加密密钥保持不变。";
             ErrorBox.IsVisible = false;
+            UpdateEncryptionKeyStatus();
+            if (session.NeedsKeyFileSave)
+            {
+                DirectoryStatus.Text = "已升级为独立加密密钥，请永久保存生成的密钥文件。";
+                await SavePendingKeyAsync(session);
+            }
         }
-        catch (Exception ex) when (ex is CredentialRejectedException or ArgumentException or IOException)
+        catch (Exception ex) when (ex is CredentialRejectedException or ArgumentException or InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             ShowError(ex.Message);
         }
@@ -377,29 +437,32 @@ public partial class SettingsView : UserControl
 
     private async void OnExport(object? sender, RoutedEventArgs e)
     {
-        if (_session is null)
+        if (_session is not { IsUnlocked: true } session)
         {
             return;
         }
 
         try
         {
+            if (!session.UsesIndependentKey)
+                throw new InvalidOperationException("请先更换主密码并保存加密密钥，再导出新版加密备份。");
             var path = await SafeStoragePickers.PickSaveFileAsync(
                 Host,
                 "导出加密备份",
                 "keep-password-backup.kpvault",
                 [new FilePickerFileType("Keep Password 保险库") { Patterns = ["*.kpvault"] }],
                 _pauseWatcher);
-            if (string.IsNullOrWhiteSpace(path))
+            if (string.IsNullOrWhiteSpace(path) || _session != session || !session.IsUnlocked)
             {
                 return;
             }
 
-            EncryptedBackup.Export(_session.VaultPath, path);
+            session.EnsureExternalPath(path);
+            EncryptedBackup.Export(session.VaultPath, path);
             DirectoryStatus.Text = "已导出加密备份。";
             ErrorBox.IsVisible = false;
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException)
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
             ShowError(ex.Message);
         }
@@ -412,7 +475,8 @@ public partial class SettingsView : UserControl
             return;
         }
 
-        if (!await Dialogs.ConfirmAsync(Host, "还原加密备份", "还原会替换当前保险库中的全部条目，并使用当前主密码重新加密。此操作需要备份文件自己的主密码。"))
+        var targetSession = _session;
+        if (!await Dialogs.ConfirmAsync(Host, "还原加密备份", "还原会替换当前保险库中的全部条目。请准备该备份对应的加密密钥文件；还原后使用当前保险库的加密密钥保存。"))
         {
             return;
         }
@@ -429,26 +493,25 @@ public partial class SettingsView : UserControl
                 return;
             }
 
-            var password = await AskSecretAsync("请输入备份文件的主密码");
-            if (password is null)
+            if (_session != targetSession || !targetSession.IsUnlocked) return;
+            var encryptionKey = await EncryptionKeyDialog.AskAsync(Host, "验证备份的加密密钥", targetSession, _pauseWatcher, verifyCurrent: false);
+            if (encryptionKey is null || _session != targetSession || !targetSession.IsUnlocked)
             {
                 return;
             }
 
-            var entries = await Task.Run(() => EncryptedBackup.ReadEntries(path, password));
-            if (_session is not { IsUnlocked: true } session)
+            var count = await Task.Run(() => targetSession.RestoreBackup(path, encryptionKey));
+            if (_session != targetSession || !targetSession.IsUnlocked)
             {
                 return;
             }
 
-            session.ReplaceAll(entries);
-            session.Save();
             VaultChanged?.Invoke(this, EventArgs.Empty);
             RebuildLabels();
-            DirectoryStatus.Text = $"已还原 {entries.Count} 条，并重新加密。";
+            DirectoryStatus.Text = $"已还原 {count} 条，并使用当前保险库的加密密钥保存。";
             ErrorBox.IsVisible = false;
         }
-        catch (Exception ex) when (ex is UnlockFailedException or IOException or InvalidDataException or ArgumentException)
+        catch (Exception ex) when (ex is CredentialRejectedException or UnlockFailedException or InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
             ShowError(ex.Message);
         }
@@ -456,7 +519,7 @@ public partial class SettingsView : UserControl
 
     private async void OnExportCsv(object? sender, RoutedEventArgs e)
     {
-        if (_session is not { IsUnlocked: true })
+        if (_session is not { IsUnlocked: true } exportSession)
         {
             return;
         }
@@ -466,75 +529,64 @@ public partial class SettingsView : UserControl
             return;
         }
 
-        if (_session is not { IsUnlocked: true })
+        if (_session != exportSession || !exportSession.IsUnlocked)
         {
             return;
         }
 
         try
         {
+            var encryptionKey = await EncryptionKeyDialog.AskAsync(Host, "验证加密密钥后导出明文", exportSession, _pauseWatcher);
+            if (encryptionKey is null || _session != exportSession || !exportSession.IsUnlocked) return;
             var path = await SafeStoragePickers.PickSaveFileAsync(
                 Host,
                 "导出 CSV",
                 "KeepPassword-导出.csv",
                 [new FilePickerFileType("CSV 文件") { Patterns = ["*.csv"] }],
                 _pauseWatcher);
-            if (string.IsNullOrWhiteSpace(path) || _session is not { IsUnlocked: true } current)
+            if (string.IsNullOrWhiteSpace(path) || _session != exportSession || !exportSession.IsUnlocked)
             {
                 return;
             }
 
-            var csv = CsvExporter.Export(current.Entries);
+            exportSession.EnsureExternalPath(path);
+            var csv = exportSession.ExportCsv(encryptionKey);
             await Task.Run(() => File.WriteAllText(path, csv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true)));
             DirectoryStatus.Text = "已导出 CSV。";
             ErrorBox.IsVisible = false;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException or CredentialRejectedException or InvalidOperationException)
         {
             ShowError(ex.Message);
         }
     }
 
-    private async Task<string?> AskSecretAsync(string title)
+    private void UpdateEncryptionKeyStatus()
     {
-        var window = new Window
+        if (_session is not { IsUnlocked: true } session) return;
+        MasterChangeHint.Text = session.UsesIndependentKey
+            ? "更换主密码不会改变加密密钥，之前保存的密钥文件仍然有效。"
+            : "此保险库仍使用旧版加密。更换一次主密码将升级为独立随机密钥，并提示保存密钥文件。";
+        EncryptionKeyStatus.Text = !session.UsesIndependentKey
+            ? "尚未升级。请先更换一次主密码，生成并永久保存独立加密密钥。"
+            : session.NeedsKeyFileSave ? "密钥文件尚未保存，请选择文件夹完成保存。"
+            : "密钥文件已保存。还原备份、明文导出和重置主密码时，请提供你永久保管的密钥。";
+        SavePendingKeyButton.IsVisible = session.NeedsKeyFileSave;
+    }
+
+    private async void OnSavePendingKey(object? sender, RoutedEventArgs e)
+    {
+        if (_session is { IsUnlocked: true } session) await SavePendingKeyAsync(session);
+    }
+
+    private async Task SavePendingKeyAsync(VaultSession session)
+    {
+        if (!await EncryptionKeyDialog.SaveNewAsync(Host, session, _pauseWatcher))
         {
-            Title = title,
-            Width = 420,
-            SizeToContent = SizeToContent.Height,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner
-        };
-        var box = new TextBox { PasswordChar = '•' };
-        string? value = null;
-        var ok = new Button { Content = "确定", MinWidth = 72 };
-        ok.Classes.Add("accent");
-        ok.Click += (_, _) =>
-        {
-            value = box.Text ?? "";
-            window.Close();
-        };
-        var cancel = new Button { Content = "取消", MinWidth = 72 };
-        cancel.Click += (_, _) => window.Close();
-        window.Content = new StackPanel
-        {
-            Margin = new Avalonia.Thickness(20),
-            Spacing = 12,
-            Children =
-            {
-                new TextBlock { Text = title, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
-                box,
-                new StackPanel
-                {
-                    Orientation = Avalonia.Layout.Orientation.Horizontal,
-                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                    Spacing = 8,
-                    Children = { cancel, ok }
-                }
-            }
-        };
-        await window.ShowDialog(Host);
-        return value;
+            if (_session == session) LockRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+        if (_session == session) UpdateEncryptionKeyStatus();
     }
 
     private void ShowError(string message)

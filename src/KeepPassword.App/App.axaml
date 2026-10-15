@@ -1,5 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:KeepPassword.App.Views"
              x:Class="KeepPassword.App.App">
   <Application.Resources>
     <ResourceDictionary>
@@ -216,6 +217,65 @@
     <FluentTheme />
 
     <Style Selector="Window">
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.16" Easing="CubicEaseOut" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="MenuFlyoutPresenter">
+      <Setter Property="views:Motion.RevealOnShow" Value="True" />
+    </Style>
+
+    <!-- 在实际绘制状态的模板元素上过渡，保持所有页面与弹窗的反馈一致。 -->
+    <Style Selector="Button /template/ ContentPresenter, ListBoxItem /template/ ContentPresenter, ComboBoxItem /template/ ContentPresenter">
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.14" Easing="CubicEaseOut" />
+          <BrushTransition Property="BorderBrush" Duration="0:0:0.14" Easing="CubicEaseOut" />
+          <BrushTransition Property="Foreground" Duration="0:0:0.14" Easing="CubicEaseOut" />
+          <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.16" Easing="CubicEaseOut" />
+          <DoubleTransition Property="Opacity" Duration="0:0:0.12" Easing="CubicEaseOut" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="Transitions">
+        <Transitions>
+          <DoubleTransition Property="Opacity" Duration="0:0:0.12" Easing="CubicEaseOut" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button:pressed">
+      <Setter Property="Opacity" Value="0.84" />
+    </Style>
+
+    <!-- 只过渡控件底色和边框，不对密码文字或密码显隐做动画。 -->
+    <Style Selector="TextBox /template/ Border#PART_BorderElement, ComboBox /template/ Border#Background, ListBoxItem /template/ Border#PART_LayoutRoot, ComboBoxItem /template/ Border#PART_LayoutRoot, MenuFlyoutPresenter MenuItem /template/ Border#PART_LayoutRoot">
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.16" Easing="CubicEaseOut" />
+          <BrushTransition Property="BorderBrush" Duration="0:0:0.16" Easing="CubicEaseOut" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="MenuFlyoutPresenter MenuItem /template/ ContentPresenter#PART_HeaderPresenter">
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Foreground" Duration="0:0:0.14" Easing="CubicEaseOut" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Border">
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.16" Easing="CubicEaseOut" />
+          <BrushTransition Property="BorderBrush" Duration="0:0:0.16" Easing="CubicEaseOut" />
+        </Transitions>
+      </Setter>
+    </Style>
+
+    <Style Selector="Window">
       <Setter Property="FontFamily" Value="{StaticResource Kp.Font.Ui}" />
       <Setter Property="FontSize" Value="14" />
       <Setter Property="Background" Value="{DynamicResource Kp.Bg}" />
@@ -400,6 +460,7 @@
     <Style Selector="Button.filter-card:pointerover /template/ ContentPresenter, Button.account-card:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.SelectionBorder}" />
+      <Setter Property="BoxShadow" Value="0 3 8 0 #14000000" />
     </Style>
     <Style Selector="Button.filter-card.selected /template/ ContentPresenter, Button.account-card.selected /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Kp.Selection}" />
@@ -603,6 +664,9 @@
       <Setter Property="CornerRadius" Value="10" />
       <Setter Property="Padding" Value="14,10" />
       <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+    <Style Selector="Border.field:focus-within">
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.SelectionBorder}" />
     </Style>
     <Style Selector="Border.audit-card">
       <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />

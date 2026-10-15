@@ -130,7 +130,7 @@ public sealed class MainViewModel : ViewModelBase
     public bool PlatformAutofillSupported { get; }
 
     public string AutofillHint => PlatformAutofillSupported
-        ? "确认短密钥后，Windows 程序通过模拟键盘输入（仅登录类型）。浏览器使用扩展按钮或 Ctrl+Shift+L。空闲 5 分钟、锁屏或休眠时自动锁定。"
+        ? "聚焦可识别的密码框后，选择登录、服务器、数据库或集群账号并确认短密钥。未识别到用户名框时只填密码。浏览器需要安装扩展并注册连接，再使用扩展按钮或 Ctrl+Shift+L。空闲 5 分钟、锁屏或休眠时自动锁定。"
         : "当前系统的程序补全尚未实现。浏览器使用扩展按钮或 Ctrl+Shift+L。";
 
     public string Search
@@ -390,7 +390,7 @@ public sealed class MainViewModel : ViewModelBase
             return null;
         }
 
-        var account = CreateAccountView(new VaultAccount(), canGenerate: true);
+        var account = CreateAccountView(new VaultAccount(), canGenerate: true, animateOnShow: true);
         Accounts.Add(account);
         OnAccountsChanged();
         return account;
@@ -409,9 +409,9 @@ public sealed class MainViewModel : ViewModelBase
         OnAccountsChanged();
     }
 
-    private AccountEditorView CreateAccountView(VaultAccount account, bool canGenerate)
+    private AccountEditorView CreateAccountView(VaultAccount account, bool canGenerate, bool animateOnShow = false)
     {
-        var view = new AccountEditorView(account, canGenerate, () => { });
+        var view = new AccountEditorView(account, canGenerate, () => { }) { AnimateOnShow = animateOnShow };
         view.SetKeyOptions(SshKeyOptions);
         view.Configure(ItemTemplates.AccountLabelsOf(_draft), ItemTemplates.SupportsKeyAuth(_draft), _draft.Kind == VaultItemKind.Login);
         return view;
@@ -472,7 +472,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (Nodes.Count < VaultItemRules.MaxNodes)
         {
-            Nodes.Add(new NodeEditorView(new ClusterNode(), Nodes.Count + 1, () => { }));
+            Nodes.Add(new NodeEditorView(new ClusterNode(), Nodes.Count + 1, () => { }) { AnimateOnShow = true });
         }
     }
 

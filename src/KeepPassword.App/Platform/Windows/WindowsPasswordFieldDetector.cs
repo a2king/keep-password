@@ -89,7 +89,9 @@ public sealed class WindowsPasswordFieldDetector : IPasswordFieldDetector
         var username = FindUsername(automation, window, focused, out var usernameHandle);
         var fieldKey = passwordHandle != 0
             ? processId + ":" + passwordHandle
-            : processId + ":" + (title ?? "");
+            : focused.GetRuntimeId(out var runtimeId) >= 0 && runtimeId is { Length: > 0 }
+                ? processId + ":uia:" + string.Join(".", runtimeId)
+                : processId + ":" + (title ?? "");
 
         Release(ref _cachedPassword);
         Release(ref _cachedUsername);
@@ -108,6 +110,7 @@ public sealed class WindowsPasswordFieldDetector : IPasswordFieldDetector
             ProcessId = processId,
             PasswordHandle = passwordHandle,
             UsernameHandle = usernameHandle,
+            HasUsernameField = username is not null,
             ProcessName = processName,
             IsElevated = elevated
         };
@@ -120,7 +123,6 @@ public sealed class WindowsPasswordFieldDetector : IPasswordFieldDetector
             return null;
         }
 
-        IUIAutomationElement? window = null;
         var current = focused;
         var owned = false;
         try
@@ -129,7 +131,10 @@ public sealed class WindowsPasswordFieldDetector : IPasswordFieldDetector
             {
                 if (current.get_CurrentControlType(out var controlType) >= 0 && controlType == UiaIds.Window)
                 {
-                    window = current;
+                    // Keep the nearest dialog's title and fields rather than
+                    // climbing into its owner's unrelated controls.
+                    owned = false;
+                    return current;
                 }
 
                 if (walker.GetParentElement(current, out var parent) < 0 || parent is null)
@@ -137,7 +142,7 @@ public sealed class WindowsPasswordFieldDetector : IPasswordFieldDetector
                     break;
                 }
 
-                if (owned && !ReferenceEquals(current, window))
+                if (owned)
                 {
                     Release(current);
                 }
@@ -148,10 +153,15 @@ public sealed class WindowsPasswordFieldDetector : IPasswordFieldDetector
         }
         finally
         {
+            if (owned)
+            {
+                Release(current);
+            }
+
             Release(walker);
         }
 
-        return window;
+        return null;
     }
 
     private static IUIAutomationElement? FindUsername(
@@ -199,7 +209,14 @@ public sealed class WindowsPasswordFieldDetector : IPasswordFieldDetector
                 IUIAutomationElement? username = null;
                 for (var i = passwordIndex - 1; i >= 0; i--)
                 {
-                    if (edits[i].get_CurrentIsPassword(out var masked) >= 0 && masked == 0)
+                    if (edits[i].get_CurrentIsPassword(out var masked) < 0 || masked != 0)
+                    {
+                        break;
+                    }
+
+                    // A database connection form also has host, port and database
+                    // edits. Positional proximity alone must not overwrite them.
+                    if (edits[i].get_CurrentName(out var name) >= 0 && IsUsernameLabel(name))
                     {
                         username = edits[i];
                         username.get_CurrentNativeWindowHandle(out usernameHandle);
@@ -226,6 +243,17 @@ public sealed class WindowsPasswordFieldDetector : IPasswordFieldDetector
         {
             Release(condition);
         }
+    }
+
+    private static bool IsUsernameLabel(string? name)
+    {
+        var label = (name ?? "").Trim().TrimEnd(':', '：', '*').Trim().ToLowerInvariant();
+        return label is "username" or "user name" or "userid" or "user id" or "user"
+            or "account" or "account name" or "login" or "login name"
+            or "email" or "e-mail" or "email address" or "e-mail address"
+            or "phone" or "phone number" or "mobile" or "mobile number"
+            or "用户名" or "用户名称" or "用户" or "账号" or "帐号" or "账户" or "账户名" or "帐户"
+            or "登录名" or "邮箱" or "邮箱地址" or "电子邮箱" or "手机号" or "手机号码";
     }
 
     private static IUIAutomation Automation()

@@ -9,6 +9,10 @@ public sealed class TotpRowView : ViewModelBase
     private string _code = "";
     private int _remaining;
 
+    public required Guid AccountId { get; init; }
+
+    public required Guid EntryId { get; init; }
+
     public required string Name { get; init; }
 
     public required string? Secret { get; init; }
@@ -51,19 +55,24 @@ public sealed class TotpPageViewModel : ViewModelBase
     public void Refresh()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var previous = Rows.ToDictionary(row => row.Name + "|" + row.Secret, row => row);
+        var previous = Rows.GroupBy(row => (row.EntryId, row.AccountId))
+            .ToDictionary(group => group.Key, group => new Queue<TotpRowView>(group));
         var next = new List<TotpRowView>();
         var accounts = _session.Entries
             .SelectMany(entry => entry.Accounts
                 .Where(account => !string.IsNullOrWhiteSpace(account.TotpSecret))
-                .Select(account => (Name: VaultAudit.AccountTitle(entry, account), Secret: account.TotpSecret!)))
+                .Select(account => (EntryId: entry.Id, AccountId: account.Id, Name: VaultAudit.AccountTitle(entry, account), Secret: account.TotpSecret!)))
             .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase);
-        foreach (var (name, secret) in accounts)
+        foreach (var (entryId, accountId, name, secret) in accounts)
         {
-            var key = name + "|" + secret;
-            if (!previous.TryGetValue(key, out var row))
+            TotpRowView? row = null;
+            if (previous.TryGetValue((entryId, accountId), out var candidates))
             {
-                row = new TotpRowView { Name = name, Secret = secret };
+                candidates.TryDequeue(out row);
+            }
+            if (row is null || row.Name != name || row.Secret != secret)
+            {
+                row = new TotpRowView { EntryId = entryId, AccountId = accountId, Name = name, Secret = secret };
             }
 
             if (TotpGenerator.TryGenerate(secret, now, out var code, out var remaining))
@@ -80,8 +89,12 @@ public sealed class TotpPageViewModel : ViewModelBase
             next.Add(row);
         }
 
-        Rows = next;
-        OnPropertyChanged(nameof(Rows));
-        OnPropertyChanged(nameof(IsEmpty));
+        // Keep existing cards during the countdown; only their numbers change.
+        if (!Rows.SequenceEqual(next))
+        {
+            Rows = next;
+            OnPropertyChanged(nameof(Rows));
+            OnPropertyChanged(nameof(IsEmpty));
+        }
     }
 }
