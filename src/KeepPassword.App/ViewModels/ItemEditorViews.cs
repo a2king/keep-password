@@ -17,7 +17,8 @@ public abstract class SecretFieldView : ViewModelBase
         Sensitive = sensitive;
         Multiline = multiline;
         _changed = changed;
-        _revealed = !sensitive || value.Length == 0;
+        // 隐藏的多行字段不显示输入框，空的多行敏感字段（如私钥）需保持可粘贴。
+        _revealed = !sensitive || (multiline && value.Length == 0);
     }
 
     public bool Sensitive { get; }
