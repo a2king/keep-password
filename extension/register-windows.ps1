@@ -9,7 +9,8 @@ if ([string]::IsNullOrWhiteSpace($HostExe)) {
     $installDir = Split-Path -Parent $PSScriptRoot
     $candidates = @(
         (Join-Path $installDir "KeepPassword.NativeHost.exe"),
-        (Join-Path $installDir "native-host\KeepPassword.NativeHost.exe")
+        (Join-Path $installDir "native-host\KeepPassword.NativeHost.exe"),
+        (Join-Path $env:LOCALAPPDATA "Programs\KeepPassword\KeepPassword.NativeHost.exe")
     )
     $HostExe = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
     if ([string]::IsNullOrWhiteSpace($HostExe)) {
@@ -55,4 +56,4 @@ foreach ($key in $keys) {
 Write-Host "已写入 $manifestPath"
 Write-Host "Chrome 与 Edge 的 Native Messaging 注册表项已更新。"
 Write-Host "宿主: $hostPath"
-Write-Host "请启动并解锁 Keep Password，刷新登录网页，点击密码框后使用扩展按钮或 Ctrl+Shift+L。"
+Write-Host "首次在新版 Keep Password 解锁一次后可保持锁定运行。刷新登录网页，点击密码框选择账号，再输入短密钥授权填入。"

@@ -14,6 +14,8 @@ public sealed class AutofillResponse
 {
     public string Type { get; init; } = "";
 
+    public IReadOnlyList<AutofillCandidate>? Candidates { get; init; }
+
     public string? Username { get; init; }
 
     public string? Password { get; init; }
@@ -27,6 +29,9 @@ public sealed class AutofillResponse
     public static AutofillResponse Cancelled() => new() { Type = "cancelled" };
 
     public static AutofillResponse Error(string message) => new() { Type = "error", Message = message };
+
+    public static AutofillResponse CandidatesList(IReadOnlyList<AutofillCandidate> candidates) =>
+        new() { Type = "candidates", Candidates = candidates };
 
     public static AutofillResponse Fill(string username, string password) =>
         new() { Type = "fill", Username = username, Password = password };
@@ -53,23 +58,32 @@ public static class AutofillProtocol
             return false;
         }
 
-        if (dto is null || !string.Equals(dto.Type, "discover", StringComparison.OrdinalIgnoreCase))
+        if (dto is null || !IsSupportedType(dto.Type))
         {
             return false;
         }
 
         request = new AutofillRequest
         {
+            Operation = dto.Type!.ToLowerInvariant(),
             Origin = AutofillOrigin.Browser,
             Url = dto.Url,
             WindowTitle = dto.Title,
-            ClientToken = dto.Token
+            ClientToken = dto.Token,
+            EntryId = dto.EntryId,
+            AccountId = dto.AccountId,
+            ShortKey = dto.ShortKey
         };
         return true;
     }
 
     public static string Serialize(AutofillResponse response) =>
         JsonSerializer.Serialize(response, Options);
+
+    private static bool IsSupportedType(string? type) =>
+        string.Equals(type, "discover", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(type, "discover-candidates", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(type, "fill-candidate", StringComparison.OrdinalIgnoreCase);
 
     private sealed class DiscoverDto
     {
@@ -80,5 +94,11 @@ public static class AutofillProtocol
         public string? Title { get; set; }
 
         public string? Token { get; set; }
+
+        public Guid? EntryId { get; set; }
+
+        public Guid? AccountId { get; set; }
+
+        public string? ShortKey { get; set; }
     }
 }

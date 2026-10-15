@@ -10,6 +10,8 @@ public enum AutofillOrigin
 
 public sealed class AutofillRequest
 {
+    public string Operation { get; init; } = "discover";
+
     public AutofillOrigin Origin { get; init; }
 
     public string? Url { get; init; }
@@ -21,6 +23,12 @@ public sealed class AutofillRequest
     public bool PasswordOnly { get; init; }
 
     public string? ClientToken { get; init; }
+
+    public Guid? EntryId { get; init; }
+
+    public Guid? AccountId { get; init; }
+
+    public string? ShortKey { get; init; }
 }
 
 public sealed class AutofillCandidate

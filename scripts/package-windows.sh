@@ -55,6 +55,7 @@ rm -f "$STAGING/createdump.exe" || true
 
 echo "== 扩展与说明 =="
 cp -a "$ROOT/extension/." "$STAGING/extension/"
+rm -rf "$STAGING/extension/tests"
 python3 - <<'PY' > "$STAGING/使用说明.txt"
 text = """Keep Password
 
@@ -106,8 +107,17 @@ cp -f "$SETUP_OUT/KeepPassword.Setup.exe" "$OUT/KeepPassword-Setup-win-x64.exe"
   zip -r -q -9 "$OUT/KeepPassword-win-x64.zip" .
 )
 
+echo "== 打包浏览器扩展 =="
+EXT_VERSION="$(python3 -c "import json, sys; print(json.load(open(sys.argv[1], encoding='utf-8'))['version'])" "$ROOT/extension/manifest.json")"
+EXT_ZIP="$OUT/KeepPassword-Chrome-Extension-v$EXT_VERSION.zip"
+rm -f "$EXT_ZIP"
+(
+  cd "$STAGING/extension"
+  zip -r -q -9 "$EXT_ZIP" .
+)
+
 echo "== 完成 =="
-ls -lh "$OUT/KeepPassword-Setup-win-x64.exe" "$OUT/KeepPassword-win-x64.zip" "$OUT/payload.zip"
+ls -lh "$OUT/KeepPassword-Setup-win-x64.exe" "$OUT/KeepPassword-win-x64.zip" "$EXT_ZIP" "$OUT/payload.zip"
 echo "安装目录文件数: $(find "$STAGING" -type f | wc -l)"
 echo "外层可执行文件:"
 ls -lh "$STAGING/KeepPassword.exe" "$STAGING/KeepPassword.NativeHost.exe" "$STAGING/Uninstall.exe"

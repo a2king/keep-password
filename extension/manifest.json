@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Keep Password",
-  "version": "0.6.1",
-  "description": "在你确认后，为当前聚焦的密码框填入 Keep Password 中的登录信息",
+  "version": "0.6.2",
+  "description": "聚焦密码框后显示 Keep Password 候选账号，经短密钥确认后填入登录信息",
   "permissions": ["nativeMessaging", "storage"],
   "action": {
     "default_title": "填充 Keep Password"

@@ -4,6 +4,67 @@ namespace KeepPassword.Core.Autofill;
 
 public static class AutofillMatcher
 {
+    public static IReadOnlyList<AutofillCandidate> Catalog(IEnumerable<VaultEntry> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        var matches = new List<AutofillCandidate>();
+        foreach (var entry in entries)
+        {
+            if (entry.Kind != VaultItemKind.Login)
+            {
+                continue;
+            }
+
+            var host = DomainGrouping.HostOf(entry.Url);
+            if (!DomainGrouping.TryRegistrableDomain(host, out _))
+            {
+                continue;
+            }
+
+            foreach (var account in entry.Accounts)
+            {
+                if (!IsEligible(entry, account, AutofillOrigin.Browser))
+                {
+                    continue;
+                }
+
+                matches.Add(new AutofillCandidate
+                {
+                    Id = entry.Id,
+                    AccountId = account.Id,
+                    Name = string.IsNullOrWhiteSpace(entry.Name) ? (host.Length > 0 ? host : "未命名") : entry.Name,
+                    Username = account.Username,
+                    Domain = host
+                });
+            }
+        }
+
+        return matches.OrderBy(match => match.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public static IReadOnlyList<AutofillCandidate> MatchCatalog(
+        IEnumerable<AutofillCandidate> candidates,
+        AutofillRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Origin != AutofillOrigin.Browser)
+        {
+            return [];
+        }
+
+        var pageHost = DomainGrouping.HostOf(request.Url);
+        if (pageHost.Length == 0)
+        {
+            return [];
+        }
+
+        return candidates
+            .Where(candidate => DomainGrouping.HostsMatch(candidate.Domain, pageHost))
+            .OrderBy(match => match.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public static IReadOnlyList<AutofillCandidate> Match(IEnumerable<VaultEntry> entries, AutofillRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);

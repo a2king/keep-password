@@ -1,3 +1,5 @@
+const automaticRequests = new Map();
+
 function focusKey(tabId) {
   return `password-frame-${tabId}`;
 }
@@ -14,10 +16,13 @@ function showResult(tabId, response) {
     message = "浏览器尚未连接 Keep Password，请按 extension/README.md 注册本机宿主和当前扩展 ID。";
   }
   message = message || "无法完成填充，请检查 Keep Password 是否已启动。";
-  const success = response && response.type === "filled";
-  chrome.action.setBadgeText({ tabId, text: success ? "OK" : "!" });
+  const success = response && ["filled", "candidates", "ready"].includes(response.type);
+  chrome.action.setBadgeText({ tabId, text: response && response.type === "candidates" ? "…" : success ? "OK" : "!" });
   chrome.action.setBadgeBackgroundColor({ tabId, color: success ? "#287b46" : "#b44335" });
-  chrome.action.setTitle({ tabId, title: `Keep Password：${message}` });
+  const title = response && response.type === "candidates"
+    ? "请选择账号并输入短密钥授权填入。"
+    : message;
+  chrome.action.setTitle({ tabId, title: `Keep Password：${title}` });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -29,10 +34,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     chrome.storage.session.set({ [focusKey(sender.tab.id)]: target }, () => {
       sendResponse({ type: chrome.runtime.lastError ? "error" : "ready" });
+      if (!chrome.runtime.lastError && message.auto === true) {
+        const now = Date.now();
+        const previous = automaticRequests.get(sender.tab.id) || 0;
+        if (now - previous >= 1000) {
+          automaticRequests.set(sender.tab.id, now);
+          requestFill(sender.tab.id, true);
+        }
+      }
     });
     return true;
   }
-  if (!message || message.type !== "discover") {
+  if (!message || !["discover", "discover-candidates", "fill-candidate"].includes(message.type)) {
     return false;
   }
 
@@ -70,7 +83,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   });
   try {
     port.postMessage({
-      type: "discover",
+      ...message,
+      type: message.type,
       url: sender.url,
       title: message.title
     });
@@ -80,7 +94,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-function requestFill(tabId) {
+function requestFill(tabId, automatic = false) {
   if (!Number.isInteger(tabId)) {
     return;
   }
@@ -91,7 +105,7 @@ function requestFill(tabId) {
     }
     const target = stored[focusKey(tabId)] || { frameId: 0 };
     // Send to one document only. Broadcasting to all frames can open multiple prompts.
-    chrome.tabs.sendMessage(tabId, { type: "fill-request" }, target, (response) => {
+    chrome.tabs.sendMessage(tabId, { type: "fill-request", automatic }, target, (response) => {
       const error = chrome.runtime.lastError;
       showResult(tabId, error
         ? { type: "error", message: "无法访问当前密码框，请刷新登录网页并重新点击密码框。浏览器内部页面无法填充。" }
@@ -100,21 +114,24 @@ function requestFill(tabId) {
   });
 }
 
-chrome.tabs.onRemoved.addListener((tabId) => chrome.storage.session.remove(focusKey(tabId)));
+chrome.tabs.onRemoved.addListener((tabId) => {
+  automaticRequests.delete(tabId);
+  chrome.storage.session.remove(focusKey(tabId));
+});
 chrome.tabs.onUpdated.addListener((tabId, change) => {
   if (change.status === "loading") {
     chrome.storage.session.remove(focusKey(tabId));
   }
 });
 
-chrome.action.onClicked.addListener((tab) => requestFill(tab.id));
+chrome.action.onClicked.addListener((tab) => requestFill(tab.id, false));
 chrome.commands.onCommand.addListener((command) => {
   if (command !== "fill-password") {
     return;
   }
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
-      requestFill(tabs[0].id);
+      requestFill(tabs[0].id, false);
     }
   });
 });

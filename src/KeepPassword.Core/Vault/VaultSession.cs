@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using KeepPassword.Core.Crypto;
+using KeepPassword.Core.Autofill;
 
 namespace KeepPassword.Core.Vault;
 
@@ -418,6 +419,7 @@ public sealed partial class VaultSession : IDisposable
         {
             EnsureUnlocked();
             VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _dataKey, _entries, _recovery, _labels, _passwordWrap, _keyFileSaved);
+            AutofillIndexStore.Write(_path, _entries);
         }
     }
 

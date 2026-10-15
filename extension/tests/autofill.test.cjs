@@ -54,6 +54,15 @@ test("one request reaches only the last focused frame, including after worker su
   assert.equal(restarted.sent[1].target.frameId, 0);
 });
 
+test("a trusted password focus starts the inline candidate request automatically", () => {
+  const harness = background();
+  harness.receive({ type: "password-focused", auto: true }, { tab: { id: 11 }, frameId: 2, documentId: "login" }, () => {});
+  assert.equal(harness.sent.length, 1);
+  assert.equal(harness.sent[0].message.type, "fill-request");
+  assert.equal(harness.sent[0].message.automatic, true);
+  assert.equal(harness.sent[0].target.frameId, 2);
+});
+
 test("matching uses the browser-reported frame URL and preserves host errors", () => {
   const harness = background();
   let response;
@@ -63,6 +72,20 @@ test("matching uses the browser-reported frame URL and preserves host errors", (
   harness.chrome.runtime.lastError = { message: "Specified native messaging host not found." };
   harness.port.onDisconnect.listeners[0]();
   assert.match(response.message, /not found/);
+});
+
+test("candidate and fill-candidate messages are forwarded without replacing the browser URL", () => {
+  const harness = background();
+  harness.receive({ type: "discover-candidates", url: "https://forged.example", title: "Login" },
+    { tab: { id: 5 }, url: "https://real.example/login" }, () => {});
+  assert.equal(harness.nativeMessages[0].type, "discover-candidates");
+  assert.equal(harness.nativeMessages[0].url, "https://real.example/login");
+
+  harness.receive({ type: "fill-candidate", entryId: "entry", accountId: "account", shortKey: "key" },
+    { tab: { id: 5 }, url: "https://real.example/login" }, () => {});
+  assert.equal(harness.nativeMessages[1].type, "fill-candidate");
+  assert.equal(harness.nativeMessages[1].entryId, "entry");
+  assert.equal(harness.nativeMessages[1].url, "https://real.example/login");
 });
 
 test("a missing content script gives visible toolbar guidance", () => {
@@ -111,7 +134,7 @@ function content() {
   const chrome = { runtime: {
     onMessage: event(),
     sendMessage(message, callback) {
-      if (message.type === "discover") { requests.push({ message, callback }); }
+      if (message.type === "discover" || message.type === "discover-candidates") { requests.push({ message, callback }); }
       else { callback({ type: "ready" }); }
     }
   } };

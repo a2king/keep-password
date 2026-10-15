@@ -207,16 +207,20 @@ public class SecurityPhaseTests
     }
 
     [Fact]
-    public void Extension_RequiresExplicitFillRequest()
+    public void Extension_ShowsCandidatesOnPasswordFocus_AndKeepsExplicitAuthorization()
     {
         var root = RepoRoot();
         var content = File.ReadAllText(Path.Combine(root, "extension", "content.js"));
         var manifest = File.ReadAllText(Path.Combine(root, "extension", "manifest.json"));
         Assert.DoesNotContain("MutationObserver", content);
+        Assert.Contains("password-focused", content);
+        Assert.Contains("discover-candidates", content);
+        Assert.Contains("fill-candidate", content);
+        Assert.Contains("shortKey", content);
         Assert.Contains("fill-request", content);
         Assert.DoesNotContain("host_permissions", manifest);
         Assert.Contains("fill-password", manifest);
-        Assert.Contains("\"version\": \"0.6.1\"", manifest);
+        Assert.Contains("\"version\": \"0.6.2\"", manifest);
     }
 
     [Fact]

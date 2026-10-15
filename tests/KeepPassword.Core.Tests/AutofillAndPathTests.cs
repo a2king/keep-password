@@ -189,6 +189,142 @@ public class AutofillAndPathTests
     }
 
     [Fact]
+    public void Coordinator_BrowserCandidateFlowKeepsPasswordsOutOfDiscovery()
+    {
+        using var session = TestVault.CreateUnlocked(TestVault.NewPath());
+        var account = new VaultAccount { Username = "ada", Password = "s3cret" };
+        var entry = new VaultEntry { Name = "GitHub", Url = "https://github.com", Accounts = [account] };
+        session.Upsert(entry);
+        var request = Request("https://github.com/login");
+
+        var discovered = AutofillCoordinator.DiscoverCandidates(session, request);
+        var candidate = Assert.Single(discovered.Candidates!);
+        Assert.Equal("candidates", discovered.Type);
+        Assert.Null(discovered.Password);
+        Assert.DoesNotContain("password", AutofillProtocol.Serialize(discovered), StringComparison.OrdinalIgnoreCase);
+
+        var fillRequest = new AutofillRequest
+        {
+            Operation = "fill-candidate",
+            Origin = AutofillOrigin.Browser,
+            Url = request.Url,
+            EntryId = candidate.Id,
+            AccountId = candidate.AccountId,
+            ShortKey = "short-key"
+        };
+        var filled = AutofillCoordinator.FillCandidate(session, fillRequest);
+        Assert.Equal("fill", filled.Type);
+        Assert.Equal("ada", filled.Username);
+        Assert.Equal("s3cret", filled.Password);
+
+        fillRequest = new AutofillRequest
+        {
+            Operation = "fill-candidate",
+            Origin = AutofillOrigin.Browser,
+            Url = "https://forged.example/login",
+            EntryId = candidate.Id,
+            AccountId = candidate.AccountId,
+            ShortKey = "short-key"
+        };
+        Assert.Equal("cancelled", AutofillCoordinator.FillCandidate(session, fillRequest).Type);
+    }
+
+    [Fact]
+    public void LockedSessionCanReadProtectedAutofillMetadataWithoutPasswords()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var path = TestVault.NewPath();
+        using var session = TestVault.CreateUnlocked(path);
+        var entry = new VaultEntry
+        {
+            Name = "GitHub",
+            Url = "https://github.com",
+            Accounts = [new VaultAccount { Username = "ada", Password = "s3cret", Note = "private account note" }]
+        };
+        session.Upsert(entry);
+        session.Save();
+        session.Lock();
+
+        var matches = AutofillIndexStore.Match(path, Request("https://github.com/login"), out var available);
+        Assert.True(available);
+        Assert.Equal("ada", Assert.Single(matches).Username);
+        var stored = File.ReadAllBytes(path + ".autofill-index");
+        var plaintext = System.Security.Cryptography.ProtectedData.Unprotect(stored,
+            System.Text.Encoding.UTF8.GetBytes("keep-password/autofill-index/v1"),
+            System.Security.Cryptography.DataProtectionScope.CurrentUser);
+        try
+        {
+            var json = System.Text.Encoding.UTF8.GetString(plaintext);
+            Assert.DoesNotContain("s3cret", json);
+            Assert.DoesNotContain("private account note", json);
+            Assert.DoesNotContain("password", json, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(plaintext);
+        }
+    }
+
+    [Theory]
+    [InlineData("short-key", "https://github.com/login", "fill")]
+    [InlineData("wrong-key", "https://github.com/login", "error")]
+    [InlineData("", "https://github.com/login", "error")]
+    [InlineData("short-key", "https://github.com.attacker.example/login", "cancelled")]
+    public void LockedBrowserFillRequiresShortKeyAndCurrentDomain(string shortKey, string url, string expected)
+    {
+        var path = TestVault.NewPath();
+        using var desktopSession = TestVault.CreateUnlocked(path);
+        var account = new VaultAccount { Username = "ada", Password = "s3cret" };
+        var entry = new VaultEntry { Name = "GitHub", Url = "https://github.com", Accounts = [account] };
+        desktopSession.Upsert(entry);
+        desktopSession.Save();
+        desktopSession.Lock();
+
+        var response = AutofillCoordinator.FillCandidateFromLockedVault(TestVault.Store(), path, new AutofillRequest
+        {
+            Operation = "fill-candidate",
+            Origin = AutofillOrigin.Browser,
+            Url = url,
+            EntryId = entry.Id,
+            AccountId = account.Id,
+            ShortKey = shortKey
+        });
+
+        Assert.Equal(expected, response.Type);
+        Assert.Equal(expected == "fill" ? "s3cret" : null, response.Password);
+        Assert.False(desktopSession.IsUnlocked);
+    }
+
+    [Fact]
+    public void AutofillIndexReflectsDeletedAccountsAndHandlesCorruption()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var path = TestVault.NewPath();
+        using var session = TestVault.CreateUnlocked(path);
+        var entry = new VaultEntry
+        {
+            Name = "GitHub", Url = "https://github.com",
+            Accounts = [new VaultAccount { Username = "ada", Password = "s3cret" }]
+        };
+        session.Upsert(entry);
+        session.Save();
+        Assert.Single(AutofillIndexStore.Match(path, Request("https://github.com/login"), out _));
+        Assert.Empty(AutofillIndexStore.Match(path, Request("https://unrelated.example/login"), out _));
+        session.Remove(entry.Id);
+        session.Save();
+        session.Lock();
+        Assert.Empty(AutofillIndexStore.Match(path, Request("https://github.com/login"), out var available));
+        Assert.True(available);
+
+        File.WriteAllText(path + ".autofill-index", "corrupted cache");
+        Assert.False(AutofillIndexStore.TryRead(path, out _));
+    }
+
+    [Fact]
     public async Task Coordinator_DesktopDatabaseRequiresAuthorizedAccountAndShortKey()
     {
         using var session = TestVault.CreateUnlocked(TestVault.NewPath());

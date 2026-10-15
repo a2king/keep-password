@@ -144,7 +144,7 @@ TOTP，RFC 6238。默认 SHA-1、6 位、30 秒；otpauth:// 链接里写了 6�
 
 - Windows：保险库解锁后，每秒检查当前聚焦控件。普通程序用 UI Automation 识别 `IsPassword` 输入框，可选择登录、服务器、数据库、集群的密码账号；SSH 密钥认证和只有验证码的账号不参与。没有明确识别到用户名框时只填密码，避免改动数据库连接里的主机、端口等字段。填入前都要再输入短密钥。
 - DBX、飞书等应用只有在向 Windows 暴露标准可访问性密码属性时才能被识别；自绘、未启用可访问性的控件仍可能没有提示。程序也不会向管理员权限的目标输入。遇到不支持的控件可手动复制密码。
-- 浏览器：Chrome / Edge 使用扩展和 Native Messaging。聚焦密码框后，点击扩展按钮或按 `Ctrl+Shift+L` 才请求填充，单纯聚焦不会自动弹窗。
+- 浏览器：Chrome / Edge 使用扩展和 Native Messaging。保险库首次在本机解锁后会生成仅含账号元数据的 DPAPI 保护索引；之后即使桌面端处于锁定状态，聚焦密码框仍会显示候选账号，只有选择账号并输入短密钥时才临时解密并填充。扩展按钮和 `Ctrl+Shift+L` 仍可手动重新打开候选框。
 - macOS、Linux：程序补全只留了接口和空实现（辅助功能 / AT-SPI 以后再接）。浏览器扩展和本机消息协议是同一份，客户端在这三个系统上都会听本机端口。
 
 扩展在 `extension/`，Manifest V3。安装桌面端不会自动连接浏览器。首次需要在浏览器扩展管理页加载 `extension` 文件夹，复制真实扩展 ID，再运行 `extension/register-windows.ps1 -ExtensionId "实际扩展ID"`。Windows 发布包的宿主是安装根目录中的 `KeepPassword.NativeHost.exe`。完整步骤及排错说明见 [浏览器连接说明](extension/README.md)。
@@ -179,10 +179,10 @@ dotnet run --project src\KeepPassword.App -c Release
 打 Windows 安装包：
 
 ```powershell
-pwsh -NoProfile -File artifacts\package.ps1 -Version v0.6.1
+pwsh -NoProfile -File artifacts\package.ps1 -Version v0.6.2
 ```
 
-产物在 `artifacts\v0.6.1\`。
+产物在 `artifacts\v0.6.2\`：安装程序、便携包，以及单独的浏览器扩展包 `KeepPassword-Chrome-Extension-v0.6.2.zip`。
 
 Windows 用户请直接用上面的安装包或便携包，**不要**再单独安装 .NET。
 
@@ -200,6 +200,6 @@ Windows 安装包请用上面的 `package-windows.sh`。
 
 - `tests/KeepPassword.Core.Tests`：加密与密钥、解锁、备份还原、CSV 导入、TOTP（含 RFC 6238 SHA-1 / SHA-256 / SHA-512 向量）、二维码识别、自动填充匹配、缓存目录等核心逻辑。
 - `tests/KeepPassword.App.Tests`：用临时保险库做的界面回归测试，覆盖加密密钥保存流程、详情抽屉动画、动画偏好和英文输入限制，不访问真实保险库。
-- `extension/tests`：浏览器扩展的填充逻辑测试，运行 `node --test extension/tests`。
+- `extension/tests`：浏览器扩展的填充逻辑测试，运行 `node --test extension/tests/autofill.test.cjs`。
 - Windows 上的手工验收清单见 [docs/windows-acceptance.md](docs/windows-acceptance.md)。
 - macOS、Linux 未做完整的图形验收，程序补全在这两个平台上只有空实现。

@@ -81,6 +81,7 @@ public sealed class AppHost : IDisposable
     private void BeginSession(VaultSession session)
     {
         _session = session;
+        AutofillIndexStore.Write(session.VaultPath, session.Entries);
         _main?.ShowVault(session);
         _autoLock.Start();
         _watcher.Start();
@@ -264,6 +265,37 @@ public sealed class AppHost : IDisposable
         if (!AutofillProtocol.TryParseDiscover(json, out var request))
         {
             return AutofillProtocol.Serialize(AutofillResponse.Error("无法识别的消息。"));
+        }
+
+        if (request.Operation == "discover-candidates")
+        {
+            if (_session is { IsUnlocked: true } unlocked)
+            {
+                return AutofillProtocol.Serialize(AutofillCoordinator.DiscoverCandidates(unlocked, request));
+            }
+
+            var cached = AutofillIndexStore.Match(_location.VaultFile, request, out var available);
+            if (!available)
+            {
+                return AutofillProtocol.Serialize(AutofillResponse.Locked());
+            }
+
+            return AutofillProtocol.Serialize(cached.Count == 0
+                ? AutofillResponse.NoMatch()
+                : AutofillResponse.CandidatesList(cached));
+        }
+
+        if (request.Operation == "fill-candidate")
+        {
+            if (_session is { IsUnlocked: true } unlocked)
+            {
+                return AutofillProtocol.Serialize(AutofillCoordinator.FillCandidate(unlocked, request));
+            }
+
+            var vaultPath = _location.VaultFile;
+            var lockedResponse = await Task.Run(
+                () => AutofillCoordinator.FillCandidateFromLockedVault(_store, vaultPath, request), cancellationToken);
+            return AutofillProtocol.Serialize(lockedResponse);
         }
 
         var response = await PromptAndFillAsync(request, field: null, cancellationToken);
