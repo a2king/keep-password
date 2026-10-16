@@ -114,16 +114,30 @@ public static class ItemTemplates
             case VaultItemKind.Server:
                 if (entry.Field(FieldKeys.Protocol).Length == 0)
                 {
-                    entry.SetField(FieldKeys.Protocol, Protocols[0].Code);
-                    entry.SetField(FieldKeys.Port, Protocols[0].DefaultPort);
+                    var port = entry.Field(FieldKeys.Port);
+                    var inferred = Protocols.FirstOrDefault(item =>
+                        item.DefaultPort.Length > 0 && item.DefaultPort == port);
+                    entry.SetField(FieldKeys.Protocol, inferred?.Code ?? Protocols[0].Code);
+                }
+
+                if (entry.Field(FieldKeys.Port).Length == 0)
+                {
+                    entry.SetField(FieldKeys.Port, Protocol(entry.Field(FieldKeys.Protocol)).DefaultPort);
                 }
 
                 break;
             case VaultItemKind.Database:
                 if (entry.Field(FieldKeys.Driver).Length == 0)
                 {
-                    entry.SetField(FieldKeys.Driver, Drivers[0].Code);
-                    entry.SetField(FieldKeys.Port, Drivers[0].DefaultPort);
+                    var port = entry.Field(FieldKeys.Port);
+                    var inferred = Drivers.FirstOrDefault(item =>
+                        item.DefaultPort.Length > 0 && item.DefaultPort == port);
+                    entry.SetField(FieldKeys.Driver, inferred?.Code ?? Drivers[0].Code);
+                }
+
+                if (entry.Field(FieldKeys.Port).Length == 0)
+                {
+                    entry.SetField(FieldKeys.Port, Driver(entry.Field(FieldKeys.Driver)).DefaultPort);
                 }
 
                 break;

@@ -21,8 +21,7 @@ public sealed class AppHost : IDisposable
     private readonly NativeMessagingServer _server;
     private readonly AutofillGate _gate = new();
     private readonly AutoLockMonitor _autoLock;
-    private readonly Mutex _mutex;
-    private readonly EventWaitHandle _activate;
+    private readonly InstanceActivation _activation;
     private VaultSession? _session;
     private MainWindow? _main;
     private IDisposable? _hotkey;
@@ -39,9 +38,8 @@ public sealed class AppHost : IDisposable
         _filler = PlatformAutofill.CreateFiller();
         _server = new NativeMessagingServer(HandleMessageAsync);
         _autoLock = new AutoLockMonitor(LockVault);
-        _mutex = new Mutex(true, "KeepPassword.SingleInstance", out var created);
-        _activate = new EventWaitHandle(false, EventResetMode.AutoReset, "KeepPassword.Activate");
-        if (!created)
+        _activation = new InstanceActivation();
+        if (!_activation.IsPrimary)
         {
             _exiting = true;
         }
@@ -51,12 +49,12 @@ public sealed class AppHost : IDisposable
     {
         if (_exiting)
         {
-            _activate.Set();
+            _activation.SignalActivate();
             _desktop.Shutdown();
             return;
         }
 
-        StartActivationListener();
+        _activation.StartListening(ShowFromTray);
         InstallTray();
         _server.Start();
         AppUpdateService.ExitApplication = Shutdown;
@@ -178,8 +176,7 @@ public sealed class AppHost : IDisposable
         _hotkey?.Dispose();
         _server.Dispose();
         _session?.Dispose();
-        _mutex.Dispose();
-        _activate.Dispose();
+        _activation.Dispose();
     }
 
     private void OnMainClosing(object? sender, WindowClosingEventArgs e)
@@ -274,31 +271,6 @@ public sealed class AppHost : IDisposable
         {
             _trayReady = false;
         }
-    }
-
-    private void StartActivationListener()
-    {
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                while (!_exiting)
-                {
-                    if (_activate.WaitOne(500) && !_exiting)
-                    {
-                        Dispatcher.UIThread.Post(ShowFromTray);
-                    }
-                }
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-        })
-        {
-            IsBackground = true,
-            Name = "KeepPassword.Activate"
-        };
-        thread.Start();
     }
 
     private void ShowFromTray()

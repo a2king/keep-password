@@ -48,10 +48,11 @@ public sealed class ImportWizardWindow : Window
         title.Classes.Add("h1");
         var subtitle = Muted($"{fileName} · {table.Headers.Count} 列 · {table.Rows.Count} 行数据。按 1Password 的方式：先选条目类型，再把每一列映射到字段，最后确认要导入的行。");
 
+        var kindIndex = Math.Max(0, CsvMapper.ImportableKinds.ToList().IndexOf(CsvMapper.GuessKind(table.Headers)));
         _kindBox = new ComboBox
         {
             ItemsSource = CsvMapper.ImportableKinds.Select(VaultItemKinds.DisplayName).ToList(),
-            SelectedIndex = 0,
+            SelectedIndex = kindIndex,
             Width = 220,
             HorizontalAlignment = HorizontalAlignment.Left
         };

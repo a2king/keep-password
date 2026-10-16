@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using KeepPassword.Core.Crypto;
+using KeepPassword.Core.Paths;
 
 namespace KeepPassword.Core.Vault;
 
@@ -407,11 +408,6 @@ public sealed partial class VaultStore
 
     internal static bool TryWriteDeviceQuickUnlock(string vaultPath, byte[] vaultSalt, byte[] masterKey)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return false;
-        }
-
         var dto = new QuickUnlockDto
         {
             Version = 1,
@@ -423,9 +419,9 @@ public sealed partial class VaultStore
         byte[] stored;
         try
         {
-            stored = ProtectedData.Protect(json, QuickEntropy, DataProtectionScope.CurrentUser);
+            stored = ProtectQuick(json);
         }
-        catch (PlatformNotSupportedException)
+        catch (Exception ex) when (ex is CryptographicException or PlatformNotSupportedException or IOException or UnauthorizedAccessException)
         {
             return false;
         }
@@ -629,6 +625,8 @@ public sealed partial class VaultStore
 
     private static readonly byte[] QuickEntropy = Encoding.UTF8.GetBytes("keep-password/quick-unlock/v1");
 
+    private static readonly byte[] QuickFileMagic = "KPQU1"u8.ToArray();
+
     private static CipherDto CipherFrom(ShortWrapMaterial wrap) => new()
     {
         Algorithm = "aes-256-gcm",
@@ -650,7 +648,7 @@ public sealed partial class VaultStore
             }
         }
 
-        return json.ToArray();
+        return ProtectQuickWithDeviceKey(json);
     }
 
     private static byte[]? OpenQuick(byte[] stored)
@@ -663,7 +661,6 @@ public sealed partial class VaultStore
             }
             catch (PlatformNotSupportedException)
             {
-                return stored.ToArray();
             }
             catch (CryptographicException)
             {
@@ -671,8 +668,108 @@ public sealed partial class VaultStore
             }
         }
 
+        if (LooksLikeDeviceKeyBlob(stored))
+        {
+            try
+            {
+                return OpenQuickWithDeviceKey(stored);
+            }
+            catch (Exception ex) when (ex is CryptographicException or FormatException or IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        // 旧版非 Windows 明文 .quick，或 Windows DPAPI 失败后的降级明文。
         return stored.ToArray();
     }
+
+    private static bool LooksLikeDeviceKeyBlob(byte[] stored) =>
+        stored.Length > QuickFileMagic.Length + VaultCipher.NonceLength + VaultCipher.TagLength
+        && stored.AsSpan(0, QuickFileMagic.Length).SequenceEqual(QuickFileMagic);
+
+    private static byte[] ProtectQuickWithDeviceKey(byte[] json)
+    {
+        var key = LoadOrCreateDeviceKey();
+        try
+        {
+            var (nonce, ciphertext, tag) = VaultCipher.Encrypt(key, json, QuickEntropy);
+            var stored = new byte[QuickFileMagic.Length + nonce.Length + tag.Length + ciphertext.Length];
+            QuickFileMagic.CopyTo(stored, 0);
+            var offset = QuickFileMagic.Length;
+            nonce.CopyTo(stored, offset);
+            offset += nonce.Length;
+            tag.CopyTo(stored, offset);
+            offset += tag.Length;
+            ciphertext.CopyTo(stored, offset);
+            return stored;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+        }
+    }
+
+    private static byte[] OpenQuickWithDeviceKey(byte[] stored)
+    {
+        var key = LoadOrCreateDeviceKey();
+        try
+        {
+            var offset = QuickFileMagic.Length;
+            var nonce = stored.AsSpan(offset, VaultCipher.NonceLength).ToArray();
+            offset += VaultCipher.NonceLength;
+            var tag = stored.AsSpan(offset, VaultCipher.TagLength).ToArray();
+            offset += VaultCipher.TagLength;
+            var ciphertext = stored.AsSpan(offset).ToArray();
+            return VaultCipher.Decrypt(key, nonce, ciphertext, tag, QuickEntropy);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+        }
+    }
+
+    private static byte[] LoadOrCreateDeviceKey()
+    {
+        var path = DeviceKeyPath();
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+            FileProtection.RestrictToCurrentUser(directory);
+        }
+
+        if (File.Exists(path))
+        {
+            var existing = File.ReadAllBytes(path);
+            if (existing.Length == Argon2Id.HashLength)
+            {
+                return existing;
+            }
+
+            CryptographicOperations.ZeroMemory(existing);
+        }
+
+        var key = RandomNumberGenerator.GetBytes(Argon2Id.HashLength);
+        var temp = path + ".tmp";
+        try
+        {
+            File.WriteAllBytes(temp, key);
+            FileProtection.RestrictToCurrentUser(temp);
+            File.Move(temp, path, overwrite: true);
+            FileProtection.RestrictToCurrentUser(path);
+            return key;
+        }
+        catch
+        {
+            CryptographicOperations.ZeroMemory(key);
+            TryDeleteFile(temp);
+            throw;
+        }
+    }
+
+    private static string DeviceKeyPath() =>
+        Path.Combine(AppDataPaths.VaultDirectory(), "device.key");
 
     private static void TryDeleteFile(string path)
     {

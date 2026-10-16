@@ -56,7 +56,7 @@ public static class CsvMapper
         [FieldPrefix + FieldKeys.Host] = ["host", "hostname", "server", "ip", "主机", "服务器", "endpoint"],
         [FieldPrefix + FieldKeys.Port] = ["port", "端口"],
         [FieldPrefix + FieldKeys.Protocol] = ["protocol", "协议"],
-        [FieldPrefix + FieldKeys.Driver] = ["driver", "type", "database type", "数据库类型"],
+        [FieldPrefix + FieldKeys.Driver] = ["driver", "type", "db type", "db_type", "database type", "数据库类型"],
         [FieldPrefix + FieldKeys.Database] = ["database", "db", "dbname", "bucket", "数据库", "数据库名"],
         [FieldPrefix + FieldKeys.ApiKey] = ["api key", "apikey", "api_key", "key"],
         [FieldPrefix + FieldKeys.Secret] = ["secret", "client secret", "secret key"],
@@ -120,7 +120,7 @@ public static class CsvMapper
 
     public static string Guess(string header, VaultItemKind kind)
     {
-        var normalized = header.Trim().Replace('_', ' ').ToLowerInvariant();
+        var normalized = NormalizeHeader(header);
         var available = Targets(kind).Select(target => target.Code).ToHashSet(StringComparer.Ordinal);
         foreach (var (code, aliases) in Aliases)
         {
@@ -150,6 +150,47 @@ public static class CsvMapper
 
         return result;
     }
+
+    /// <summary>
+    /// 按表头推断默认导入类型：有数据库特征列 → 数据库；有主机/端口/协议 → 服务器；否则登录。
+    /// </summary>
+    public static VaultItemKind GuessKind(IReadOnlyList<string> headers)
+    {
+        var normalized = headers.Select(NormalizeHeader).Where(header => header.Length > 0).ToHashSet(StringComparer.Ordinal);
+        if (MatchesAny(normalized, Aliases[FieldPrefix + FieldKeys.Driver])
+            || MatchesAny(normalized, Aliases[FieldPrefix + FieldKeys.Database]))
+        {
+            return VaultItemKind.Database;
+        }
+
+        if (MatchesAny(normalized, Aliases[Nodes])
+            || MatchesAny(normalized, Aliases[FieldPrefix + FieldKeys.Product]))
+        {
+            return VaultItemKind.Cluster;
+        }
+
+        if (MatchesAny(normalized, Aliases[FieldPrefix + FieldKeys.ApiKey])
+            || MatchesAny(normalized, Aliases[FieldPrefix + FieldKeys.Token])
+            || MatchesAny(normalized, Aliases[FieldPrefix + FieldKeys.ClientId]))
+        {
+            return VaultItemKind.ApiCredential;
+        }
+
+        if (MatchesAny(normalized, Aliases[FieldPrefix + FieldKeys.Host])
+            || MatchesAny(normalized, Aliases[FieldPrefix + FieldKeys.Port])
+            || MatchesAny(normalized, Aliases[FieldPrefix + FieldKeys.Protocol]))
+        {
+            return VaultItemKind.Server;
+        }
+
+        return VaultItemKind.Login;
+    }
+
+    private static string NormalizeHeader(string header) =>
+        header.Trim().Replace('_', ' ').ToLowerInvariant();
+
+    private static bool MatchesAny(HashSet<string> headers, string[] aliases) =>
+        aliases.Any(alias => headers.Contains(alias.Replace('_', ' ')));
 
     public static string? ValidateMapping(IReadOnlyList<string> headers, IReadOnlyList<string> targets)
     {

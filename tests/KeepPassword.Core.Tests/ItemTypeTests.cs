@@ -383,6 +383,7 @@ public sealed class ItemTypeTests
         Assert.Null(CsvMapper.ValidateMapping(headers, targets));
 
         Assert.Equal("field:driver", CsvMapper.Guess("数据库类型", VaultItemKind.Database));
+        Assert.Equal("field:driver", CsvMapper.Guess("db_type", VaultItemKind.Database));
         Assert.Equal(CsvMapper.Ignore, CsvMapper.Guess("数据库类型", VaultItemKind.Login));
         Assert.Equal(CsvMapper.Ignore, CsvMapper.Guess("连接字符串", VaultItemKind.Database));
         Assert.DoesNotContain(CsvMapper.Targets(VaultItemKind.Database), target => target.Code.StartsWith("custom", StringComparison.Ordinal));
@@ -390,6 +391,30 @@ public sealed class ItemTypeTests
         Assert.Equal("field:token", CsvMapper.Guess("access_token", VaultItemKind.ApiCredential));
         Assert.DoesNotContain(VaultItemKind.SshKey, CsvMapper.ImportableKinds);
         Assert.DoesNotContain(CsvMapper.Targets(VaultItemKind.Login), target => target.Code == "field:host");
+        Assert.Equal(VaultItemKind.Login, CsvMapper.GuessKind(["name", "url", "username", "password"]));
+        Assert.Equal(VaultItemKind.Server, CsvMapper.GuessKind(["名称", "主机", "端口", "用户名", "密码"]));
+        Assert.Equal(VaultItemKind.Database, CsvMapper.GuessKind(["name", "host", "port", "db_type", "username", "password"]));
+    }
+
+    [Fact]
+    public void CsvMapper_KeepsMappedPort_AndInfersDriverFromPort()
+    {
+        var table = CsvImporter.ReadTable(
+            "name,host,port,username,password\n" +
+            "pay-es-prod,es.local,9200,elastic,pw\n" +
+            "cache,redis.local,6379,default,pw\n" +
+            "shop,pg.local,5432,app,pw\n");
+        var targets = CsvMapper.GuessAll(table.Headers, VaultItemKind.Database);
+        Assert.Equal("field:port", targets[2]);
+
+        var plan = CsvMapper.Build(table, VaultItemKind.Database, targets, new HashSet<int>());
+        Assert.Equal(3, plan.Valid);
+        Assert.Equal("9200", plan.Entries[0].Field(FieldKeys.Port));
+        Assert.Equal("elasticsearch", plan.Entries[0].Field(FieldKeys.Driver));
+        Assert.Equal("6379", plan.Entries[1].Field(FieldKeys.Port));
+        Assert.Equal("redis", plan.Entries[1].Field(FieldKeys.Driver));
+        Assert.Equal("5432", plan.Entries[2].Field(FieldKeys.Port));
+        Assert.Equal("postgresql", plan.Entries[2].Field(FieldKeys.Driver));
     }
 
     [Fact]

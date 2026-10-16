@@ -154,13 +154,23 @@ public sealed class MainViewModel : ViewModelBase
 
     public IReadOnlyList<FilterItemView> KindFilters { get; private set; } = [];
 
+    private FilterItemView? _selectedSpaceFilter;
+
     public FilterItemView? SelectedSpaceFilter
     {
-        get => SpaceFilters.FirstOrDefault(item => item.IsSelected);
+        get => _selectedSpaceFilter;
         set
         {
-            if (value is not null)
+            // ComboBox 在 ItemsSource 替换时会短暂写入 null，忽略以免下拉显示空白。
+            if (value is null)
             {
+                return;
+            }
+
+            if (!ReferenceEquals(_selectedSpaceFilter, value))
+            {
+                _selectedSpaceFilter = value;
+                OnPropertyChanged(nameof(SelectedSpaceFilter));
                 SelectSpace(value.Key);
             }
         }
@@ -619,7 +629,6 @@ public sealed class MainViewModel : ViewModelBase
 
         _spaceFilter = key;
         ApplyFilters();
-        OnPropertyChanged(nameof(SelectedSpaceFilter));
     }
 
     public void SelectTag(string key)
@@ -879,6 +888,18 @@ public sealed class MainViewModel : ViewModelBase
         {
             SpaceFilters = spaces;
             OnPropertyChanged(nameof(SpaceFilters));
+        }
+
+        var selectedSpace = SpaceFilters.FirstOrDefault(item => item.Key == _spaceFilter)
+            ?? SpaceFilters.FirstOrDefault();
+        if (!ReferenceEquals(_selectedSpaceFilter, selectedSpace))
+        {
+            _selectedSpaceFilter = selectedSpace;
+            OnPropertyChanged(nameof(SelectedSpaceFilter));
+        }
+        else if (selectedSpace is not null)
+        {
+            selectedSpace.IsSelected = true;
             OnPropertyChanged(nameof(SelectedSpaceFilter));
         }
 
