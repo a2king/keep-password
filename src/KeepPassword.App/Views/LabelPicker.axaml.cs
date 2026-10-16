@@ -28,8 +28,12 @@ public partial class LabelPicker : UserControl
     public static readonly StyledProperty<Geometry?> IconProperty =
         AvaloniaProperty.Register<LabelPicker, Geometry?>(nameof(Icon));
 
+    private static WeakReference<LabelPicker>? _openPicker;
+
     private List<LabelChipView> _filtered = [];
     private int _highlight = -1;
+    private ScrollViewer? _hostScroller;
+    private TopLevel? _wheelTopLevel;
 
     public LabelPicker()
     {
@@ -46,8 +50,143 @@ public partial class LabelPicker : UserControl
         Input.GotFocus += (_, _) => Open();
         Input.KeyDown += OnInputKeyDown;
         Box.AddHandler(PointerPressedEvent, OnBoxPressed, RoutingStrategies.Tunnel);
-        Dropdown.Closed += (_, _) => Input.Text = "";
-        Dropdown.Opened += (_, _) => _ = Motion.EnterAsync(DropdownCard, 4);
+        Dropdown.Closed += OnDropdownClosed;
+        Dropdown.Opened += OnDropdownOpened;
+    }
+
+    private void OnDropdownOpened(object? sender, EventArgs e)
+    {
+        _ = Motion.EnterAsync(DropdownCard, 4);
+        AttachHostScroller();
+        AttachWheelCapture();
+    }
+
+    private void OnDropdownClosed(object? sender, EventArgs e)
+    {
+        if (_openPicker is not null
+            && _openPicker.TryGetTarget(out var open)
+            && ReferenceEquals(open, this))
+        {
+            _openPicker = null;
+        }
+
+        DetachWheelCapture();
+        DetachHostScroller();
+        Input.Text = "";
+    }
+
+    private void AttachWheelCapture()
+    {
+        DetachWheelCapture();
+        // Popup 内容在独立视觉树里，滚轮常落到主窗口 TopLevel；在顶层隧道里截获并转给下拉。
+        _wheelTopLevel = TopLevel.GetTopLevel(DropdownCard) ?? TopLevel.GetTopLevel(this);
+        _wheelTopLevel?.AddHandler(
+            PointerWheelChangedEvent,
+            OnCapturedWheel,
+            RoutingStrategies.Tunnel,
+            handledEventsToo: true);
+    }
+
+    private void DetachWheelCapture()
+    {
+        if (_wheelTopLevel is null)
+        {
+            return;
+        }
+
+        _wheelTopLevel.RemoveHandler(PointerWheelChangedEvent, OnCapturedWheel);
+        _wheelTopLevel = null;
+    }
+
+    private void OnCapturedWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (!Dropdown.IsOpen || !IsPointerOverDropdown(e))
+        {
+            return;
+        }
+
+        var max = Math.Max(0, OptionsScroller.Extent.Height - OptionsScroller.Viewport.Height);
+        if (max > 0)
+        {
+            // Windows 上 Delta.Y 通常是 ±1（一格），按行高换算像素。
+            var step = Math.Abs(e.Delta.Y) < 2 ? e.Delta.Y * 48 : e.Delta.Y;
+            var next = Math.Clamp(OptionsScroller.Offset.Y - step, 0, max);
+            OptionsScroller.Offset = new Vector(OptionsScroller.Offset.X, next);
+        }
+
+        e.Handled = true;
+    }
+
+    private bool IsPointerOverDropdown(PointerWheelEventArgs e)
+    {
+        if (DropdownCard.IsPointerOver || OptionsScroller.IsPointerOver)
+        {
+            return true;
+        }
+
+        if (e.Source is Visual source)
+        {
+            for (Visual? current = source; current is not null; current = current.GetVisualParent())
+            {
+                if (ReferenceEquals(current, DropdownCard) || ReferenceEquals(current, OptionsScroller))
+                {
+                    return true;
+                }
+            }
+        }
+
+        try
+        {
+            var point = e.GetPosition(DropdownCard);
+            return point.X >= 0
+                   && point.Y >= 0
+                   && point.X <= DropdownCard.Bounds.Width
+                   && point.Y <= DropdownCard.Bounds.Height;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private void AttachHostScroller()
+    {
+        DetachHostScroller();
+        _hostScroller = this.FindAncestorOfType<ScrollViewer>();
+        if (_hostScroller is not null)
+        {
+            _hostScroller.ScrollChanged += OnHostScrollChanged;
+        }
+    }
+
+    private void DetachHostScroller()
+    {
+        if (_hostScroller is null)
+        {
+            return;
+        }
+
+        _hostScroller.ScrollChanged -= OnHostScrollChanged;
+        _hostScroller = null;
+    }
+
+    private void OnHostScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        if (!Dropdown.IsOpen)
+        {
+            return;
+        }
+
+        // 指针还在下拉上时，不因详情滚动而关闭（避免滚轮穿透误关）。
+        if (DropdownCard.IsPointerOver || OptionsScroller.IsPointerOver)
+        {
+            return;
+        }
+
+        if (Math.Abs(e.OffsetDelta.Y) > 0.1 || Math.Abs(e.OffsetDelta.X) > 0.1)
+        {
+            Close();
+        }
     }
 
     public IReadOnlyList<LabelChipView>? Items
@@ -122,12 +261,30 @@ public partial class LabelPicker : UserControl
             return;
         }
 
+        CloseOtherPickers();
         Dropdown.Width = Box.Bounds.Width;
         RebuildOptions();
         Dropdown.IsOpen = true;
+        _openPicker = new WeakReference<LabelPicker>(this);
     }
 
-    private void Close() => Dropdown.IsOpen = false;
+    private void Close()
+    {
+        if (Dropdown.IsOpen)
+        {
+            Dropdown.IsOpen = false;
+        }
+    }
+
+    private void CloseOtherPickers()
+    {
+        if (_openPicker is null || !_openPicker.TryGetTarget(out var open) || ReferenceEquals(open, this))
+        {
+            return;
+        }
+
+        open.Close();
+    }
 
     private void OnInputKeyDown(object? sender, KeyEventArgs e)
     {

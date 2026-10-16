@@ -102,15 +102,22 @@
            Placement="BottomEdgeAlignedLeft"
            VerticalOffset="4"
            IsLightDismissEnabled="True"
-           OverlayDismissEventPassThrough="True"
+           OverlayDismissEventPassThrough="False"
            OverlayInputPassThroughElement="{Binding #Box}">
       <Border x:Name="DropdownCard" Background="{DynamicResource Kp.Surface}"
               BorderBrush="{DynamicResource Kp.Border}"
               BorderThickness="1"
               CornerRadius="8"
               Padding="4"
-              BoxShadow="0 6 16 0 #26000000">
-        <ScrollViewer MaxHeight="288">
+              BoxShadow="0 6 16 0 #26000000"
+              Focusable="True">
+        <!-- MaxHeight：选项少时贴合内容，多时再出现滚动，避免大片留白 -->
+        <ScrollViewer x:Name="OptionsScroller"
+                      MaxHeight="240"
+                      Focusable="True"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto"
+                      BringIntoViewOnFocusChange="False">
           <StackPanel x:Name="Options" Spacing="1" />
         </ScrollViewer>
       </Border>

@@ -23,9 +23,14 @@ public partial class MainWindow : Window
     private string? _installRoot;
     private string? _launchAfterClose;
     private bool _installSucceeded;
+    private bool _closingProcesses;
     private DispatcherTimer? _flushTimer;
     private double _percent;
     private string _stage = "准备中";
+    private string _finishTitle = "安装完成";
+    private string _finishText = "";
+    private string? _finishError;
+    private string _finishButtonText = "完成";
 
     public MainWindow()
     {
@@ -62,9 +67,30 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnCancel(object? sender, RoutedEventArgs e) => Close();
+    private void OnCancel(object? sender, RoutedEventArgs e)
+    {
+        if (_closingProcesses)
+        {
+            return;
+        }
+
+        Close();
+    }
 
     private void OnFinish(object? sender, RoutedEventArgs e) => Close();
+
+    private void OnProgressNext(object? sender, RoutedEventArgs e)
+    {
+        FinishTitle.Text = _finishTitle;
+        FinishText.Text = _finishText;
+        FinishError.Text = _finishError ?? "";
+        FinishError.IsVisible = !string.IsNullOrEmpty(_finishError);
+        FinishButton.Content = _finishButtonText;
+        ShowPage(finish: true);
+        StepTitle.Text = _installSucceeded
+            ? "第 3 步 / 共 3 步 · 完成"
+            : _finishTitle;
+    }
 
     private async void OnBrowse(object? sender, RoutedEventArgs e)
     {
@@ -109,8 +135,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        InstallButton.IsEnabled = false;
         ShowPage(progress: true);
         StepTitle.Text = "第 2 步 / 共 3 步 · 安装";
+        ProgressHeading.Text = "正在安装…";
+        ProgressNextButton.IsVisible = false;
+        ProgressNextButton.IsEnabled = false;
         _logText.Clear();
         LogText.Text = "";
         lock (_progressLock)
@@ -177,39 +207,34 @@ public partial class MainWindow : Window
             _installSucceeded = true;
             var exe = Path.Combine(target, InstallConstants.AppExecutableName());
             _launchAfterClose = options.LaunchAfterInstall && File.Exists(exe) ? exe : null;
-            FinishTitle.Text = "安装完成";
-            FinishText.Text = "Keep Password 已安装到：" + target +
-                              (_launchAfterClose is not null ? "\n点击「完成」关闭安装程序后将自动启动。" : "\n可从开始菜单或桌面快捷方式打开。");
-            FinishError.IsVisible = false;
-            FinishButton.Content = "完成";
-            ShowPage(finish: true);
-            StepTitle.Text = "第 3 步 / 共 3 步 · 完成";
+            _finishTitle = "安装完成";
+            _finishText = "Keep Password 已安装到：" + target +
+                          (_launchAfterClose is not null ? "\n点击「完成」关闭安装程序后将自动启动。" : "\n可从开始菜单或桌面快捷方式打开。");
+            _finishError = null;
+            _finishButtonText = "完成";
+            ShowInstallStepDone("安装完成，可查看上方日志后进入下一步。");
         }
         catch (OperationCanceledException ex)
         {
             StopFlush();
             _installSucceeded = false;
             _launchAfterClose = null;
-            FinishTitle.Text = "安装已取消";
-            FinishText.Text = "安装已取消。请退出 Keep Password 后重新运行安装程序。";
-            FinishError.Text = ex.Message;
-            FinishError.IsVisible = true;
-            FinishButton.Content = "关闭";
-            ShowPage(finish: true);
-            StepTitle.Text = "安装已取消";
+            _finishTitle = "安装已取消";
+            _finishText = "安装已取消。请退出 Keep Password 后重新运行安装程序。";
+            _finishError = ex.Message;
+            _finishButtonText = "关闭";
+            ShowInstallStepDone("安装已取消。");
         }
         catch (Exception ex)
         {
             StopFlush();
             _installSucceeded = false;
             _launchAfterClose = null;
-            FinishTitle.Text = "安装失败";
-            FinishText.Text = "安装未能完成。请关闭占用程序后重试，或更换安装目录。";
-            FinishError.Text = ex.Message;
-            FinishError.IsVisible = true;
-            FinishButton.Content = "关闭";
-            ShowPage(finish: true);
-            StepTitle.Text = "安装失败";
+            _finishTitle = "安装失败";
+            _finishText = "安装未能完成。请关闭占用程序后重试，或更换安装目录。";
+            _finishError = ex.Message;
+            _finishButtonText = "关闭";
+            ShowInstallStepDone("安装失败，可查看上方日志。");
         }
         finally
         {
@@ -223,7 +248,24 @@ public partial class MainWindow : Window
                 {
                 }
             }
+
+            InstallButton.IsEnabled = true;
         }
+    }
+
+    private void ShowInstallStepDone(string status)
+    {
+        ProgressHeading.Text = _installSucceeded ? "安装写入完成" : _finishTitle;
+        ProgressText.Text = status;
+        if (_installSucceeded)
+        {
+            ProgressBar.Value = 100;
+            PercentText.Text = "100%";
+        }
+
+        ProgressNextButton.Content = "下一步";
+        ProgressNextButton.IsVisible = true;
+        ProgressNextButton.IsEnabled = true;
     }
 
     /// <summary>
@@ -239,13 +281,11 @@ public partial class MainWindow : Window
                 return true;
             }
 
-            // 文件仍被占用但未识别到进程时，仍提示用户确认重试
-            var retry = await ConfirmAsync(
+            return await ConfirmAsync(
                 "文件被占用",
                 "安装目录中的文件正被其它程序占用，但未识别到正在运行的 Keep Password。\n\n仍要重试安装吗？",
                 "重试",
                 "取消");
-            return retry;
         }
 
         try
@@ -262,32 +302,18 @@ public partial class MainWindow : Window
                 }
             }).Distinct());
 
-            var confirmed = await ConfirmAsync(
+            return await ConfirmCloseRunningAsync(
                 "需要退出正在运行的程序",
                 "检测到以下程序仍在运行，会占用安装目录中的文件，导致无法覆盖更新：\n\n"
                 + names
                 + "\n\n确认后将退出这些程序并继续安装；取消则中止安装。",
-                "退出并继续",
-                "取消");
-            if (!confirmed)
-            {
-                DisposeProcesses(running);
-                return false;
-            }
-
-            progressLogClose(running.Count);
-            await Task.Run(() => InstallOperations.CloseRunningProductProcesses(running));
-            await Task.Delay(400);
-            return true;
+                running);
         }
         catch (Exception)
         {
             DisposeProcesses(running);
             throw;
         }
-
-        void progressLogClose(int count) =>
-            _pendingLogs.Enqueue($"正在退出占用进程（{count} 个）…");
     }
 
     private static void DisposeProcesses(IEnumerable<Process> processes)
@@ -304,19 +330,142 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task<bool> ConfirmAsync(string title, string message, string okText, string cancelText)
+    private async Task<bool> ConfirmCloseRunningAsync(string title, string message, IReadOnlyList<Process> running)
     {
-        var window = new Window
+        var window = CreateConfirmWindow(title);
+        var accepted = false;
+        var busy = false;
+
+        var titleBlock = new TextBlock
         {
-            Title = title,
-            Width = 440,
-            SizeToContent = SizeToContent.Height,
-            CanResize = false,
-            ShowInTaskbar = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            SystemDecorations = SystemDecorations.BorderOnly
+            Text = title,
+            FontSize = 17,
+            FontWeight = FontWeight.SemiBold,
+            Margin = new Thickness(0, 0, 0, 10)
+        };
+        var text = new TextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 20,
+            FontSize = 13.5,
+            Foreground = new SolidColorBrush(Color.Parse("#4A5568")),
+            Margin = new Thickness(0, 0, 0, 12)
+        };
+        var status = new TextBlock
+        {
+            Text = "",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12.5,
+            Foreground = new SolidColorBrush(Color.Parse("#0B4F9C")),
+            Margin = new Thickness(0, 0, 0, 16),
+            IsVisible = false
+        };
+        var cancel = new Button { Content = "取消", MinWidth = 88, Padding = new Thickness(14, 8) };
+        cancel.Classes.Add("ghost");
+        var ok = new Button
+        {
+            Content = "退出并继续",
+            MinWidth = 112,
+            Padding = new Thickness(14, 8)
+        };
+        ok.Classes.Add("accent");
+
+        void SetBusy(bool value)
+        {
+            busy = value;
+            _closingProcesses = value;
+            ok.IsEnabled = !value;
+            cancel.IsEnabled = !value;
+            InstallButton.IsEnabled = !value;
+            status.IsVisible = value;
+            status.Text = value ? "正在退出占用进程，请稍候…" : "";
+        }
+
+        cancel.Click += (_, _) =>
+        {
+            if (!busy)
+            {
+                window.Close();
+            }
+        };
+        ok.Click += async (_, _) =>
+        {
+            if (busy)
+            {
+                return;
+            }
+
+            SetBusy(true);
+            _pendingLogs.Enqueue($"正在退出占用进程（{running.Count} 个）…");
+            try
+            {
+                await Task.Run(() => InstallOperations.CloseRunningProductProcesses(running));
+                await Task.Delay(400);
+                accepted = true;
+                // 必须先解除 busy，否则 Closing 会因 busy 取消关闭，弹窗永久卡住。
+                SetBusy(false);
+                window.Close();
+            }
+            catch (Exception ex)
+            {
+                SetBusy(false);
+                status.IsVisible = true;
+                status.Foreground = new SolidColorBrush(Color.Parse("#D14343"));
+                status.Text = "退出失败：" + ex.Message;
+                DisposeProcesses(running);
+            }
         };
 
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 10,
+            Children = { cancel, ok }
+        };
+        window.Content = CreateConfirmCard(new StackPanel { Children = { titleBlock, text, status, buttons } });
+        window.Closing += (_, e) =>
+        {
+            // 退出进行中禁止关掉弹窗；成功结束后 accepted=true 且已解除 busy，允许关闭。
+            if (busy && !accepted)
+            {
+                e.Cancel = true;
+            }
+        };
+        window.KeyDown += (_, e) =>
+        {
+            if (busy)
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                window.Close();
+            }
+        };
+
+        await window.ShowDialog(this);
+        _closingProcesses = false;
+        if (!ProgressPage.IsVisible)
+        {
+            InstallButton.IsEnabled = true;
+        }
+
+        if (!accepted)
+        {
+            DisposeProcesses(running);
+        }
+
+        return accepted;
+    }
+
+    private async Task<bool> ConfirmAsync(string title, string message, string okText, string cancelText)
+    {
+        var window = CreateConfirmWindow(title);
         var accepted = false;
         var titleBlock = new TextBlock
         {
@@ -335,15 +484,10 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 0, 0, 20)
         };
         var cancel = new Button { Content = cancelText, MinWidth = 88, Padding = new Thickness(14, 8) };
+        cancel.Classes.Add("ghost");
         cancel.Click += (_, _) => window.Close();
-        var ok = new Button
-        {
-            Content = okText,
-            MinWidth = 88,
-            Padding = new Thickness(14, 8),
-            Background = new SolidColorBrush(Color.Parse("#0B4F9C")),
-            Foreground = Brushes.White
-        };
+        var ok = new Button { Content = okText, MinWidth = 88, Padding = new Thickness(14, 8) };
+        ok.Classes.Add("accent");
         ok.Click += (_, _) =>
         {
             accepted = true;
@@ -356,12 +500,7 @@ public partial class MainWindow : Window
             Spacing = 10,
             Children = { cancel, ok }
         };
-        window.Content = new Border
-        {
-            Padding = new Thickness(24),
-            Background = Brushes.White,
-            Child = new StackPanel { Children = { titleBlock, text, buttons } }
-        };
+        window.Content = CreateConfirmCard(new StackPanel { Children = { titleBlock, text, buttons } });
         window.KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape)
@@ -380,6 +519,32 @@ public partial class MainWindow : Window
         await window.ShowDialog(this);
         return accepted;
     }
+
+    private Window CreateConfirmWindow(string title) =>
+        new()
+        {
+            Title = title,
+            Width = 460,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            SystemDecorations = SystemDecorations.BorderOnly,
+            Background = Brushes.Transparent
+        };
+
+    private static Border CreateConfirmCard(Control child) =>
+        new()
+        {
+            Margin = new Thickness(12),
+            Padding = new Thickness(22),
+            Background = Brushes.White,
+            BorderBrush = new SolidColorBrush(Color.Parse("#D0D7E2")),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(12),
+            BoxShadow = BoxShadows.Parse("0 12 28 0 #33000000"),
+            Child = child
+        };
 
     private void ShowPage(bool progress = false, bool finish = false)
     {
