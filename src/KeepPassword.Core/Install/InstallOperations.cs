@@ -185,6 +185,153 @@ public static class InstallOperations
             File.Exists(DesktopShortcutPath()));
     }
 
+    /// <summary>
+    /// 查找仍在运行、且可执行文件位于安装目录内的 Keep Password 相关进程（不含当前进程与安装程序自身）。
+    /// </summary>
+    public static IReadOnlyList<Process> FindRunningProductProcesses(string installRoot)
+    {
+        string root;
+        try
+        {
+            root = Path.GetFullPath(installRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                   + Path.DirectorySeparatorChar;
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+
+        var selfId = Environment.ProcessId;
+        var found = new List<Process>();
+        foreach (var processName in new[] { InstallConstants.AppFileName, "KeepPassword.NativeHost" })
+        {
+            Process[] processes;
+            try
+            {
+                processes = Process.GetProcessesByName(processName);
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            foreach (var process in processes)
+            {
+                try
+                {
+                    if (process.Id == selfId || process.HasExited)
+                    {
+                        process.Dispose();
+                        continue;
+                    }
+
+                    string? path = null;
+                    try
+                    {
+                        path = process.MainModule?.FileName;
+                    }
+                    catch (Exception)
+                    {
+                        // 无权限读模块时，同名进程仍视为可能占用安装目录
+                    }
+
+                    if (path is not null)
+                    {
+                        var full = Path.GetFullPath(path);
+                        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                        {
+                            process.Dispose();
+                            continue;
+                        }
+                    }
+
+                    found.Add(process);
+                }
+                catch (Exception)
+                {
+                    try
+                    {
+                        process.Dispose();
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+            }
+        }
+
+        return found;
+    }
+
+    public static void CloseRunningProductProcesses(IEnumerable<Process> processes)
+    {
+        foreach (var process in processes)
+        {
+            try
+            {
+                if (process.HasExited)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    process.CloseMainWindow();
+                }
+                catch (Exception)
+                {
+                }
+
+                if (!process.WaitForExit(2500) && !process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(5000);
+                }
+            }
+            catch (Exception)
+            {
+            }
+            finally
+            {
+                try
+                {
+                    process.Dispose();
+                }
+                catch (Exception)
+                {
+                }
+            }
+        }
+    }
+
+    public static bool IsFileInUseException(Exception? ex)
+    {
+        const int sharingViolation = unchecked((int)0x80070020);
+        const int lockViolation = unchecked((int)0x80070021);
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            if (current is not IOException io)
+            {
+                continue;
+            }
+
+            if (io.HResult is sharingViolation or lockViolation)
+            {
+                return true;
+            }
+
+            var message = io.Message;
+            if (message.Contains("being used by another process", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("另一个程序正在使用此文件", StringComparison.Ordinal)
+                || message.Contains("正由另一进程使用", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static ExistingInstall? ResolveExistingInstall(string? location, string? version, bool hasStartMenuShortcut, bool hasDesktopShortcut)
     {
         if (string.IsNullOrWhiteSpace(location))

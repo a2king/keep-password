@@ -2,8 +2,12 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using KeepPassword.Core.Install;
@@ -100,37 +104,74 @@ public partial class MainWindow : Window
             LaunchAfterInstall = LaunchBox.IsChecked == true
         };
 
+        if (!await EnsureNoRunningAppAsync(target))
+        {
+            return;
+        }
+
         ShowPage(progress: true);
         StepTitle.Text = "第 2 步 / 共 3 步 · 安装";
+        _logText.Clear();
+        LogText.Text = "";
+        lock (_progressLock)
+        {
+            _percent = 0;
+            _stage = "准备中";
+        }
+
         var progress = new InstallReporter(this);
         _flushTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(60), DispatcherPriority.Background, (_, _) => FlushProgress());
         _flushTimer.Start();
 
+        string? extract = null;
         try
         {
-            await Task.Run(() =>
+            extract = await Task.Run(() =>
             {
                 progress.Report(new InstallProgress(0, "正在校验安装包…", "读取并校验安装包完整性"));
                 using var payload = OpenVerifiedPayload(progress);
                 progress.Report(new InstallProgress(InstallOperations.ExtractStart, "正在解压安装文件…", "安装包校验通过"));
-                var extract = Path.Combine(Path.GetTempPath(), "keep-password-setup-" + Guid.NewGuid().ToString("n"));
-                Directory.CreateDirectory(extract);
+                var folder = Path.Combine(Path.GetTempPath(), "keep-password-setup-" + Guid.NewGuid().ToString("n"));
+                Directory.CreateDirectory(folder);
+                InstallOperations.ExtractZip(payload, folder, progress);
+                return folder;
+            });
+
+            const int maxLockRetries = 3;
+            for (var attempt = 0; ; attempt++)
+            {
                 try
                 {
-                    InstallOperations.ExtractZip(payload, extract, progress);
-                    InstallOperations.InstallFromDirectory(extract, target, options, progress);
+                    var installTarget = target;
+                    var installExtract = extract;
+                    await Task.Run(() =>
+                        InstallOperations.InstallFromDirectory(installExtract, installTarget, options, progress));
+                    break;
                 }
-                finally
+                catch (Exception ex) when (InstallOperations.IsFileInUseException(ex) && attempt < maxLockRetries)
                 {
-                    try
+                    double percent;
+                    lock (_progressLock)
                     {
-                        Directory.Delete(extract, recursive: true);
+                        percent = _percent;
                     }
-                    catch (Exception)
+
+                    FlushProgress();
+                    progress.Report(new InstallProgress(percent, "检测到程序仍在运行…", "安装目录中的文件正被占用"));
+                    FlushProgress();
+                    if (!await EnsureNoRunningAppAsync(target, forcePrompt: true))
                     {
+                        throw new OperationCanceledException("用户取消：未关闭正在运行的 Keep Password。", ex);
                     }
+
+                    lock (_progressLock)
+                    {
+                        percent = _percent;
+                    }
+
+                    progress.Report(new InstallProgress(percent, "正在重新写入程序文件…", "已退出占用进程，继续安装"));
                 }
-            });
+            }
 
             StopFlush();
             _installSucceeded = true;
@@ -143,6 +184,19 @@ public partial class MainWindow : Window
             FinishButton.Content = "完成";
             ShowPage(finish: true);
             StepTitle.Text = "第 3 步 / 共 3 步 · 完成";
+        }
+        catch (OperationCanceledException ex)
+        {
+            StopFlush();
+            _installSucceeded = false;
+            _launchAfterClose = null;
+            FinishTitle.Text = "安装已取消";
+            FinishText.Text = "安装已取消。请退出 Keep Password 后重新运行安装程序。";
+            FinishError.Text = ex.Message;
+            FinishError.IsVisible = true;
+            FinishButton.Content = "关闭";
+            ShowPage(finish: true);
+            StepTitle.Text = "安装已取消";
         }
         catch (Exception ex)
         {
@@ -157,6 +211,174 @@ public partial class MainWindow : Window
             ShowPage(finish: true);
             StepTitle.Text = "安装失败";
         }
+        finally
+        {
+            if (extract is not null)
+            {
+                try
+                {
+                    Directory.Delete(extract, recursive: true);
+                }
+                catch (Exception)
+                {
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 若安装目录内仍有 Keep Password 在运行：弹窗询问。确认则结束进程；取消则返回 false。
+    /// </summary>
+    private async Task<bool> EnsureNoRunningAppAsync(string installRoot, bool forcePrompt = false)
+    {
+        var running = InstallOperations.FindRunningProductProcesses(installRoot);
+        if (running.Count == 0)
+        {
+            if (!forcePrompt)
+            {
+                return true;
+            }
+
+            // 文件仍被占用但未识别到进程时，仍提示用户确认重试
+            var retry = await ConfirmAsync(
+                "文件被占用",
+                "安装目录中的文件正被其它程序占用，但未识别到正在运行的 Keep Password。\n\n仍要重试安装吗？",
+                "重试",
+                "取消");
+            return retry;
+        }
+
+        try
+        {
+            var names = string.Join("、", running.Select(p =>
+            {
+                try
+                {
+                    return p.ProcessName + " (PID " + p.Id + ")";
+                }
+                catch (Exception)
+                {
+                    return "Keep Password";
+                }
+            }).Distinct());
+
+            var confirmed = await ConfirmAsync(
+                "需要退出正在运行的程序",
+                "检测到以下程序仍在运行，会占用安装目录中的文件，导致无法覆盖更新：\n\n"
+                + names
+                + "\n\n确认后将退出这些程序并继续安装；取消则中止安装。",
+                "退出并继续",
+                "取消");
+            if (!confirmed)
+            {
+                DisposeProcesses(running);
+                return false;
+            }
+
+            progressLogClose(running.Count);
+            await Task.Run(() => InstallOperations.CloseRunningProductProcesses(running));
+            await Task.Delay(400);
+            return true;
+        }
+        catch (Exception)
+        {
+            DisposeProcesses(running);
+            throw;
+        }
+
+        void progressLogClose(int count) =>
+            _pendingLogs.Enqueue($"正在退出占用进程（{count} 个）…");
+    }
+
+    private static void DisposeProcesses(IEnumerable<Process> processes)
+    {
+        foreach (var process in processes)
+        {
+            try
+            {
+                process.Dispose();
+            }
+            catch (Exception)
+            {
+            }
+        }
+    }
+
+    private async Task<bool> ConfirmAsync(string title, string message, string okText, string cancelText)
+    {
+        var window = new Window
+        {
+            Title = title,
+            Width = 440,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            SystemDecorations = SystemDecorations.BorderOnly
+        };
+
+        var accepted = false;
+        var titleBlock = new TextBlock
+        {
+            Text = title,
+            FontSize = 17,
+            FontWeight = FontWeight.SemiBold,
+            Margin = new Thickness(0, 0, 0, 10)
+        };
+        var text = new TextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 20,
+            FontSize = 13.5,
+            Foreground = new SolidColorBrush(Color.Parse("#4A5568")),
+            Margin = new Thickness(0, 0, 0, 20)
+        };
+        var cancel = new Button { Content = cancelText, MinWidth = 88, Padding = new Thickness(14, 8) };
+        cancel.Click += (_, _) => window.Close();
+        var ok = new Button
+        {
+            Content = okText,
+            MinWidth = 88,
+            Padding = new Thickness(14, 8),
+            Background = new SolidColorBrush(Color.Parse("#0B4F9C")),
+            Foreground = Brushes.White
+        };
+        ok.Click += (_, _) =>
+        {
+            accepted = true;
+            window.Close();
+        };
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 10,
+            Children = { cancel, ok }
+        };
+        window.Content = new Border
+        {
+            Padding = new Thickness(24),
+            Background = Brushes.White,
+            Child = new StackPanel { Children = { titleBlock, text, buttons } }
+        };
+        window.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                window.Close();
+            }
+            else if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                accepted = true;
+                window.Close();
+            }
+        };
+
+        await window.ShowDialog(this);
+        return accepted;
     }
 
     private void ShowPage(bool progress = false, bool finish = false)

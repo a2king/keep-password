@@ -75,6 +75,26 @@ public class InstallOperationsTests
     }
 
     [Fact]
+    public void IsFileInUseException_DetectsSharingViolationMessage()
+    {
+        var locked = new IOException(
+            "The process cannot access the file 'Avalonia.Base.dll' because it is being used by another process.");
+        Assert.True(InstallOperations.IsFileInUseException(locked));
+        Assert.True(InstallOperations.IsFileInUseException(new InvalidOperationException("wrap", locked)));
+        Assert.False(InstallOperations.IsFileInUseException(new IOException("disk full")));
+        Assert.False(InstallOperations.IsFileInUseException(null));
+    }
+
+    [Fact]
+    public void FindRunningProductProcesses_IgnoresUnrelatedDirectory()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "keep-password-tests", Guid.NewGuid().ToString("n"), "empty-install");
+        Directory.CreateDirectory(missing);
+        var found = InstallOperations.FindRunningProductProcesses(missing);
+        Assert.Empty(found);
+    }
+
+    [Fact]
     public void ResolveExistingInstall_RequiresInstalledExecutable()
     {
         var install = Path.Combine(Path.GetTempPath(), "keep-password-tests", Guid.NewGuid().ToString("n"), "Keep Password");
