@@ -130,7 +130,7 @@ public sealed class MainViewModel : ViewModelBase
     public bool PlatformAutofillSupported { get; }
 
     public string AutofillHint => PlatformAutofillSupported
-        ? "聚焦可识别的密码框后，选择登录、服务器、数据库或集群账号并确认短密钥。未识别到用户名框时只填密码。浏览器需要安装扩展并注册连接，再使用扩展按钮或 Ctrl+Shift+L。空闲 5 分钟、锁屏或休眠时自动锁定。"
+        ? $"在其它程序里点击密码框，再按 {Services.AutofillHotkeyPreferences.Current}（可在设置中修改），选择登录、服务器、数据库或集群账号并确认短密钥。未识别到用户名框时只填密码。浏览器需要安装扩展并注册连接，再使用扩展按钮或 Ctrl+Shift+L。空闲 5 分钟、锁屏或休眠时自动锁定。"
         : "当前系统的程序补全尚未实现。浏览器使用扩展按钮或 Ctrl+Shift+L。";
 
     public string Search

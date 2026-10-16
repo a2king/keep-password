@@ -19,13 +19,15 @@ public sealed class AppHost : IDisposable
     private readonly IPasswordFieldDetector _detector;
     private readonly ICredentialFiller _filler;
     private readonly NativeMessagingServer _server;
-    private readonly AutofillWatcher _watcher;
     private readonly AutofillGate _gate = new();
     private readonly AutoLockMonitor _autoLock;
     private readonly Mutex _mutex;
     private readonly EventWaitHandle _activate;
     private VaultSession? _session;
     private MainWindow? _main;
+    private IDisposable? _hotkey;
+    private bool _hotkeyPaused;
+    private bool _hotkeyBusy;
     private bool _trayReady;
     private bool _locking;
     private volatile bool _exiting;
@@ -36,7 +38,6 @@ public sealed class AppHost : IDisposable
         _detector = PlatformAutofill.CreateDetector();
         _filler = PlatformAutofill.CreateFiller();
         _server = new NativeMessagingServer(HandleMessageAsync);
-        _watcher = new AutofillWatcher(_detector, OnWindowsFieldAsync);
         _autoLock = new AutoLockMonitor(LockVault);
         _mutex = new Mutex(true, "KeepPassword.SingleInstance", out var created);
         _activate = new EventWaitHandle(false, EventResetMode.AutoReset, "KeepPassword.Activate");
@@ -58,6 +59,7 @@ public sealed class AppHost : IDisposable
         StartActivationListener();
         InstallTray();
         _server.Start();
+        AppUpdateService.ExitApplication = Shutdown;
         try
         {
             ShowShell();
@@ -65,6 +67,90 @@ public sealed class AppHost : IDisposable
         catch (Exception)
         {
             Shutdown();
+            return;
+        }
+
+        InstallHotkey();
+        _ = AppUpdateService.SilentCheckAsync();
+    }
+
+    private void InstallHotkey()
+    {
+        if (!OperatingSystem.IsWindows() || !_detector.IsSupported)
+        {
+            return;
+        }
+
+        InstallWindowsHotkey();
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private void InstallWindowsHotkey()
+    {
+        try
+        {
+            var hotkey = new Platform.Windows.WindowsGlobalHotkey();
+            hotkey.Pressed += () => _ = OnHotkeyAsync();
+            _hotkey = hotkey;
+            AutofillHotkeyPreferences.Attach(
+                gesture => hotkey.Register(gesture.Win32Modifiers, gesture.VirtualKey),
+                hotkey.Unregister);
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            _hotkey = null;
+        }
+    }
+
+    private async Task OnHotkeyAsync()
+    {
+        if (_hotkeyPaused || _hotkeyBusy || _locking || _exiting)
+        {
+            return;
+        }
+
+        _hotkeyBusy = true;
+        try
+        {
+            if (_session is not { IsUnlocked: true })
+            {
+                if (_main is not null)
+                {
+                    await Dialogs.AlertAsync(_main, "Keep Password 已锁定", "请先解锁 Keep Password，再回到目标程序的密码框按快捷键。");
+                }
+
+                return;
+            }
+
+            // UI Automation 扫树可能很慢；放到后台，避免拖死界面。
+            var field = await Task.Run(() =>
+            {
+                try
+                {
+                    return _detector.DetectForeground().FirstOrDefault();
+                }
+                catch (Exception)
+                {
+                    return null;
+                }
+            });
+
+            if (field is null)
+            {
+                if (_main is not null)
+                {
+                    await Dialogs.AlertAsync(_main, "没有识别到密码框",
+                        $"请先点击目标程序的密码框，再按 {AutofillHotkeyPreferences.Current}。浏览器里的网页请使用浏览器扩展；自绘或未开放辅助功能的输入框无法识别，可以从保险库复制密码。");
+                }
+
+                return;
+            }
+
+            await OnWindowsFieldAsync(field);
+        }
+        finally
+        {
+            _hotkeyBusy = false;
         }
     }
 
@@ -84,13 +170,12 @@ public sealed class AppHost : IDisposable
         AutofillIndexStore.Write(session.VaultPath, session.Entries);
         _main?.ShowVault(session);
         _autoLock.Start();
-        _watcher.Start();
     }
 
     public void Dispose()
     {
         _autoLock.Dispose();
-        _watcher.Stop();
+        _hotkey?.Dispose();
         _server.Dispose();
         _session?.Dispose();
         _mutex.Dispose();
@@ -132,7 +217,6 @@ public sealed class AppHost : IDisposable
         try
         {
             _autoLock.Stop();
-            _watcher.Stop();
             if (_main is not null)
             {
                 foreach (var owned in _main.OwnedWindows.ToArray())
@@ -151,19 +235,7 @@ public sealed class AppHost : IDisposable
         }
     }
 
-    private void PauseWatcher(bool paused)
-    {
-        if (paused)
-        {
-            _watcher.Stop();
-            return;
-        }
-
-        if (_session is { IsUnlocked: true })
-        {
-            _watcher.Start();
-        }
-    }
+    private void PauseWatcher(bool paused) => _hotkeyPaused = paused;
 
     private void InstallTray()
     {
@@ -243,7 +315,8 @@ public sealed class AppHost : IDisposable
     {
         _exiting = true;
         _autoLock.Stop();
-        _watcher.Stop();
+        _hotkey?.Dispose();
+        _hotkey = null;
         _session?.Lock();
         _session = null;
         if (_main is not null)

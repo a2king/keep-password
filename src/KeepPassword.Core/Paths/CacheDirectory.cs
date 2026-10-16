@@ -239,7 +239,30 @@ public static class CacheDirectory
         }
     }
 
-    public static void SetMotionMode(string settingsFile, string mode)
+    public static void SetMotionMode(string settingsFile, string mode) =>
+        Update(settingsFile, dto => dto.MotionMode = mode is "System" or "Reduced" ? mode : "Full");
+
+    public static string? GetAutofillHotkey(string settingsFile)
+    {
+        if (!File.Exists(settingsFile))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<SettingsDto>(File.ReadAllText(settingsFile), Options)?.AutofillHotkey;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    public static void SetAutofillHotkey(string settingsFile, string hotkey) =>
+        Update(settingsFile, dto => dto.AutofillHotkey = hotkey);
+
+    private static void Update(string settingsFile, Action<SettingsDto> change)
     {
         var folder = Path.GetDirectoryName(settingsFile);
         if (!string.IsNullOrEmpty(folder))
@@ -259,7 +282,7 @@ public static class CacheDirectory
             dto = new SettingsDto();
         }
 
-        dto.MotionMode = mode is "System" or "Reduced" ? mode : "Full";
+        change(dto);
         var temp = settingsFile + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(dto, Options));
         File.Move(temp, settingsFile, overwrite: true);
@@ -330,5 +353,6 @@ public static class CacheDirectory
         public string? Directory { get; set; }
         public string? Theme { get; set; }
         public string? MotionMode { get; set; }
+        public string? AutofillHotkey { get; set; }
     }
 }

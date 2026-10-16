@@ -1,9 +1,14 @@
+using System.Diagnostics;
 using System.Text;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using KeepPassword.App.Services;
+using KeepPassword.Core.Autofill;
 using KeepPassword.Core.Import;
+using KeepPassword.Core.Update;
 using KeepPassword.Core.Vault;
 
 namespace KeepPassword.App.Views;
@@ -20,7 +25,9 @@ public partial class SettingsView : UserControl
         AnimateStatus(LabelStatus);
         AnimateStatus(DirectoryStatus);
         AnimateStatus(KeyStatus);
+        AnimateStatus(UpdateStatus);
         ThemeManager.ThemeChanged += UpdateThemeButtons;
+        AppUpdateService.Changed += OnAppUpdateChanged;
     }
 
     private static void AnimateStatus(TextBlock status)
@@ -53,9 +60,81 @@ public partial class SettingsView : UserControl
         ErrorBox.IsVisible = false;
         UpdateThemeButtons(ThemeManager.CurrentTheme);
         UpdateMotionButtons();
+        UpdateHotkey(null);
         RebuildLabels();
         UpdateEncryptionKeyStatus();
+        RefreshUpdateUi();
         Scroller.Offset = default;
+    }
+
+    private void OnAppUpdateChanged() => Dispatcher.UIThread.Post(RefreshUpdateUi);
+
+    private void RefreshUpdateUi()
+    {
+        var current = AppUpdateService.CurrentVersion;
+        var latest = AppUpdateService.Latest?.Version;
+        UpdateVersionText.Text = latest is null
+            ? $"当前版本 v{current}"
+            : $"当前版本 v{current}，最新版本 v{latest}";
+
+        if (!AppUpdateService.CanAutoInstall)
+        {
+            UpdateVersionText.Text += "。当前为便携运行，自动安装不可用，请到 GitHub 下载安装包。";
+        }
+
+        UpdateStatus.Text = AppUpdateService.StatusMessage
+            ?? (AppUpdateService.CanAutoInstall
+                ? "可检查 GitHub 上是否有新版本。"
+                : $"发布页：{UpdatePaths.ReleasesPageUrl}");
+
+        var phase = AppUpdateService.Phase;
+        UpdateProgress.IsVisible = phase == AppUpdatePhase.Downloading;
+        UpdateProgress.Value = AppUpdateService.DownloadProgress;
+        UpdateCheckBtn.IsEnabled = phase is not AppUpdatePhase.Checking and not AppUpdatePhase.Downloading;
+        UpdateDownloadBtn.IsVisible = phase == AppUpdatePhase.Available && AppUpdateService.CanAutoInstall;
+        UpdateCancelBtn.IsVisible = phase == AppUpdatePhase.Downloading;
+        UpdateInstallBtn.IsVisible = phase == AppUpdatePhase.Ready && AppUpdateService.CanAutoInstall;
+    }
+
+    private async void OnCheckUpdate(object? sender, RoutedEventArgs e)
+    {
+        UpdateCheckBtn.IsEnabled = false;
+        UpdateStatus.Text = "正在检查更新…";
+        await AppUpdateService.CheckAsync(silent: false);
+        RefreshUpdateUi();
+    }
+
+    private async void OnDownloadUpdate(object? sender, RoutedEventArgs e)
+    {
+        await AppUpdateService.DownloadAsync();
+        RefreshUpdateUi();
+    }
+
+    private void OnCancelDownload(object? sender, RoutedEventArgs e) => AppUpdateService.CancelDownload();
+
+    private void OnInstallUpdate(object? sender, RoutedEventArgs e)
+    {
+        var error = AppUpdateService.TryStartInstaller();
+        if (error is not null)
+        {
+            UpdateStatus.Text = error;
+        }
+    }
+
+    private void OnOpenGitHubReleases(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = UpdatePaths.ReleasesPageUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus.Text = "无法打开浏览器：" + ex.Message;
+        }
     }
 
     public void Clear()
@@ -273,6 +352,103 @@ public partial class SettingsView : UserControl
                 : "当前系统已关闭动画，过渡效果也会关闭。",
             _ => "已开启页面、面板与弹窗的过渡动画。"
         };
+    }
+
+    private void OnHotkeyFocus(object? sender, GotFocusEventArgs e)
+    {
+        AutofillHotkeyPreferences.Suspend();
+        HotkeyBox.Text = "";
+        HotkeyStatus.Text = "按下新的组合键，例如 Ctrl+Alt+K；按 Esc 取消。";
+    }
+
+    private void OnHotkeyBlur(object? sender, RoutedEventArgs e)
+    {
+        AutofillHotkeyPreferences.Resume();
+        HotkeyBox.Text = AutofillHotkeyPreferences.Current.ToString();
+    }
+
+    private void OnHotkeyKeyDown(object? sender, KeyEventArgs e)
+    {
+        e.Handled = true;
+        if (e.Key == Key.Escape)
+        {
+            EndHotkeyCapture();
+            UpdateHotkey(null);
+            return;
+        }
+
+        var key = e.Key switch
+        {
+            >= Key.A and <= Key.Z or >= Key.F1 and <= Key.F12 => e.Key.ToString(),
+            >= Key.D0 and <= Key.D9 => ((char)('0' + (e.Key - Key.D0))).ToString(),
+            >= Key.NumPad0 and <= Key.NumPad9 => ((char)('0' + (e.Key - Key.NumPad0))).ToString(),
+            Key.Space => "Space",
+            _ => null
+        };
+        if (key is null)
+        {
+            return;
+        }
+
+        var modifiers = HotkeyModifiers.None;
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            modifiers |= HotkeyModifiers.Ctrl;
+        }
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Alt))
+        {
+            modifiers |= HotkeyModifiers.Alt;
+        }
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            modifiers |= HotkeyModifiers.Shift;
+        }
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Meta))
+        {
+            modifiers |= HotkeyModifiers.Win;
+        }
+
+        ApplyHotkey(new AutofillHotkey(modifiers, key));
+    }
+
+    private void OnHotkeyReset(object? sender, RoutedEventArgs e) => ApplyHotkey(AutofillHotkey.Default);
+
+    private void ApplyHotkey(AutofillHotkey hotkey)
+    {
+        string? error;
+        try
+        {
+            error = AutofillHotkeyPreferences.TryApply(hotkey);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            error = "快捷键设置未能保存：" + ex.Message;
+        }
+
+        UpdateHotkey(error);
+        if (error is null)
+        {
+            EndHotkeyCapture();
+        }
+        else
+        {
+            AutofillHotkeyPreferences.Suspend();
+        }
+    }
+
+    private void EndHotkeyCapture() => TopLevel.GetTopLevel(this)?.FocusManager?.ClearFocus();
+
+    private void UpdateHotkey(string? error)
+    {
+        HotkeySection.IsVisible = AutofillHotkeyPreferences.IsSupported;
+        HotkeyBox.Text = AutofillHotkeyPreferences.Current.ToString();
+        HotkeyStatus.Text = error
+            ?? (AutofillHotkeyPreferences.IsActive
+                ? $"已启用：在目标程序的密码框里按 {AutofillHotkeyPreferences.Current}。"
+                : $"{AutofillHotkeyPreferences.Current} 已被其它程序占用，快捷键暂不可用，请换一个组合。");
     }
 
     private void ApplyTheme(string theme)

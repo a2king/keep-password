@@ -7,6 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using KeepPassword.Core.Install;
+using KeepPassword.Core.Update;
 
 namespace KeepPassword.Setup;
 
@@ -17,6 +18,7 @@ public partial class MainWindow : Window
     private readonly StringBuilder _logText = new();
     private string? _installRoot;
     private string? _launchAfterClose;
+    private bool _installSucceeded;
     private DispatcherTimer? _flushTimer;
     private double _percent;
     private string _stage = "准备中";
@@ -131,6 +133,7 @@ public partial class MainWindow : Window
             });
 
             StopFlush();
+            _installSucceeded = true;
             var exe = Path.Combine(target, InstallConstants.AppExecutableName());
             _launchAfterClose = options.LaunchAfterInstall && File.Exists(exe) ? exe : null;
             FinishTitle.Text = "安装完成";
@@ -144,6 +147,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             StopFlush();
+            _installSucceeded = false;
             _launchAfterClose = null;
             FinishTitle.Text = "安装失败";
             FinishText.Text = "安装未能完成。请关闭占用程序后重试，或更换安装目录。";
@@ -165,6 +169,11 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         base.OnClosed(e);
+        if (_installSucceeded)
+        {
+            ScheduleCleanupUpdateCache();
+        }
+
         if (_launchAfterClose is not { } exe)
         {
             return;
@@ -182,6 +191,36 @@ public partial class MainWindow : Window
         }
         catch (Exception)
         {
+        }
+    }
+
+    private void ScheduleCleanupUpdateCache()
+    {
+        string? processPath = null;
+        try
+        {
+            processPath = Environment.ProcessPath;
+        }
+        catch (Exception)
+        {
+        }
+
+        if (processPath is not null && UpdatePaths.IsUnderUpdateCache(processPath))
+        {
+            InstallOperations.ScheduleDeleteFile(processPath);
+            var sha = processPath + ".sha256";
+            if (File.Exists(sha))
+            {
+                InstallOperations.ScheduleDeleteFile(sha);
+            }
+
+            return;
+        }
+
+        var install = _installRoot ?? InstallOperations.FindExistingInstall()?.Directory;
+        if (install is not null)
+        {
+            UpdatePaths.CleanupCache(install);
         }
     }
 

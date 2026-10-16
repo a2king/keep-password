@@ -166,6 +166,36 @@ public class CacheDirectoryTests
         Assert.Equal("Full", CacheDirectory.GetMotionMode(settings));
     }
 
+    [Fact]
+    public void AutofillHotkey_PersistsAndSurvivesOtherSettings()
+    {
+        var root = NewRoot();
+        var settings = Path.Combine(root, "config", "settings.json");
+        var source = Path.Combine(root, "cache1");
+        Directory.CreateDirectory(source);
+
+        Assert.Null(CacheDirectory.GetAutofillHotkey(settings));
+
+        CacheDirectory.SetTheme(settings, "Dark");
+        CacheDirectory.SetAutofillHotkey(settings, "Ctrl+Shift+F9");
+        CacheDirectory.SetMotionMode(settings, "Reduced");
+        CacheDirectory.Switch(settings, source, Path.Combine(root, "cache2"));
+
+        Assert.Equal("Ctrl+Shift+F9", CacheDirectory.GetAutofillHotkey(settings));
+        Assert.Equal("Dark", CacheDirectory.GetTheme(settings));
+        Assert.Equal("Reduced", CacheDirectory.GetMotionMode(settings));
+    }
+
+    [Fact]
+    public void AutofillHotkey_CorruptSettings_ReturnsNull()
+    {
+        var root = NewRoot();
+        var settings = Path.Combine(root, "settings.json");
+        File.WriteAllText(settings, "{not json");
+
+        Assert.Null(CacheDirectory.GetAutofillHotkey(settings));
+    }
+
     private static string NewRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "keep-password-tests", Guid.NewGuid().ToString("n"));

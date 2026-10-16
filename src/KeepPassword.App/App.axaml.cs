@@ -23,6 +23,8 @@ public partial class App : Application
     {
         ThemeManager.Initialize();
         MotionPreferences.Initialize();
+        AutofillHotkeyPreferences.Initialize();
+        AppUpdateService.Initialize();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {

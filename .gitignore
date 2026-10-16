@@ -7,4 +7,5 @@ obj/
 TestResults/
 *.kpvault
 artifacts/
+!artifacts/package.ps1
 src/KeepPassword.Setup/payload.zip

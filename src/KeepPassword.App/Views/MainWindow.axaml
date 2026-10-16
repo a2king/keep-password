@@ -90,10 +90,16 @@
             </StackPanel>
           </Button>
           <Button x:Name="NavSettings" Classes="nav" Click="OnUsers" ToolTip.Tip="账户与偏好设置">
-            <StackPanel Spacing="4" HorizontalAlignment="Center">
-              <PathIcon Data="{StaticResource Icon.Settings}" Width="20" Height="20" />
-              <TextBlock Text="设置" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
-            </StackPanel>
+            <Grid>
+              <StackPanel Spacing="4" HorizontalAlignment="Center">
+                <PathIcon Data="{StaticResource Icon.Settings}" Width="20" Height="20" />
+                <TextBlock Text="设置" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
+              </StackPanel>
+              <Ellipse x:Name="SettingsUpdateBadge" Width="8" Height="8"
+                       Fill="{DynamicResource Kp.Danger}"
+                       HorizontalAlignment="Right" VerticalAlignment="Top"
+                       Margin="0,4,10,0" IsVisible="False" />
+            </Grid>
           </Button>
         </StackPanel>
 

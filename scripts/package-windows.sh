@@ -101,7 +101,15 @@ dotnet publish "$ROOT/src/KeepPassword.Setup/KeepPassword.Setup.csproj" \
   -o "$SETUP_OUT"
 rm -f "$ROOT/src/KeepPassword.Setup/payload.zip" "$ROOT/src/KeepPassword.Setup/payload.sha256"
 
-cp -f "$SETUP_OUT/KeepPassword.Setup.exe" "$OUT/KeepPassword-Setup-win-x64.exe"
+SETUP_EXE="$OUT/KeepPassword-Setup-win-x64.exe"
+cp -f "$SETUP_OUT/KeepPassword.Setup.exe" "$SETUP_EXE"
+python3 - <<PY
+import hashlib, pathlib
+setup = pathlib.Path(r"$SETUP_EXE")
+digest = hashlib.sha256(setup.read_bytes()).hexdigest().upper()
+pathlib.Path(r"$OUT/KeepPassword-Setup-win-x64.exe.sha256").write_text(digest + "\n", encoding="ascii")
+print(setup.name, digest)
+PY
 (
   cd "$STAGING"
   zip -r -q -9 "$OUT/KeepPassword-win-x64.zip" .
@@ -117,7 +125,7 @@ rm -f "$EXT_ZIP"
 )
 
 echo "== 完成 =="
-ls -lh "$OUT/KeepPassword-Setup-win-x64.exe" "$OUT/KeepPassword-win-x64.zip" "$EXT_ZIP" "$OUT/payload.zip"
+ls -lh "$OUT/KeepPassword-Setup-win-x64.exe" "$OUT/KeepPassword-Setup-win-x64.exe.sha256" "$OUT/KeepPassword-win-x64.zip" "$EXT_ZIP" "$OUT/payload.zip"
 echo "安装目录文件数: $(find "$STAGING" -type f | wc -l)"
 echo "外层可执行文件:"
 ls -lh "$STAGING/KeepPassword.exe" "$STAGING/KeepPassword.NativeHost.exe" "$STAGING/Uninstall.exe"

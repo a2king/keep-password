@@ -68,15 +68,19 @@ public partial class MainWindow : Window
         AccountScroller.SizeChanged += (_, _) => UpdateAccountColumns();
         UpdateThemeButtonState(ThemeManager.CurrentTheme);
         ThemeManager.ThemeChanged += UpdateThemeButtonState;
+        AppUpdateService.Changed += OnAppUpdateChanged;
+        UpdateSettingsBadge();
         Closed += (_, _) =>
         {
             ThemeManager.ThemeChanged -= UpdateThemeButtonState;
+            AppUpdateService.Changed -= OnAppUpdateChanged;
             ObserveView(null);
             CancelMotion();
         };
         Opened += (_, _) =>
         {
             UpdateThemeButtonState(ThemeManager.CurrentTheme);
+            UpdateSettingsBadge();
             if (!VaultRoot.IsVisible)
             {
                 UnlockRoot.FocusMaster();
@@ -680,6 +684,20 @@ public partial class MainWindow : Window
         }
 
         ShowPage(SettingsPage);
+    }
+
+    private void OnAppUpdateChanged() => Dispatcher.UIThread.Post(UpdateSettingsBadge);
+
+    private void UpdateSettingsBadge()
+    {
+        var available = AppUpdateService.UpdateAvailable
+            || AppUpdateService.Phase is AppUpdatePhase.Available or AppUpdatePhase.Ready or AppUpdatePhase.Downloading;
+        SettingsUpdateBadge.IsVisible = available;
+        NavSettings.SetValue(
+            ToolTip.TipProperty,
+            available
+                ? "有新版本可用，打开设置查看更新"
+                : "账户与偏好设置");
     }
 
     private void ShowPage(Control page, bool animate = true)

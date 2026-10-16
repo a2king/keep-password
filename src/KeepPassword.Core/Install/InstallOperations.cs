@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Runtime.Versioning;
 using System.Text;
 using KeepPassword.Core.Paths;
+using KeepPassword.Core.Update;
 using Microsoft.Win32;
 
 namespace KeepPassword.Core.Install;
@@ -96,7 +97,7 @@ public static class InstallOperations
         {
             foreach (var existing in EnumerateRelativeFiles(targetRoot).ToList())
             {
-                if (desired.Contains(existing))
+                if (desired.Contains(existing) || IsUpdateCacheRelative(existing))
                 {
                     continue;
                 }
@@ -109,6 +110,11 @@ public static class InstallOperations
                          .OrderByDescending(item => item.Length)
                          .ToList())
             {
+                if (IsUpdateCachePath(targetRoot, directory))
+                {
+                    continue;
+                }
+
                 if (IsEmpty(directory))
                 {
                     TryDeleteDirectory(directory);
@@ -286,6 +292,48 @@ public static class InstallOperations
         });
     }
 
+    /// <summary>当前进程退出后再删除文件（用于删除正在运行的安装包自身）。</summary>
+    public static void ScheduleDeleteFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            return;
+        }
+
+        string full;
+        try
+        {
+            full = Path.GetFullPath(filePath);
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            TryDeleteFile(full);
+            return;
+        }
+
+        var bat = Path.Combine(Path.GetTempPath(), "keep-password-del-" + Guid.NewGuid().ToString("n") + ".cmd");
+        var script = new StringBuilder();
+        script.AppendLine("@echo off");
+        script.AppendLine("set TARGET=" + full);
+        script.AppendLine(":retry");
+        script.AppendLine("ping 127.0.0.1 -n 2 >nul");
+        script.AppendLine("del /f /q \"%TARGET%\" >nul 2>&1");
+        script.AppendLine("if exist \"%TARGET%\" goto retry");
+        script.AppendLine("del \"%~f0\"");
+        File.WriteAllText(bat, script.ToString(), Encoding.ASCII);
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = bat,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+    }
+
     public static IEnumerable<string> EnumerateRelativeFiles(string root)
     {
         root = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -381,6 +429,34 @@ public static class InstallOperations
 
     private static bool IsEmpty(string directory) =>
         !Directory.EnumerateFileSystemEntries(directory).Any();
+
+    private static bool IsUpdateCacheRelative(string relativePath)
+    {
+        var normalized = relativePath.Replace('/', Path.DirectorySeparatorChar);
+        var prefix = UpdatePaths.CacheFolderName + Path.DirectorySeparatorChar;
+        return string.Equals(normalized, UpdatePaths.CacheFolderName, StringComparison.OrdinalIgnoreCase)
+               || normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsUpdateCachePath(string installRoot, string directory)
+    {
+        try
+        {
+            var cache = Path.GetFullPath(UpdatePaths.CacheDirectory(installRoot));
+            var full = Path.GetFullPath(directory);
+            if (string.Equals(full, cache, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var prefix = cache.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            return full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
 
     private static void TryDeleteFile(string path)
     {
