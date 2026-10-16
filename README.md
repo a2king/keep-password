@@ -1,18 +1,93 @@
 # Keep Password
 
-单机密码管理器，面向个人和运维场景：除了网站登录，也能管理服务器、数据库、SSH 密钥、API 凭据和集群服务。界面用 Avalonia，风格接近 1Password：深色侧栏、卡片列表、右侧滑出的详情面板。同一套代码可以发布到 Windows、macOS 和 Linux。保险库文件与系统无关，换电脑时可以直接拷贝打开。
+面向开发和运维的本地密码管理器：网站、服务器、数据库、SSH 密钥、API 凭据一处管理，数据不出本机。
+
+[![Latest Release](https://img.shields.io/github/v/release/a2king/keep-password?label=Release)](https://github.com/a2king/keep-password/releases/latest)
+[![License](https://img.shields.io/github/license/a2king/keep-password)](https://github.com/a2king/keep-password/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](https://github.com/a2king/keep-password/releases/latest)
+[![.NET](https://img.shields.io/badge/.NET-8-512BD4)](https://dotnet.microsoft.com/download/dotnet/8.0)
+
+<p align="center">
+  <img src="docs/images/cover.png" alt="Keep Password 封面：本地密码管理器" width="900" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/a2king/keep-password/releases/latest"><strong>下载最新版 →</strong></a>
+</p>
+
+界面用 Avalonia，风格接近 1Password：深色侧栏、卡片列表、右侧滑出的详情面板。同一套代码可以发布到 Windows、macOS 和 Linux。保险库文件与系统无关，换电脑时可以直接拷贝打开。
 
 没有云同步，所有数据只在本机加密保存。会联网的功能只有：手动触发的「泄露检查」（只发送密码哈希前 5 位），以及检查 / 下载 GitHub 发布的更新安装包。
+
+> **说明：** macOS / Linux 可构建运行，但**程序自动填充尚未实现**（仅留接口）。Windows 上支持浏览器扩展与桌面程序快捷键填充。自动填充界面截图待补。
+
+## 目录
+
+- [为什么选 Keep Password](#为什么选-keep-password)
+- [功能截图](#功能截图)
+- [快速开始](#快速开始)
+- [功能一览](#功能一览)
+- [两把锁](#两把锁)
+- [数据目录](#数据目录)
+- [Windows 安装与卸载](#windows-安装与卸载)
+- [条目](#条目)
+- [首次使用补充](#首次使用补充)
+- [密码生成器与安全检查](#密码生成器与安全检查)
+- [CSV 导入](#csv-导入)
+- [验证码](#验证码)
+- [补全](#补全)
+- [构建和运行](#构建和运行)
+- [测试与验证](#测试与验证)
+
+## 为什么选 Keep Password
+
+- **纯本地加密**：AES-256-GCM + Argon2id，数据与密钥不出本机，没有云同步账号。
+- **面向运维的条目类型**：登录之外还可管理服务器、数据库、SSH 密钥、API 凭据和集群节点。
+- **自动填充需短密钥确认**：浏览器扩展与 Windows 程序快捷键填充前都要再确认短密钥，降低误填与误触风险。
+- **内置 TOTP**：支持 Base32 / otpauth://，Windows 可扫屏识别二维码。
+- **安全审计**：空密码、弱密码、跨站重复使用检测；可选 Have I Been Pwned k-匿名泄露检查。
+- **仿 1Password 的 CSV 导入**：列映射、预览、可撤销导入，方便从其它密码管理器迁入。
+
+## 功能截图
+
+| | |
+| :---: | :---: |
+| <img src="docs/images/hero.png" alt="主界面总览：侧栏、条目卡片与详情面板" width="420" /><br/>主界面总览 | <img src="docs/images/unlock.png" alt="解锁页：短密钥快速解锁" width="420" /><br/>解锁页 |
+| <img src="docs/images/item-types.png" alt="多类型条目：登录、服务器、数据库等" width="420" /><br/>多类型条目 | <img src="docs/images/db-detail.png" alt="数据库条目详情与账号字段" width="420" /><br/>数据库详情 |
+| <img src="docs/images/server-detail.png" alt="服务器条目详情：协议、主机与账号" width="420" /><br/>服务器详情 | <img src="docs/images/totp.png" alt="验证码页面：当前码与剩余秒数" width="420" /><br/>验证码（TOTP） |
+| <img src="docs/images/generator.png" alt="密码生成器：随机字符、单词与 PIN" width="420" /><br/>密码生成器 | <img src="docs/images/audit.png" alt="安全审计：弱密码与重复使用检查" width="420" /><br/>安全审计 |
+| <img src="docs/images/import.png" alt="CSV 导入向导：列映射与预览" width="420" /><br/>CSV 导入 | <img src="docs/images/settings.png" alt="设置页：主题、快捷键、备份与更新" width="420" /><br/>设置 |
+
+## 快速开始
+
+### 下载安装（Windows）
+
+**正式安装包是自包含的，不需要安装 .NET。**
+
+1. 打开 [Releases](https://github.com/a2king/keep-password/releases/latest)，下载 `KeepPassword-Setup-win-x64.exe`。
+2. 运行安装程序，选择目录并完成安装（也可解压 `KeepPassword-win-x64.zip` 便携使用）。
+3. 从开始菜单或桌面快捷方式启动 Keep Password。
+
+### 首次创建保险库
+
+1. 在解锁页创建保险库：填写账号、主密码、短密钥（及确认项）。
+2. 按提示选择文件夹，永久保存加密密钥文件（`.kpkey`）。
+3. 之后日常解锁通常只需短密钥；关闭窗口会隐藏到托盘，托盘右键「退出」才结束程序。
+
+---
 
 ## 功能一览
 
 - **多类型条目**：登录、服务器、数据库、SSH 密钥、API 凭据、集群服务；一条记录可以有多个账号，支持自定义字段、收藏、空间分类和彩色标签。
 - **验证码（TOTP）**：手填密钥、粘贴 otpauth:// 链接，或在 Windows 上扫描屏幕二维码。
-- **自动填充**：Chrome / Edge 扩展，以及 Windows 普通程序的密码框（按快捷键 `Ctrl+Alt+K` 触发，不自动弹窗）；每次填入前都要确认短密钥。
+- **自动填充**：Chrome / Edge 扩展，以及 Windows 普通程序的密码框（按快捷键 `Ctrl+Alt+K` 触发，不自动弹窗）；每次填入前都要确认短密钥。macOS / Linux 的程序补全尚未实现。
 - **密码生成器**：随机字符、容易记住的单词、PIN 纯数字三种模式。
 - **安全检查**：审计空密码、弱密码和跨站重复使用；泄露检查使用 k-匿名查询。
 - **CSV 导入导出**：仿 1Password 的导入向导（列映射、预览、可撤销）；明文导出需要验证加密密钥。
 - **加密备份与还原**、**独立加密密钥文件**、**主题切换**、**界面动画偏好**、**托盘常驻**、**GitHub 自动更新**（设置页检查与下载，启动静默提示）。
+
+<details>
+<summary><strong>两把锁</strong>（加密模型、密钥文件、自动锁定）</summary>
 
 ## 两把锁
 
@@ -36,6 +111,11 @@
 
 自动锁定：空闲 5 分钟、锁屏或休眠后自动锁定，锁定时保险库内容立即隐藏。复制到剪贴板的密码 30 秒后自动清除。
 
+</details>
+
+<details>
+<summary><strong>数据目录</strong></summary>
+
 ## 数据目录
 
 保险库文件名都是 `vault.kpvault`。默认缓存目录：
@@ -54,6 +134,11 @@
 | macOS | `~/Library/Preferences/KeepPassword/settings.json` |
 | Linux | `~/.config/KeepPassword/settings.json` |
 
+</details>
+
+<details>
+<summary><strong>Windows 安装与卸载</strong>（覆盖安装、卸载选项、打包命令）</summary>
+
 ## Windows 安装与卸载
 
 **正式安装包是自包含的，不需要安装 .NET，也不需要其它运行库。**  
@@ -63,9 +148,9 @@
 
 1. 运行 `KeepPassword-Setup-win-x64.exe`。
 2. 选择安装目录，可勾选：开始菜单快捷方式、桌面快捷方式、安装完成后立即运行。
-3. 安装过程有进度条：先解压压缩包，再复制到目标目录。
+3. 安装过程有进度条：先解压压缩包，再复制到目标目录；写完后可查看日志，再点「下一步」进入完成页。
 4. 完成后点「完成」关闭安装窗口。若勾选了立即运行，主程序会自动启动。
-5. 默认安装到 `%LOCALAPPDATA%\Programs\KeepPassword`。覆盖安装会清理旧版本残留程序文件，不会动缓存里的保险库。
+5. 默认安装到 `%LOCALAPPDATA%\Programs\KeepPassword`。覆盖安装会清理旧版本残留程序文件，不会动缓存里的保险库。旧版仍在运行时会弹窗询问是否退出占用进程后再继续。
 6. 安装包是压缩后的自包含运行时（主程序与 Native Host 共用一份），**不需要安装 .NET**。
 7. 卸载运行安装目录里的 `Uninstall.exe`。可勾选「同时删除缓存目录」，**默认不勾选**。
 
@@ -78,6 +163,11 @@
 ```
 
 产物在输出目录：`KeepPassword-Setup-win-x64.exe`、`KeepPassword-win-x64.zip`。
+
+</details>
+
+<details>
+<summary><strong>条目</strong>（类型字段、列表与详情交互）</summary>
 
 ## 条目
 
@@ -98,7 +188,12 @@
 - 每个字段都可以单独复制；敏感字段默认隐藏，点眼睛图标查看。
 - 新建菜单里的「独立验证码」用于只保存验证码的记录。
 
-## 首次使用
+</details>
+
+<details>
+<summary><strong>首次使用补充</strong>（托盘、动画偏好）</summary>
+
+## 首次使用补充
 
 1. Windows 可用安装程序；开发时也可安装 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) 后直接运行。
 2. 在解锁页创建保险库：账号、主密码、确认主密码、短密钥、确认短密钥；随后按提示选择文件夹，永久保存加密密钥文件。
@@ -106,11 +201,21 @@
 
 在设置的“界面动画”中可选择“流畅动画”“跟随系统”或“减少动画”。默认启用流畅动画，详情面板与页面切换不受 Windows 动画关闭的影响；需要遵循系统偏好时可切换为“跟随系统”。锁定始终立即隐藏保险库内容。
 
+</details>
+
+<details>
+<summary><strong>密码生成器与安全检查</strong></summary>
+
 ## 密码生成器与安全检查
 
 - 生成器：随机字符（8–64 位，可选包含数字和特殊符号）、容易记住的单词组合（可选首字母大写、使用完整单词）、PIN 纯数字。首次进入自动生成一次，左侧重新生成，右侧复制。编辑条目时，密码框旁的「生成」按钮会直接填入 16 位字母和数字。
 - 审计：检测空密码、常见弱密码和跨条目重复使用的密码。
 - 泄露检查：手动触发，使用 [Have I Been Pwned](https://haveibeenpwned.com/Passwords) 的 k-匿名范围查询，只发送密码 SHA-1 的前 5 位，不上传明文或完整哈希。
+
+</details>
+
+<details>
+<summary><strong>CSV 导入</strong>（向导、格式示例、明文导出）</summary>
 
 ## CSV 导入
 
@@ -134,9 +239,19 @@ GitHub,https://github.com,ada,"p,ass",工作账号
 
 明文导出在「设置 → 明文导出」里，需要先验证当前保险库的加密密钥，每个账号导出一行。文件包含明文密码、验证码密钥和私钥，请自行保管。
 
+</details>
+
+<details>
+<summary><strong>验证码</strong>（TOTP、扫码）</summary>
+
 ## 验证码
 
 TOTP，RFC 6238。默认 SHA-1、6 位、30 秒；otpauth:// 链接里写了 6–8 位、其它周期或 SHA-256 / SHA-512 时按链接生成。密钥可以手填 Base32 或 otpauth:// 链接，Windows 上也可以点密钥旁的扫码图标识别屏幕上的二维码（截图只在内存里识别，用完清零，不落盘，扫描时本窗口不参与截图）。可以写在某条登录记录上，也可以单独新建一条（只填名称和密钥）。验证码页面会列出当前码和剩余秒数。
+
+</details>
+
+<details>
+<summary><strong>补全</strong>（Windows 程序、浏览器扩展、平台限制）</summary>
 
 ## 补全
 
@@ -144,10 +259,17 @@ TOTP，RFC 6238。默认 SHA-1、6 位、30 秒；otpauth:// 链接里写了 6�
 
 - Windows：不监视焦点，也不会因为出现密码框就弹窗。先在目标程序里点击密码框，再按全局快捷键（默认 `Ctrl+Alt+K`，可在「设置 → 程序自动填充快捷键」中修改）。普通程序用 UI Automation 识别 `IsPassword` 输入框，可选择登录、服务器、数据库、集群的密码账号；SSH 密钥认证和只有验证码的账号不参与。没有明确识别到用户名框时只填密码，避免改动数据库连接里的主机、端口等字段。填入前都要再输入短密钥。
 - DBX、飞书等应用只有在向 Windows 暴露标准可访问性密码属性时才能被识别；自绘、未启用可访问性的控件仍可能没有提示。程序也不会向管理员权限的目标输入。遇到不支持的控件可手动复制密码。
-- 浏览器：Chrome / Edge 使用扩展和 Native Messaging。保险库首次在本机解锁后会生成仅含账号元数据的 DPAPI 保护索引；之后即使桌面端处于锁定状态，聚焦密码框仍会显示候选账号，只有选择账号并输入短密钥时才临时解密并填充。扩展按钮和 `Ctrl+Shift+L` 仍可手动重新打开候选框。
+- 浏览器：Chrome / Edge 使用扩展和 Native Messaging。保险库首次在本机解锁后会生成仅含账号元数据的 DPAPI 保护索引；之后即使桌面端处于锁定状态，聚焦密码框仍会显示候选账号，只有选择账号并输入短密钥时才临时解密并填充。扩展按钮和 `Ctrl+Shift+L` 仍可手动重新打开候选框。**HTTP Basic 等浏览器原生认证弹窗无法由扩展填充**（不在网页 DOM 内）。
 - macOS、Linux：程序补全只留了接口和空实现（辅助功能 / AT-SPI 以后再接）。浏览器扩展和本机消息协议是同一份，客户端在这三个系统上都会听本机端口。
 
 扩展在 `extension/`，Manifest V3。安装桌面端不会自动连接浏览器。首次需要在浏览器扩展管理页加载 `extension` 文件夹，复制真实扩展 ID，再运行 `extension/register-windows.ps1 -ExtensionId "实际扩展ID"`。Windows 发布包的宿主是安装根目录中的 `KeepPassword.NativeHost.exe`。完整步骤及排错说明见 [浏览器连接说明](extension/README.md)。
+
+> 自动填充流程截图待补。
+
+</details>
+
+<details>
+<summary><strong>构建和运行</strong>（本地调试、打包、发布资源）</summary>
 
 ## 构建和运行
 
@@ -204,6 +326,11 @@ dotnet publish src/KeepPassword.App -c Release -r win-x64 --self-contained true 
 
 Windows 安装包请用上面的 `package-windows.sh`。
 
+</details>
+
+<details>
+<summary><strong>测试与验证</strong></summary>
+
 ## 测试与验证
 
 - `tests/KeepPassword.Core.Tests`：加密与密钥、解锁、备份还原、CSV 导入、TOTP（含 RFC 6238 SHA-1 / SHA-256 / SHA-512 向量）、二维码识别、自动填充匹配、缓存目录等核心逻辑。
@@ -211,3 +338,5 @@ Windows 安装包请用上面的 `package-windows.sh`。
 - `extension/tests`：浏览器扩展的填充逻辑测试，运行 `node --test extension/tests/autofill.test.cjs`。
 - Windows 上的手工验收清单见 [docs/windows-acceptance.md](docs/windows-acceptance.md)。
 - macOS、Linux 未做完整的图形验收，程序补全在这两个平台上只有空实现。
+
+</details>
