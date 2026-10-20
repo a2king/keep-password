@@ -21,6 +21,8 @@ public sealed class UnlockViewModel : ViewModelBase
     private bool _recoveryAvailable;
     private bool _hasShortUnlock;
     private bool _useMaster;
+    private bool _useEncryptionKey;
+    private bool _isLocalKeyVault;
     private string _answer1 = "";
     private string _answer2 = "";
     private string _answer3 = "";
@@ -58,11 +60,16 @@ public sealed class UnlockViewModel : ViewModelBase
         {
             if (IsCreate)
             {
-                return "设置账号、主密码和短密钥后，将生成一把独立的加密密钥。请按提示永久保存密钥文件。";
+                return "设置短密钥后，将生成一把独立的加密密钥。请按提示永久保存密钥文件；本机之后用短密钥解锁，换电脑或忘记短密钥时用密钥文件。";
             }
 
             if (IsRecovering)
             {
+                if (_isLocalKeyVault || ShowKeyUnlock)
+                {
+                    return "使用永久保存的加密密钥设置新的短密钥。保险库数据和加密密钥保持不变。";
+                }
+
                 return SupportsKeyRecovery
                     ? "使用永久保存的加密密钥设置新主密码。保险库数据和加密密钥保持不变。"
                     : "回答原有安全问题后设置新的主密码。解锁后请在设置中更换主密码，升级为独立加密密钥。";
@@ -70,7 +77,14 @@ public sealed class UnlockViewModel : ViewModelBase
 
             if (ShowShortUnlock)
             {
-                return "输入短密钥即可解锁。忘记短密钥时可以改用主密码。";
+                return _isLocalKeyVault
+                    ? "输入短密钥即可解锁。忘记短密钥时可以使用加密密钥。"
+                    : "输入短密钥即可解锁。忘记短密钥时可以改用主密码。";
+            }
+
+            if (ShowKeyUnlock)
+            {
+                return "此保险库无主密码。请选择加密密钥文件并设置本机短密钥。";
             }
 
             if (ShowPairingShort)
@@ -94,25 +108,39 @@ public sealed class UnlockViewModel : ViewModelBase
         }
     }
 
-    public bool ShowShortUnlock => !IsCreate && !IsRecovering && HasShortUnlock && !_useMaster;
+    public bool ShowShortUnlock => !IsCreate && !IsRecovering && HasShortUnlock && !_useMaster && !_useEncryptionKey;
 
-    public bool ShowPairingShort => !IsCreate && !IsRecovering && !HasShortUnlock;
+    public bool ShowPairingShort => !IsCreate && !IsRecovering && !HasShortUnlock && !_isLocalKeyVault && !_useEncryptionKey;
 
-    public bool ShowMaster => !ShowShortUnlock;
+    public bool ShowKeyUnlock => !IsCreate && !IsRecovering && _isLocalKeyVault && (!HasShortUnlock || _useEncryptionKey);
+
+    public bool ShowMaster => !ShowShortUnlock && !ShowKeyUnlock && !IsCreate;
 
     public bool ShowShortField => ShowShortUnlock;
 
-    public bool ShowUseMaster => ShowShortUnlock;
+    public bool ShowUseMaster => ShowShortUnlock && !_isLocalKeyVault;
 
-    public bool ShowUseShort => !IsCreate && !IsRecovering && HasShortUnlock && _useMaster;
+    public bool ShowUseEncryptionKey => ShowShortUnlock && _isLocalKeyVault;
 
-    public bool IsQuick => !IsCreate && !IsRecovering;
+    public bool ShowUseShort => !IsCreate && !IsRecovering && HasShortUnlock && (_useMaster || _useEncryptionKey);
 
-    public bool ShowHint => IsCreate || IsRecovering || ShowPairingShort;
+    public bool IsQuick => !IsCreate && !IsRecovering && !ShowKeyUnlock;
 
-    public string MasterLabel => IsRecovering ? "新主密码" : "主密码";
+    public bool ShowHint => IsCreate || IsRecovering || ShowPairingShort || ShowKeyUnlock;
 
-    public string MasterWatermark => IsCreate ? "设置主密码" : IsRecovering ? "输入新主密码" : "输入主密码";
+    public bool ShowCreateShort => IsCreate;
+
+    public bool ShowCreateConfirmShort => IsCreate;
+
+    public string MasterLabel => IsRecovering
+        ? (_isLocalKeyVault ? "新短密钥" : "新主密码")
+        : "主密码";
+
+    public string MasterWatermark => IsCreate
+        ? "设置短密钥"
+        : IsRecovering
+            ? (_isLocalKeyVault ? "输入新短密钥" : "输入新主密码")
+            : "输入主密码";
 
     public string AccountName
     {
@@ -126,15 +154,32 @@ public sealed class UnlockViewModel : ViewModelBase
         }
     }
 
-    public string Initial => AccountName.Length > 0 ? AccountName[..1].ToUpperInvariant() : "?";
+    public string Initial
+    {
+        get
+        {
+            if (AccountName.Length > 0)
+            {
+                return AccountName[..1].ToUpperInvariant();
+            }
 
-    public string SubmitText => IsRecovering ? "重置并解锁" : IsCreate ? "创建并解锁" : "解锁";
+            return _isLocalKeyVault ? "K" : "?";
+        }
+    }
+
+    public string SubmitText => IsRecovering
+        ? (_isLocalKeyVault ? "重置短密钥并解锁" : "重置并解锁")
+        : IsCreate
+            ? "创建并解锁"
+            : ShowKeyUnlock
+                ? "导入密钥并解锁"
+                : "解锁";
 
     public string RecoveryWarning => RecoveryRisk.Warning;
 
     public bool SupportsKeyRecovery { get; private set; }
-    public bool ShowKeyRecovery => IsRecovering && SupportsKeyRecovery;
-    public bool ShowLegacyRecovery => IsRecovering && !SupportsKeyRecovery;
+    public bool ShowKeyRecovery => (IsRecovering && SupportsKeyRecovery) || ShowKeyUnlock;
+    public bool ShowLegacyRecovery => IsRecovering && !SupportsKeyRecovery && !_isLocalKeyVault;
     public string EncryptionKey { get; set; } = "";
 
     public bool RiskAcknowledged
@@ -227,22 +272,43 @@ public sealed class UnlockViewModel : ViewModelBase
 
     public VaultSession? Session { get; private set; }
 
+    public void DropSession()
+    {
+        Session?.Dispose();
+        Session = null;
+    }
+
     public void UseVaultFile(string path)
     {
         _path = path;
         _useMaster = false;
+        _useEncryptionKey = false;
         IsCreate = !_store.Exists(path);
         RefreshAccount();
     }
 
     public void UseMasterPassword()
     {
-        if (!HasShortUnlock || IsCreate)
+        if (!HasShortUnlock || IsCreate || _isLocalKeyVault)
         {
             return;
         }
 
         _useMaster = true;
+        _useEncryptionKey = false;
+        Error = "";
+        NotifyMode();
+    }
+
+    public void UseEncryptionKey()
+    {
+        if (!_isLocalKeyVault || IsCreate)
+        {
+            return;
+        }
+
+        _useEncryptionKey = true;
+        _useMaster = false;
         Error = "";
         NotifyMode();
     }
@@ -250,6 +316,7 @@ public sealed class UnlockViewModel : ViewModelBase
     public void UseShortKey()
     {
         _useMaster = false;
+        _useEncryptionKey = false;
         Error = "";
         NotifyMode();
     }
@@ -257,12 +324,6 @@ public sealed class UnlockViewModel : ViewModelBase
     public async Task<bool> SubmitAsync()
     {
         Error = "";
-        if (IsCreate && MasterPassword != ConfirmMaster)
-        {
-            Error = "两次输入的主密码不一致。";
-            return false;
-        }
-
         if (IsCreate && ShortKey != ConfirmShort)
         {
             Error = "两次输入的短密钥不一致。";
@@ -277,7 +338,13 @@ public sealed class UnlockViewModel : ViewModelBase
 
         if (IsRecovering && MasterPassword != ConfirmMaster)
         {
-            Error = "两次输入的新主密码不一致。";
+            Error = _isLocalKeyVault ? "两次输入的短密钥不一致。" : "两次输入的新主密码不一致。";
+            return false;
+        }
+
+        if (ShowKeyUnlock && ShortKey != ConfirmShort)
+        {
+            Error = "两次输入的短密钥不一致。";
             return false;
         }
 
@@ -287,11 +354,28 @@ public sealed class UnlockViewModel : ViewModelBase
             return false;
         }
 
-        var account = Account.Trim();
+        if ((ShowKeyUnlock || (IsRecovering && (_isLocalKeyVault || SupportsKeyRecovery))) && string.IsNullOrEmpty(EncryptionKey))
+        {
+            Error = "请选择或粘贴加密密钥。";
+            return false;
+        }
+
         var master = MasterPassword;
-        var shortKey = ShortKey;
+        var shortKey = IsCreate || ShowKeyUnlock ? ShortKey : ShortKey;
+        if (IsRecovering && _isLocalKeyVault)
+        {
+            shortKey = MasterPassword;
+        }
+
         var answers = new[] { Answer1, Answer2, Answer3 };
         var useShort = ShowShortUnlock;
+        var useKey = ShowKeyUnlock || (IsRecovering && _isLocalKeyVault);
+        var encryptionKey = EncryptionKey;
+        if ((IsCreate || ShowKeyUnlock) && string.IsNullOrEmpty(shortKey))
+        {
+            Error = "请填写短密钥。";
+            return false;
+        }
         IsBusy = true;
         try
         {
@@ -299,14 +383,24 @@ public sealed class UnlockViewModel : ViewModelBase
             {
                 if (IsRecovering)
                 {
+                    if (_isLocalKeyVault || useKey)
+                    {
+                        return _store.UnlockWithEncryptionKey(_path, encryptionKey, shortKey);
+                    }
+
                     return SupportsKeyRecovery
-                        ? _store.RecoverWithKey(_path, EncryptionKey, master)
+                        ? _store.RecoverWithKey(_path, encryptionKey, master)
                         : _store.Recover(_path, answers, master);
                 }
 
                 if (IsCreate)
                 {
-                    return _store.CreateSession(_path, account, master, shortKey);
+                    return _store.CreateLocalSession(_path, shortKey);
+                }
+
+                if (useKey)
+                {
+                    return _store.UnlockWithEncryptionKey(_path, encryptionKey, shortKey);
                 }
 
                 if (useShort)
@@ -344,11 +438,13 @@ public sealed class UnlockViewModel : ViewModelBase
             return;
         }
 
-        var questions = SupportsKeyRecovery ? [] : _store.RecoveryQuestions(_path);
+        var questions = SupportsKeyRecovery || _isLocalKeyVault ? [] : _store.RecoveryQuestions(_path);
         RecoveryQuestion1 = questions.ElementAtOrDefault(0) ?? "";
         RecoveryQuestion2 = questions.ElementAtOrDefault(1) ?? "";
         RecoveryQuestion3 = questions.ElementAtOrDefault(2) ?? "";
         RiskAcknowledged = false;
+        _useEncryptionKey = false;
+        _useMaster = false;
         IsRecovering = true;
         Error = "";
     }
@@ -380,6 +476,7 @@ public sealed class UnlockViewModel : ViewModelBase
             AccountLabel = "";
             AccountName = "";
             HasShortUnlock = false;
+            _isLocalKeyVault = false;
             NotifyMode();
             return;
         }
@@ -387,15 +484,26 @@ public sealed class UnlockViewModel : ViewModelBase
         try
         {
             AccountName = _store.ReadAccount(_path);
-            AccountLabel = "账号 " + AccountName;
+            if (string.IsNullOrWhiteSpace(AccountName))
+            {
+                AccountName = "本地保险库";
+                AccountLabel = AccountName;
+            }
+            else
+            {
+                AccountLabel = "账号 " + AccountName;
+            }
+
             SupportsKeyRecovery = _store.UsesIndependentKey(_path);
-            RecoveryAvailable = SupportsKeyRecovery || _store.HasRecovery(_path);
+            _isLocalKeyVault = _store.IsLocalKeyVault(_path);
+            RecoveryAvailable = SupportsKeyRecovery || _isLocalKeyVault || _store.HasRecovery(_path);
             HasShortUnlock = _store.HasShortUnlock(_path);
         }
         catch (Exception ex) when (ex is InvalidDataException or IOException)
         {
             AccountLabel = "";
             HasShortUnlock = false;
+            _isLocalKeyVault = false;
             Error = Friendly(ex);
         }
 
@@ -409,7 +517,9 @@ public sealed class UnlockViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowShortField));
         OnPropertyChanged(nameof(ShowShortUnlock));
         OnPropertyChanged(nameof(ShowPairingShort));
+        OnPropertyChanged(nameof(ShowKeyUnlock));
         OnPropertyChanged(nameof(ShowUseMaster));
+        OnPropertyChanged(nameof(ShowUseEncryptionKey));
         OnPropertyChanged(nameof(ShowUseShort));
         OnPropertyChanged(nameof(IsQuick));
         OnPropertyChanged(nameof(ShowHint));
@@ -417,6 +527,10 @@ public sealed class UnlockViewModel : ViewModelBase
         OnPropertyChanged(nameof(MasterWatermark));
         OnPropertyChanged(nameof(ShowKeyRecovery));
         OnPropertyChanged(nameof(ShowLegacyRecovery));
+        OnPropertyChanged(nameof(ShowCreateShort));
+        OnPropertyChanged(nameof(ShowCreateConfirmShort));
+        OnPropertyChanged(nameof(SubmitText));
+        OnPropertyChanged(nameof(Initial));
     }
 
     private static string Friendly(Exception ex)

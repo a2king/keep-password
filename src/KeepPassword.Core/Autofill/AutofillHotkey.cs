@@ -129,6 +129,26 @@ public sealed record AutofillHotkey(HotkeyModifiers Modifiers, string Key)
         | (Modifiers.HasFlag(HotkeyModifiers.Shift) ? 0x4u : 0)
         | (Modifiers.HasFlag(HotkeyModifiers.Win) ? 0x8u : 0);
 
+    /// <summary>Carbon RegisterEventHotKey 修饰键：cmdKey / shiftKey / optionKey / controlKey。</summary>
+    public uint CarbonModifiers =>
+        (Modifiers.HasFlag(HotkeyModifiers.Win) ? 256u : 0)
+        | (Modifiers.HasFlag(HotkeyModifiers.Shift) ? 512u : 0)
+        | (Modifiers.HasFlag(HotkeyModifiers.Alt) ? 2048u : 0)
+        | (Modifiers.HasFlag(HotkeyModifiers.Ctrl) ? 4096u : 0);
+
+    /// <summary>macOS 虚拟键码（ANSI 布局）。无法映射时返回 null。</summary>
+    public ushort? CarbonKeyCode => Key switch
+    {
+        "A" => 0, "S" => 1, "D" => 2, "F" => 3, "H" => 4, "G" => 5, "Z" => 6, "X" => 7, "C" => 8, "V" => 9,
+        "B" => 11, "Q" => 12, "W" => 13, "E" => 14, "R" => 15, "Y" => 16, "T" => 17,
+        "1" => 18, "2" => 19, "3" => 20, "4" => 21, "6" => 22, "5" => 23, "9" => 25, "7" => 26, "8" => 28, "0" => 29,
+        "O" => 31, "U" => 32, "I" => 34, "P" => 35, "L" => 37, "J" => 38, "K" => 40,
+        "N" => 45, "M" => 46, "Space" => 49,
+        "F1" => 122, "F2" => 120, "F3" => 99, "F4" => 118, "F5" => 96, "F6" => 97,
+        "F7" => 98, "F8" => 100, "F9" => 101, "F10" => 109, "F11" => 103, "F12" => 111,
+        _ => null
+    };
+
     public static string? NormalizeKey(string? key)
     {
         if (string.IsNullOrWhiteSpace(key))

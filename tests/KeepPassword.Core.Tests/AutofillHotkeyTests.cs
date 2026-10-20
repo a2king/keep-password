@@ -11,6 +11,8 @@ public class AutofillHotkeyTests
         Assert.Null(AutofillHotkey.Default.Validate());
         Assert.Equal(0x4Bu, AutofillHotkey.Default.VirtualKey);
         Assert.Equal(0x3u, AutofillHotkey.Default.Win32Modifiers);
+        Assert.Equal((ushort)40, AutofillHotkey.Default.CarbonKeyCode);
+        Assert.Equal(4096u + 2048u, AutofillHotkey.Default.CarbonModifiers);
     }
 
     [Theory]

@@ -28,6 +28,14 @@ public sealed class VaultEntry
 
     public List<ClusterNode> Nodes { get; set; } = [];
 
+    /// <summary>条目最后修改时间（UTC）。同步合并时以较新者为准。</summary>
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    /// <summary>非空表示墓碑：条目已删除，仍参与同步合并。</summary>
+    public DateTimeOffset? DeletedAt { get; set; }
+
+    public bool IsDeleted => DeletedAt is not null;
+
     public string Field(string key) => Fields.TryGetValue(key, out var value) ? value : "";
 
     public void SetField(string key, string? value)
@@ -40,6 +48,26 @@ public sealed class VaultEntry
         {
             Fields[key] = value;
         }
+    }
+
+    public void Touch(DateTimeOffset? at = null) => UpdatedAt = at ?? DateTimeOffset.UtcNow;
+
+    public void MarkDeleted(DateTimeOffset? at = null)
+    {
+        var when = at ?? DateTimeOffset.UtcNow;
+        DeletedAt = when;
+        UpdatedAt = when;
+        Name = "";
+        Url = "";
+        Note = "";
+        Favorite = false;
+        Accounts.Clear();
+        Space = "";
+        Tags.Clear();
+        Fields.Clear();
+        CustomFields.Clear();
+        SshKeyId = null;
+        Nodes.Clear();
     }
 
     public VaultEntry Clone() => new()
@@ -56,7 +84,9 @@ public sealed class VaultEntry
         Fields = new Dictionary<string, string>(Fields, StringComparer.Ordinal),
         CustomFields = CustomFields.Select(field => field.Clone()).ToList(),
         SshKeyId = SshKeyId,
-        Nodes = Nodes.Select(node => node.Clone()).ToList()
+        Nodes = Nodes.Select(node => node.Clone()).ToList(),
+        UpdatedAt = UpdatedAt,
+        DeletedAt = DeletedAt
     };
 }
 

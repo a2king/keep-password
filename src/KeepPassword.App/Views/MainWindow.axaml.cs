@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private VaultSession? _session;
     private VaultLocation? _location;
     private Action<bool>? _pauseWatcher;
+    private CloudSyncCoordinator? _cloudSync;
     private bool _platformAutofill;
     private bool _scanning;
     private Control? _activePage;
@@ -88,13 +89,19 @@ public partial class MainWindow : Window
         };
     }
 
-    public MainWindow(VaultStore store, VaultLocation location, bool platformAutofillSupported, Action<bool>? pauseWatcher = null)
+    public MainWindow(
+        VaultStore store,
+        VaultLocation location,
+        bool platformAutofillSupported,
+        Action<bool>? pauseWatcher = null,
+        CloudSyncCoordinator? cloudSync = null)
         : this()
     {
         _store = store;
         _location = location;
         _platformAutofill = platformAutofillSupported;
         _pauseWatcher = pauseWatcher;
+        _cloudSync = cloudSync;
         ShowUnlockScreen();
     }
 
@@ -538,7 +545,10 @@ public partial class MainWindow : Window
         if (error is not null)
         {
             await Dialogs.AlertAsync(this, "无法保存", error);
+            return;
         }
+
+        _cloudSync?.NotifyLocalChanged();
     }
 
     private async void OnDelete(object? sender, RoutedEventArgs e)
@@ -563,7 +573,10 @@ public partial class MainWindow : Window
         {
             try
             {
-                view.Delete();
+                if (view.Delete())
+                {
+                    _cloudSync?.NotifyLocalChanged();
+                }
             }
             finally
             {
@@ -680,7 +693,7 @@ public partial class MainWindow : Window
 
         if (_activePage != SettingsPage)
         {
-            SettingsRoot.Show(_session, _location, _pauseWatcher);
+            SettingsRoot.Show(_session, _location, _pauseWatcher, _cloudSync);
         }
 
         ShowPage(SettingsPage);

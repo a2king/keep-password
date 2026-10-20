@@ -68,7 +68,7 @@ public static class AutofillMatcher
     public static IReadOnlyList<AutofillCandidate> Match(IEnumerable<VaultEntry> entries, AutofillRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var desktop = request.Origin == AutofillOrigin.WindowsApplication;
+        var desktop = IsDesktopOrigin(request.Origin);
         var pageHost = DomainGrouping.HostOf(request.Url);
         var title = request.WindowTitle ?? "";
         var matches = new List<AutofillCandidate>();
@@ -116,8 +116,11 @@ public static class AutofillMatcher
             .ToList();
     }
 
+    public static bool IsDesktopOrigin(AutofillOrigin origin) =>
+        origin is AutofillOrigin.WindowsApplication or AutofillOrigin.MacOsApplication;
+
     internal static bool IsEligible(VaultEntry entry, VaultAccount account, AutofillOrigin origin) =>
-        (origin == AutofillOrigin.WindowsApplication ? VaultItemKinds.HasAccounts(entry.Kind) : entry.Kind == VaultItemKind.Login)
+        (IsDesktopOrigin(origin) ? VaultItemKinds.HasAccounts(entry.Kind) : entry.Kind == VaultItemKind.Login)
         && !ItemTemplates.UsesKeyAuth(entry, account)
         && !string.IsNullOrEmpty(account.Password);
 }

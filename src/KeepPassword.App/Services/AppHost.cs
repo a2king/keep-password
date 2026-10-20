@@ -22,9 +22,11 @@ public sealed class AppHost : IDisposable
     private readonly AutofillGate _gate = new();
     private readonly AutoLockMonitor _autoLock;
     private readonly InstanceActivation _activation;
+    private readonly CloudSyncCoordinator _cloudSync = new();
     private VaultSession? _session;
     private MainWindow? _main;
     private IDisposable? _hotkey;
+    private Platform.Mac.MacOsFocusWatcher? _macFocusWatcher;
     private bool _hotkeyPaused;
     private bool _hotkeyBusy;
     private bool _trayReady;
@@ -69,17 +71,91 @@ public sealed class AppHost : IDisposable
         }
 
         InstallHotkey();
+        if (OperatingSystem.IsMacOS())
+        {
+            InstallMacFocusWatcher();
+        }
+
         _ = AppUpdateService.SilentCheckAsync();
     }
 
     private void InstallHotkey()
     {
-        if (!OperatingSystem.IsWindows() || !_detector.IsSupported)
+        if (!_detector.IsSupported)
         {
             return;
         }
 
-        InstallWindowsHotkey();
+        if (OperatingSystem.IsWindows())
+        {
+            InstallWindowsHotkey();
+            return;
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            InstallMacHotkey();
+        }
+    }
+
+    private void InstallMacFocusWatcher()
+    {
+        if (!_detector.IsSupported)
+        {
+            return;
+        }
+
+        try
+        {
+            Platform.Mac.MacOsPasswordFieldDetector.EnsureAccessibility(prompt: false);
+            var watcher = new Platform.Mac.MacOsFocusWatcher(_detector);
+            watcher.PasswordFieldFocused += field =>
+                Dispatcher.UIThread.Post(() => _ = OnMacPasswordFocusedAsync(field));
+            _macFocusWatcher = watcher;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
+        {
+            _macFocusWatcher = null;
+        }
+    }
+
+    private async Task OnMacPasswordFocusedAsync(DetectedPasswordField field)
+    {
+        if (_hotkeyPaused || _hotkeyBusy || _locking || _exiting)
+        {
+            return;
+        }
+
+        if (_session is not { IsUnlocked: true })
+        {
+            return;
+        }
+
+        if (!Platform.Mac.MacOsPasswordFieldDetector.EnsureAccessibility(prompt: false))
+        {
+            return;
+        }
+
+        _hotkeyBusy = true;
+        SetMacFocusWatcherPaused(true);
+        try
+        {
+            await OnDesktopFieldAsync(field);
+        }
+        finally
+        {
+            _hotkeyBusy = false;
+            _macFocusWatcher?.ResetOffer(field.FieldKey);
+            SetMacFocusWatcherPaused(_hotkeyPaused);
+        }
+    }
+
+    private void SetMacFocusWatcherPaused(bool paused)
+    {
+        if (_macFocusWatcher is not null)
+        {
+            _macFocusWatcher.Paused = paused;
+        }
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
@@ -100,6 +176,25 @@ public sealed class AppHost : IDisposable
         }
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("macos")]
+    private void InstallMacHotkey()
+    {
+        try
+        {
+            Platform.Mac.MacOsPasswordFieldDetector.EnsureAccessibility(prompt: true);
+            var hotkey = new Platform.Mac.MacOsGlobalHotkey();
+            hotkey.Pressed += () => _ = OnHotkeyAsync();
+            _hotkey = hotkey;
+            AutofillHotkeyPreferences.Attach(
+                gesture => hotkey.Register(gesture),
+                hotkey.Unregister);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
+        {
+            _hotkey = null;
+        }
+    }
+
     private async Task OnHotkeyAsync()
     {
         if (_hotkeyPaused || _hotkeyBusy || _locking || _exiting)
@@ -108,6 +203,7 @@ public sealed class AppHost : IDisposable
         }
 
         _hotkeyBusy = true;
+        SetMacFocusWatcherPaused(true);
         try
         {
             if (_session is not { IsUnlocked: true })
@@ -120,7 +216,19 @@ public sealed class AppHost : IDisposable
                 return;
             }
 
-            // UI Automation 扫树可能很慢；放到后台，避免拖死界面。
+            if (OperatingSystem.IsMacOS()
+                && !Platform.Mac.MacOsPasswordFieldDetector.EnsureAccessibility(prompt: true))
+            {
+                if (_main is not null)
+                {
+                    await Dialogs.AlertAsync(_main, "需要辅助功能权限",
+                        "请在「系统设置 → 隐私与安全性 → 辅助功能」中允许 Keep Password，然后点击目标程序的密码框（或再按快捷键）。");
+                }
+
+                return;
+            }
+
+            // 扫控件树可能很慢；放到后台，避免拖死界面。
             var field = await Task.Run(() =>
             {
                 try
@@ -137,42 +245,80 @@ public sealed class AppHost : IDisposable
             {
                 if (_main is not null)
                 {
-                    await Dialogs.AlertAsync(_main, "没有识别到密码框",
-                        $"请先点击目标程序的密码框，再按 {AutofillHotkeyPreferences.Current}。浏览器里的网页请使用浏览器扩展；自绘或未开放辅助功能的输入框无法识别，可以从保险库复制密码。");
+                    var tip = OperatingSystem.IsMacOS()
+                        ? $"请先点击目标程序的密码框，再按 {AutofillHotkeyPreferences.Current}。若仍无法识别，请确认已开启辅助功能权限；自绘控件可从保险库复制密码。浏览器网页请使用浏览器扩展。"
+                        : $"请先点击目标程序的密码框，再按 {AutofillHotkeyPreferences.Current}。浏览器里的网页请使用浏览器扩展；自绘或未开放辅助功能的输入框无法识别，可以从保险库复制密码。";
+                    await Dialogs.AlertAsync(_main, "没有识别到密码框", tip);
                 }
 
                 return;
             }
 
-            await OnWindowsFieldAsync(field);
+            await OnDesktopFieldAsync(field);
+            _macFocusWatcher?.ResetOffer(field.FieldKey);
         }
         finally
         {
             _hotkeyBusy = false;
+            SetMacFocusWatcherPaused(_hotkeyPaused);
         }
     }
 
     private void ShowShell()
     {
-        _main = new MainWindow(_store, _location, _detector.IsSupported, PauseWatcher);
+        _main = new MainWindow(_store, _location, _detector.IsSupported, PauseWatcher, _cloudSync);
         _main.Unlocked += BeginSession;
         _main.LockRequested += (_, _) => LockVault();
         _main.Closing += OnMainClosing;
         _desktop.MainWindow = _main;
         _main.Show();
+        if (StartupPreferences.RequestedMinimizedStartup)
+        {
+            ApplyMinimizedStartup();
+        }
+    }
+
+    private void ApplyMinimizedStartup()
+    {
+        if (_main is null)
+        {
+            return;
+        }
+
+        // 等托盘装好后再藏窗口；托盘不可用时退化为任务栏最小化。
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_main is null || _exiting)
+            {
+                return;
+            }
+
+            if (_trayReady)
+            {
+                _main.Hide();
+            }
+            else
+            {
+                _main.WindowState = WindowState.Minimized;
+            }
+        }, DispatcherPriority.Background);
     }
 
     private void BeginSession(VaultSession session)
     {
         _session = session;
         AutofillIndexStore.Write(session.VaultPath, session.Entries);
+        _cloudSync.Attach(session);
         _main?.ShowVault(session);
         _autoLock.Start();
     }
 
     public void Dispose()
     {
+        _cloudSync.Dispose();
         _autoLock.Dispose();
+        _macFocusWatcher?.Dispose();
+        _macFocusWatcher = null;
         _hotkey?.Dispose();
         _server.Dispose();
         _session?.Dispose();
@@ -226,13 +372,18 @@ public sealed class AppHost : IDisposable
         }
         finally
         {
+            _cloudSync.Detach();
             session.Lock();
             _session = null;
             _locking = false;
         }
     }
 
-    private void PauseWatcher(bool paused) => _hotkeyPaused = paused;
+    private void PauseWatcher(bool paused)
+    {
+        _hotkeyPaused = paused;
+        SetMacFocusWatcherPaused(paused || _hotkeyBusy);
+    }
 
     private void InstallTray()
     {
@@ -347,7 +498,7 @@ public sealed class AppHost : IDisposable
         return AutofillProtocol.Serialize(response);
     }
 
-    private async Task OnWindowsFieldAsync(DetectedPasswordField field)
+    private async Task OnDesktopFieldAsync(DetectedPasswordField field)
     {
         if (_session is not { IsUnlocked: true })
         {
@@ -364,9 +515,12 @@ public sealed class AppHost : IDisposable
             return;
         }
 
+        var origin = OperatingSystem.IsMacOS()
+            ? AutofillOrigin.MacOsApplication
+            : AutofillOrigin.WindowsApplication;
         var request = new AutofillRequest
         {
-            Origin = AutofillOrigin.WindowsApplication,
+            Origin = origin,
             WindowTitle = field.WindowTitle,
             TargetProcess = field.ProcessName,
             PasswordOnly = !field.HasUsernameField

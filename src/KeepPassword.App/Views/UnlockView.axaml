@@ -84,11 +84,6 @@
           <TextBlock Text="创建保险库" Classes="h1" Margin="0,0,0,8" IsVisible="{Binding IsCreate}" />
           <TextBlock Text="{Binding Hint}" Classes="muted" TextWrapping="Wrap" LineHeight="18" Margin="2,0,0,12" IsVisible="{Binding ShowHint}" />
 
-          <StackPanel IsVisible="{Binding IsCreate}">
-            <TextBlock Text="账号" Classes="label" Margin="0,0,0,6" />
-            <TextBox Text="{Binding Account}" views:AsciiInput.IsEnabled="True" Watermark="例如 ada" Classes="mono" />
-          </StackPanel>
-
           <StackPanel IsVisible="{Binding ShowKeyRecovery}" Spacing="8">
             <TextBlock Text="加密密钥" Classes="label" />
             <TextBox x:Name="RecoveryKeyBox" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="粘贴完整的 KP2- 加密密钥" />
@@ -107,8 +102,8 @@
             <TextBox x:Name="RecoverAnswer3Box" PasswordChar="•" views:PasswordReveal.IsEnabled="True" />
           </StackPanel>
 
-          <TextBlock Text="{Binding MasterLabel}" Classes="label" IsVisible="{Binding !IsQuick}" />
-          <Border x:Name="InputBox" Classes="unlock-input">
+          <TextBlock Text="{Binding MasterLabel}" Classes="label" IsVisible="{Binding ShowMaster}" />
+          <Border x:Name="InputBox" Classes="unlock-input" IsVisible="{Binding IsQuick}">
             <Border.RenderTransform>
               <TranslateTransform />
             </Border.RenderTransform>
@@ -144,21 +139,32 @@
 
           <WrapPanel Margin="2,12,0,0" IsVisible="{Binding IsQuick}">
             <Button Classes="link" Content="改用主密码" Margin="0,0,18,4" Click="OnUseMaster" IsVisible="{Binding ShowUseMaster}" />
+            <Button Classes="link" Content="使用加密密钥" Margin="0,0,18,4" Click="OnUseEncryptionKey" IsVisible="{Binding ShowUseEncryptionKey}" />
             <Button Classes="link" Content="改用短密钥" Margin="0,0,18,4" Click="OnUseShort" IsVisible="{Binding ShowUseShort}" />
             <Button Classes="link" Content="忘记主密码？" Margin="0,0,18,4" Click="OnBeginRecovery" IsVisible="{Binding RecoveryAvailable}" />
           </WrapPanel>
 
-          <StackPanel IsVisible="{Binding IsCreate}">
-            <TextBlock Text="确认主密码" Classes="label" />
-            <TextBox x:Name="ConfirmMasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" />
+          <StackPanel IsVisible="{Binding ShowCreateShort}">
             <TextBlock Text="短密钥" Classes="label" />
             <TextBox x:Name="ShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="之后每次用它解锁" Classes="mono" />
             <TextBlock Text="确认短密钥" Classes="label" />
             <TextBox x:Name="ConfirmShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" />
           </StackPanel>
 
+          <StackPanel IsVisible="{Binding ShowKeyUnlock}">
+            <TextBlock Text="本机短密钥" Classes="label" />
+            <TextBox x:Name="KeyUnlockShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="为此设备设置短密钥" Classes="mono" />
+            <TextBlock Text="确认短密钥" Classes="label" />
+            <TextBox x:Name="KeyUnlockConfirmShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" />
+          </StackPanel>
+
+          <!-- ConfirmMasterBox / RecoverConfirmBox kept for v1/v2 recovery paths -->
+          <StackPanel IsVisible="False">
+            <TextBox x:Name="ConfirmMasterBox" />
+          </StackPanel>
+
           <StackPanel IsVisible="{Binding IsRecovering}">
-            <TextBlock Text="确认新主密码" Classes="label" />
+            <TextBlock Text="确认" Classes="label" />
             <TextBox x:Name="RecoverConfirmBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" />
           </StackPanel>
 

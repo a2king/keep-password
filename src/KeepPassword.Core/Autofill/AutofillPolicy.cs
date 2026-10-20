@@ -14,7 +14,13 @@ public static class AutofillPolicy
     {
         var name = Path.GetFileNameWithoutExtension(processName ?? "");
         return name.Equals("chrome", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("msedge", StringComparison.OrdinalIgnoreCase);
+            || name.Equals("msedge", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("Microsoft Edge", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("Google Chrome", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("Safari", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("firefox", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("Arc", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("Brave Browser", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool AllowAutoType(bool targetElevated) => !targetElevated;

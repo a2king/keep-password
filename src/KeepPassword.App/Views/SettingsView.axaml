@@ -103,11 +103,26 @@
           </StackPanel>
         </Border>
 
+        <!-- 开机启动 -->
+        <Border Classes="section">
+          <StackPanel>
+            <TextBlock Text="开机启动" Classes="h2" Margin="0,0,0,4" />
+            <TextBlock Text="登录系统后自动运行 Keep Password。最小化启动时会先进入托盘，不弹出主窗口。"
+                       Classes="muted" TextWrapping="Wrap" Margin="0,0,0,12" />
+            <ToggleSwitch x:Name="LaunchAtStartupSwitch" OffContent="关闭" OnContent="开机启动"
+                          IsCheckedChanged="OnLaunchAtStartupChanged" />
+            <ToggleSwitch x:Name="StartMinimizedSwitch" OffContent="正常窗口" OnContent="最小化启动"
+                          Margin="0,10,0,0" IsCheckedChanged="OnStartMinimizedChanged" />
+            <TextBlock x:Name="StartupStatus" Classes="muted" TextWrapping="Wrap" Margin="0,10,0,0" />
+          </StackPanel>
+        </Border>
+
         <!-- 程序自动填充快捷键 -->
         <Border x:Name="HotkeySection" Classes="section">
           <StackPanel>
             <TextBlock Text="程序自动填充快捷键" Classes="h2" Margin="0,0,0,4" />
-            <TextBlock Text="在其它 Windows 程序里点击密码框后按这个快捷键，选择账号并确认短密钥即可填入。检测到密码框时不会自动弹窗。浏览器网页请使用浏览器扩展。"
+            <TextBlock x:Name="HotkeyHint"
+                       Text="Windows：点击密码框后按快捷键填入，不会因检测到密码框自动弹窗。macOS：点击密码框会自动提示选账号，也可按快捷键；需在「系统设置 → 隐私与安全性 → 辅助功能」中允许 Keep Password。浏览器网页请使用浏览器扩展。"
                        Classes="muted" TextWrapping="Wrap" Margin="0,0,0,12" />
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
               <TextBox x:Name="HotkeyBox" Classes="mono" IsReadOnly="True"
@@ -160,19 +175,19 @@
         <Border Classes="section">
           <StackPanel>
             <TextBlock Text="修改短密钥" Classes="h2" Margin="0,0,0,4" />
-            <TextBlock Text="提交前必须验证当前主密码。短密钥也可以解锁保险库，自动填入时仍会再确认一次。更新后主密码和条目不变。"
+            <TextBlock x:Name="ShortKeyHint" Text="提交前必须验证当前短密钥。自动填入时仍会再确认一次。"
                        TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
             <TextBlock x:Name="AccountText" Classes="muted" Margin="0,0,0,4" FontWeight="SemiBold" />
             <TextBlock Text="新短密钥" Classes="label" />
             <TextBox x:Name="NewKeyBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
             <TextBlock Text="确认新短密钥" Classes="label" />
             <TextBox x:Name="ConfirmBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
-            <TextBlock Text="当前主密码" Classes="label" />
+            <TextBlock x:Name="VerifyLabel" Text="当前短密钥" Classes="label" />
             <TextBox x:Name="MasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
             <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,10,0,0" IsVisible="False" x:Name="ErrorBox" views:Motion.RevealOnShow="True">
               <TextBlock x:Name="ErrorText" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
             </Border>
-            <TextBlock x:Name="BusyText" Text="正在验证主密码…" Classes="muted" Margin="0,8,0,0" IsVisible="False" views:Motion.RevealOnShow="True" />
+            <TextBlock x:Name="BusyText" Text="正在验证…" Classes="muted" Margin="0,8,0,0" IsVisible="False" views:Motion.RevealOnShow="True" />
             <TextBlock x:Name="KeyStatus" Classes="muted" Margin="0,8,0,0" TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
               <Button Classes="ghost" Content="清空" Click="OnCancel" />
@@ -181,8 +196,8 @@
           </StackPanel>
         </Border>
 
-        <!-- 更换主密码 -->
-        <Border Classes="section">
+        <!-- 更换主密码（仅 v1/v2） -->
+        <Border x:Name="MasterPasswordSection" Classes="section">
           <StackPanel>
             <TextBlock Text="更换主密码" Classes="h2" Margin="0,0,0,4" />
             <TextBlock x:Name="MasterChangeHint" Text="更换主密码不会改变加密密钥，之前保存的密钥文件仍然有效。" TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
@@ -201,6 +216,44 @@
             <TextBlock Text="加密密钥" Classes="h2" />
             <TextBlock x:Name="EncryptionKeyStatus" TextWrapping="Wrap" Classes="muted" />
             <Button x:Name="SavePendingKeyButton" Classes="soft" Content="保存加密密钥文件…" HorizontalAlignment="Left" Click="OnSavePendingKey" />
+            <Button x:Name="UpgradeLocalKeyButton" Classes="soft" Content="升级到本地密钥格式…" HorizontalAlignment="Left" Click="OnUpgradeLocalKey" IsVisible="False" />
+          </StackPanel>
+        </Border>
+
+        <!-- 云同步 -->
+        <Border Classes="section">
+          <StackPanel Spacing="8">
+            <TextBlock Text="云同步" Classes="h2" Margin="0,0,0,0" />
+            <TextBlock Text="使用官网账号同步加密保险库。服务器无法解密内容；本地变更后自动上传，点刷新可立即拉取。"
+                       TextWrapping="Wrap" Classes="muted" />
+            <TextBlock x:Name="SyncStatusText" Classes="muted" TextWrapping="Wrap" />
+
+            <StackPanel x:Name="SyncBoundPanel" IsVisible="False" Spacing="8">
+              <TextBlock x:Name="SyncAccountText" FontWeight="SemiBold" />
+              <TextBlock x:Name="SyncMetaText" Classes="muted" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="accent" Content="立即刷新" Click="OnSyncRefresh" />
+                <Button Classes="ghost" Content="断开云同步" Click="OnSyncDisconnect" />
+              </StackPanel>
+            </StackPanel>
+
+            <StackPanel x:Name="SyncBindPanel" Spacing="6">
+              <TextBlock Text="官网邮箱" Classes="label" />
+              <TextBox x:Name="SyncEmailBox" Watermark="you@example.com" />
+              <TextBlock Text="官网密码" Classes="label" />
+              <TextBox x:Name="SyncPasswordBox" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" />
+              <TextBlock Text="绑定密钥" Classes="label" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox x:Name="SyncBindingKeyBox" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="粘贴或选择 .kpbind" Classes="mono" />
+                <Button Grid.Column="1" Classes="soft" Content="选择…" Click="OnPickBindingKey" />
+              </Grid>
+              <TextBlock Text="邮箱验证码" Classes="label" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox x:Name="SyncCodeBox" Watermark="6 位验证码" Classes="mono" />
+                <Button Grid.Column="1" Classes="soft" Content="发送验证码" Click="OnSyncSendCode" />
+              </Grid>
+              <Button Classes="accent" Content="绑定并开启同步" HorizontalAlignment="Left" Margin="0,6,0,0" Click="OnSyncBind" />
+            </StackPanel>
           </StackPanel>
         </Border>
 

@@ -18,6 +18,7 @@ public sealed partial class VaultSession : IDisposable
     private bool _deviceQuick;
     private RecoverySecrets? _recovery;
     private bool _unlocked;
+    private int _formatVersion;
 
     internal VaultSession(
         string path,
@@ -32,7 +33,8 @@ public sealed partial class VaultSession : IDisposable
         byte[]? shortWrapKey = null,
         bool deviceQuick = false,
         VaultStore.CipherDto? passwordWrap = null,
-        bool keyFileSaved = false)
+        bool keyFileSaved = false,
+        int formatVersion = VaultStore.IndependentKeyVersion)
     {
         _path = path;
         Account = account;
@@ -46,9 +48,13 @@ public sealed partial class VaultSession : IDisposable
         _deviceQuick = deviceQuick;
         _passwordWrap = passwordWrap;
         _keyFileSaved = keyFileSaved;
-        _labels = labels ?? VaultLabels.From(null, null, entries);
+        _formatVersion = formatVersion;
+        _labels = labels ?? VaultLabels.From(null, null, AliveEntries(entries));
         _unlocked = true;
     }
+
+    private static IEnumerable<VaultEntry> AliveEntries(IEnumerable<VaultEntry> entries) =>
+        entries.Where(entry => !entry.IsDeleted);
 
     public IReadOnlyList<string> Spaces
     {
@@ -258,7 +264,44 @@ public sealed partial class VaultSession : IDisposable
             lock (_gate)
             {
                 EnsureUnlocked();
+                return _entries.Where(entry => !entry.IsDeleted).Select(entry => entry.Clone()).ToList();
+            }
+        }
+    }
+
+    /// <summary>含墓碑在内的全部记录，供同步合并使用。</summary>
+    public IReadOnlyList<VaultEntry> AllRecords
+    {
+        get
+        {
+            lock (_gate)
+            {
+                EnsureUnlocked();
                 return _entries.Select(entry => entry.Clone()).ToList();
+            }
+        }
+    }
+
+    public int FormatVersion
+    {
+        get
+        {
+            lock (_gate)
+            {
+                EnsureUnlocked();
+                return _formatVersion;
+            }
+        }
+    }
+
+    public bool NeedsLocalKeyUpgrade
+    {
+        get
+        {
+            lock (_gate)
+            {
+                EnsureUnlocked();
+                return _formatVersion < VaultStore.FormatVersion || _passwordWrap is not null;
             }
         }
     }
@@ -276,7 +319,8 @@ public sealed partial class VaultSession : IDisposable
                 throw new InvalidOperationException("条目类型创建后不能修改。");
             }
 
-            if (copy.Accounts.Any(account => account.SshKeyId is { } keyId && !_entries.Any(item => item.Id == keyId && item.Kind == VaultItemKind.SshKey)))
+            if (copy.Accounts.Any(account => account.SshKeyId is { } keyId
+                && !_entries.Any(item => item.Id == keyId && item.Kind == VaultItemKind.SshKey && !item.IsDeleted)))
             {
                 throw new ArgumentException("关联的 SSH 密钥不存在。", nameof(entry));
             }
@@ -301,12 +345,52 @@ public sealed partial class VaultSession : IDisposable
         }
     }
 
+    /// <summary>用合并结果整体替换本地记录（含墓碑），不刷新 UpdatedAt。</summary>
+    public void ReplaceAllRecords(IEnumerable<VaultEntry> entries, IReadOnlyList<string>? spaces = null, IReadOnlyList<string>? tags = null)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            var prepared = entries.Select(entry => entry.Clone()).ToList();
+            DropDanglingKeyReferences(prepared);
+            _entries.Clear();
+            _entries.AddRange(prepared);
+            _labels.Spaces.Clear();
+            _labels.Tags.Clear();
+            if (spaces is not null)
+            {
+                foreach (var space in spaces)
+                {
+                    VaultLabels.AddTo(_labels.Spaces, space);
+                }
+            }
+
+            if (tags is not null)
+            {
+                foreach (var tag in tags)
+                {
+                    VaultLabels.AddTo(_labels.Tags, tag);
+                }
+            }
+
+            foreach (var entry in AliveEntries(_entries))
+            {
+                entry.Space = VaultLabels.AddTo(_labels.Spaces, entry.Space);
+                entry.Tags = LabelName.NormalizeAll(entry.Tags)
+                    .Select(tag => VaultLabels.AddTo(_labels.Tags, tag))
+                    .ToList();
+            }
+        }
+    }
+
     public IReadOnlyList<string> ReferencingNames(Guid keyId)
     {
         lock (_gate)
         {
             EnsureUnlocked();
             return _entries
+                .Where(entry => !entry.IsDeleted)
                 .Where(entry => entry.SshKeyId == keyId || entry.Accounts.Any(account => account.SshKeyId == keyId))
                 .Select(entry => string.IsNullOrWhiteSpace(entry.Name) ? "未命名" : entry.Name)
                 .ToList();
@@ -318,21 +402,37 @@ public sealed partial class VaultSession : IDisposable
         lock (_gate)
         {
             EnsureUnlocked();
-            var removed = _entries.RemoveAll(entry => entry.Id == id) > 0;
-            if (removed)
+            var index = _entries.FindIndex(entry => entry.Id == id && !entry.IsDeleted);
+            if (index < 0)
             {
-                DropDanglingKeyReferences(_entries);
+                return false;
             }
 
-            return removed;
+            if (_formatVersion >= VaultStore.FormatVersion)
+            {
+                _entries[index].MarkDeleted();
+            }
+            else
+            {
+                _entries.RemoveAt(index);
+            }
+
+            DropDanglingKeyReferences(_entries);
+            return true;
         }
     }
 
     internal static void DropDanglingKeyReferences(List<VaultEntry> entries)
     {
-        var keys = entries.Where(entry => entry.Kind == VaultItemKind.SshKey).Select(entry => entry.Id).ToHashSet();
+        var keys = entries.Where(entry => entry.Kind == VaultItemKind.SshKey && !entry.IsDeleted)
+            .Select(entry => entry.Id).ToHashSet();
         foreach (var entry in entries)
         {
+            if (entry.IsDeleted)
+            {
+                continue;
+            }
+
             if (entry.SshKeyId is { } id && !keys.Contains(id))
             {
                 entry.SshKeyId = null;
@@ -356,6 +456,17 @@ public sealed partial class VaultSession : IDisposable
         if (copy.Id == Guid.Empty)
         {
             copy.Id = Guid.NewGuid();
+        }
+
+        if (copy.IsDeleted)
+        {
+            copy.MarkDeleted(copy.DeletedAt ?? copy.UpdatedAt);
+            if (copy.UpdatedAt == default)
+            {
+                copy.Touch();
+            }
+
+            return copy;
         }
 
         foreach (var field in copy.CustomFields)
@@ -394,15 +505,21 @@ public sealed partial class VaultSession : IDisposable
             throw new ArgumentException(error, nameof(entry));
         }
 
+        copy.DeletedAt = null;
+        copy.Touch();
         return copy;
     }
 
     private void Commit(VaultEntry copy, int index)
     {
-        copy.Space = VaultLabels.AddTo(_labels.Spaces, copy.Space);
-        copy.Tags = LabelName.NormalizeAll(copy.Tags)
-            .Select(tag => VaultLabels.AddTo(_labels.Tags, tag))
-            .ToList();
+        if (!copy.IsDeleted)
+        {
+            copy.Space = VaultLabels.AddTo(_labels.Spaces, copy.Space);
+            copy.Tags = LabelName.NormalizeAll(copy.Tags)
+                .Select(tag => VaultLabels.AddTo(_labels.Tags, tag))
+                .ToList();
+        }
+
         if (index < 0)
         {
             _entries.Add(copy);
@@ -418,8 +535,49 @@ public sealed partial class VaultSession : IDisposable
         lock (_gate)
         {
             EnsureUnlocked();
-            VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _dataKey, _entries, _recovery, _labels, _passwordWrap, _keyFileSaved);
-            AutofillIndexStore.Write(_path, _entries);
+            VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _dataKey, _entries, _recovery, _labels, _passwordWrap,
+                _keyFileSaved, _formatVersion);
+            AutofillIndexStore.Write(_path, AliveEntries(_entries).Select(entry => entry.Clone()).ToList());
+        }
+    }
+
+    /// <summary>升级到 v3 本地密钥格式：去掉主密码保护层，为条目补时间戳。须已保存 .kpkey。</summary>
+    public void UpgradeToLocalKeyFormat()
+    {
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            if (_formatVersion >= VaultStore.FormatVersion && _passwordWrap is null)
+            {
+                return;
+            }
+
+            if (_passwordWrap is not null && !_keyFileSaved)
+            {
+                throw new InvalidOperationException("请先永久保存加密密钥文件，再升级到本地密钥格式。");
+            }
+
+            if (_passwordWrap is null && _formatVersion < VaultStore.IndependentKeyVersion)
+            {
+                throw new InvalidOperationException("请先更换一次主密码，升级为独立加密密钥并保存密钥文件。");
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            foreach (var entry in _entries)
+            {
+                if (entry.UpdatedAt == default)
+                {
+                    entry.UpdatedAt = now;
+                }
+            }
+
+            _passwordWrap = null;
+            _formatVersion = VaultStore.FormatVersion;
+            _keyFileSaved = true;
+            VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _dataKey, _entries, recovery: null, _labels,
+                passwordWrap: null, keyFileSaved: true, formatVersion: VaultStore.FormatVersion);
+            _recovery?.Zero();
+            _recovery = null;
         }
     }
 
@@ -445,6 +603,11 @@ public sealed partial class VaultSession : IDisposable
             EnsureUnlocked();
             VerifyMasterPassword(currentPassword);
 
+            if (_formatVersion >= VaultStore.FormatVersion && _passwordWrap is null)
+            {
+                throw new InvalidOperationException("此保险库无主密码。解锁与恢复请使用短密钥或加密密钥。");
+            }
+
             var salt = RandomNumberGenerator.GetBytes(Argon2Id.SaltLength);
             var upgrading = _passwordWrap is null;
             var next = upgrading ? RandomNumberGenerator.GetBytes(Argon2Id.HashLength) : _dataKey;
@@ -459,7 +622,8 @@ public sealed partial class VaultSession : IDisposable
                 if (upgrading)
                 {
                     VaultStore.WriteFile(_path, Account, nextKdf, _shortKey, next, _entries, labels: _labels,
-                        passwordWrap: passwordWrap);
+                        passwordWrap: passwordWrap, formatVersion: VaultStore.IndependentKeyVersion);
+                    _formatVersion = VaultStore.IndependentKeyVersion;
                 }
                 else
                 {
@@ -540,11 +704,6 @@ public sealed partial class VaultSession : IDisposable
 
     public void ChangeShortKey(string masterPassword, string newShortKey)
     {
-        if (string.IsNullOrEmpty(masterPassword))
-        {
-            throw new CredentialRejectedException("主密码不正确。");
-        }
-
         if (string.IsNullOrEmpty(newShortKey))
         {
             throw new ArgumentException("请填写新的短密钥。", nameof(newShortKey));
@@ -553,44 +712,95 @@ public sealed partial class VaultSession : IDisposable
         lock (_gate)
         {
             EnsureUnlocked();
+            if (_passwordWrap is null)
+            {
+                throw new InvalidOperationException("此保险库无主密码。请使用当前短密钥或加密密钥更换短密钥。");
+            }
+
+            if (string.IsNullOrEmpty(masterPassword))
+            {
+                throw new CredentialRejectedException("主密码不正确。");
+            }
+
             VerifyMasterPassword(masterPassword);
+            ApplyShortKeyChange(newShortKey);
+        }
+    }
 
-            var nextShort = VaultStore.HashShortKey(newShortKey, _shortKey.Profile);
-            var (wrap, key) = VaultStore.CreateShortWrap(newShortKey, _shortKey.Profile, _dataKey);
-            var previousShort = _shortKey;
-            var previousWrap = _shortWrap;
-            var previousKey = _shortWrapKey;
-            _shortKey = nextShort;
-            _shortWrap = wrap;
-            _shortWrapKey = key;
-            try
+    /// <summary>v3：用当前短密钥验证后更换短密钥。</summary>
+    public void ChangeShortKeyWithCurrent(string currentShortKey, string newShortKey)
+    {
+        if (string.IsNullOrEmpty(newShortKey))
+        {
+            throw new ArgumentException("请填写新的短密钥。", nameof(newShortKey));
+        }
+
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            if (!VerifyShortKey(currentShortKey))
             {
-                VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _dataKey, _entries, _recovery, _labels, _passwordWrap, _keyFileSaved);
-            }
-            catch
-            {
-                _shortKey = previousShort;
-                _shortWrap = previousWrap;
-                _shortWrapKey = previousKey;
-                CryptographicOperations.ZeroMemory(key);
-                throw;
+                throw new CredentialRejectedException("当前短密钥不正确。");
             }
 
-            try
-            {
-                VaultStore.WriteQuickUnlock(_path, _kdf.Salt, wrap);
-                _deviceQuick = false;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                VaultStore.DeleteQuickUnlock(_path);
-                _deviceQuick = false;
-            }
+            ApplyShortKeyChange(newShortKey);
+        }
+    }
 
-            if (previousKey is not null)
-            {
-                CryptographicOperations.ZeroMemory(previousKey);
-            }
+    /// <summary>v3：用加密密钥验证后更换短密钥。</summary>
+    public void ChangeShortKeyWithEncryptionKey(string encryptionKey, string newShortKey)
+    {
+        if (string.IsNullOrEmpty(newShortKey))
+        {
+            throw new ArgumentException("请填写新的短密钥。", nameof(newShortKey));
+        }
+
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            VerifyEncryptionKey(encryptionKey);
+            ApplyShortKeyChange(newShortKey);
+        }
+    }
+
+    private void ApplyShortKeyChange(string newShortKey)
+    {
+        var nextShort = VaultStore.HashShortKey(newShortKey, _shortKey.Profile);
+        var (wrap, key) = VaultStore.CreateShortWrap(newShortKey, _shortKey.Profile, _dataKey);
+        var previousShort = _shortKey;
+        var previousWrap = _shortWrap;
+        var previousKey = _shortWrapKey;
+        _shortKey = nextShort;
+        _shortWrap = wrap;
+        _shortWrapKey = key;
+        try
+        {
+            VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _dataKey, _entries, _recovery, _labels, _passwordWrap,
+                _keyFileSaved, _formatVersion);
+        }
+        catch
+        {
+            _shortKey = previousShort;
+            _shortWrap = previousWrap;
+            _shortWrapKey = previousKey;
+            CryptographicOperations.ZeroMemory(key);
+            throw;
+        }
+
+        try
+        {
+            VaultStore.WriteQuickUnlock(_path, _kdf.Salt, wrap);
+            _deviceQuick = false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            VaultStore.DeleteQuickUnlock(_path);
+            _deviceQuick = false;
+        }
+
+        if (previousKey is not null)
+        {
+            CryptographicOperations.ZeroMemory(previousKey);
         }
     }
 

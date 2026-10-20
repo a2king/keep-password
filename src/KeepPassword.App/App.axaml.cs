@@ -24,6 +24,7 @@ public partial class App : Application
         ThemeManager.Initialize();
         MotionPreferences.Initialize();
         AutofillHotkeyPreferences.Initialize();
+        StartupPreferences.Initialize();
         AppUpdateService.Initialize();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)

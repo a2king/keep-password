@@ -8,13 +8,55 @@ public sealed partial class VaultSession
     private VaultStore.CipherDto? _passwordWrap;
     private bool _keyFileSaved;
 
-    public bool UsesIndependentKey { get { lock (_gate) { EnsureUnlocked(); return _passwordWrap is not null; } } }
+    public bool UsesIndependentKey
+    {
+        get
+        {
+            lock (_gate)
+            {
+                EnsureUnlocked();
+                return _formatVersion >= VaultStore.IndependentKeyVersion;
+            }
+        }
+    }
 
-    public bool NeedsKeyFileSave { get { lock (_gate) { EnsureUnlocked(); return _passwordWrap is not null && !_keyFileSaved; } } }
+    public bool HasMasterPassword
+    {
+        get
+        {
+            lock (_gate)
+            {
+                EnsureUnlocked();
+                return _passwordWrap is not null;
+            }
+        }
+    }
+
+    public bool NeedsKeyFileSave
+    {
+        get
+        {
+            lock (_gate)
+            {
+                EnsureUnlocked();
+                return _formatVersion >= VaultStore.IndependentKeyVersion && !_keyFileSaved;
+            }
+        }
+    }
 
     public string EncryptionKeyId
     {
         get { lock (_gate) { EnsureUnlocked(); return Convert.ToHexString(SHA256.HashData(_dataKey))[..12]; } }
+    }
+
+    /// <summary>返回数据密钥副本，调用方负责清零。仅用于同步包裹/解密云端文件。</summary>
+    public byte[] CopyDataKey()
+    {
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            return _dataKey.ToArray();
+        }
     }
 
     public string PendingEncryptionKey
@@ -48,7 +90,7 @@ public sealed partial class VaultSession
         lock (_gate)
         {
             EnsureUnlocked();
-            if (_passwordWrap is null)
+            if (_formatVersion < VaultStore.IndependentKeyVersion)
                 throw new InvalidOperationException("请先在设置中更换一次主密码，升级保险库并保存独立加密密钥。");
             var entered = VaultKeyFile.Parse(encryptionKey);
             try
@@ -84,7 +126,7 @@ public sealed partial class VaultSession
             }
             // Only acknowledge after the user's file was written successfully. Cancellation or
             // write errors leave the setup pending, including across process restarts.
-            VaultStore.UpdateKeyHeader(_path, _kdf, _passwordWrap!, keyFileSaved: true);
+            VaultStore.UpdateKeyHeader(_path, _kdf, _passwordWrap, keyFileSaved: true);
             _keyFileSaved = true;
         }
     }
@@ -104,7 +146,7 @@ public sealed partial class VaultSession
         lock (_gate)
         {
             EnsureUnlocked();
-            if (_passwordWrap is null)
+            if (_formatVersion < VaultStore.IndependentKeyVersion)
                 throw new InvalidOperationException("请先更换主密码，将当前保险库升级为独立加密密钥。");
             var previous = _entries.ToList();
             var spaces = _labels.Spaces.ToList();

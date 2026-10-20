@@ -262,6 +262,38 @@ public static class CacheDirectory
     public static void SetAutofillHotkey(string settingsFile, string hotkey) =>
         Update(settingsFile, dto => dto.AutofillHotkey = hotkey);
 
+    /// <summary>未配置时默认开启开机启动。</summary>
+    public static bool GetLaunchAtStartup(string settingsFile) =>
+        ReadBool(settingsFile, dto => dto.LaunchAtStartup, defaultValue: true);
+
+    public static void SetLaunchAtStartup(string settingsFile, bool enabled) =>
+        Update(settingsFile, dto => dto.LaunchAtStartup = enabled);
+
+    /// <summary>未配置时默认开机（及带 --minimized 启动）时最小化到托盘。</summary>
+    public static bool GetStartMinimized(string settingsFile) =>
+        ReadBool(settingsFile, dto => dto.StartMinimized, defaultValue: true);
+
+    public static void SetStartMinimized(string settingsFile, bool enabled) =>
+        Update(settingsFile, dto => dto.StartMinimized = enabled);
+
+    private static bool ReadBool(string settingsFile, Func<SettingsDto, bool?> read, bool defaultValue)
+    {
+        if (!File.Exists(settingsFile))
+        {
+            return defaultValue;
+        }
+
+        try
+        {
+            var settings = JsonSerializer.Deserialize<SettingsDto>(File.ReadAllText(settingsFile), Options);
+            return read(settings ?? new SettingsDto()) ?? defaultValue;
+        }
+        catch (JsonException)
+        {
+            return defaultValue;
+        }
+    }
+
     private static void Update(string settingsFile, Action<SettingsDto> change)
     {
         var folder = Path.GetDirectoryName(settingsFile);
@@ -354,5 +386,7 @@ public static class CacheDirectory
         public string? Theme { get; set; }
         public string? MotionMode { get; set; }
         public string? AutofillHotkey { get; set; }
+        public bool? LaunchAtStartup { get; set; }
+        public bool? StartMinimized { get; set; }
     }
 }

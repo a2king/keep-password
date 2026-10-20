@@ -54,9 +54,10 @@ internal static class EncryptionKeyDialog
         };
         done.Click += (_, _) => window.Close();
         cancel.Click += (_, _) => window.Close();
-        window.Content = Content("这是你的长期加密密钥",
-            "还原备份、导出明文和重置忘记的主密码时都需要它。更换主密码不会改变这把密钥。请先将密钥文件保存到你选择的文件夹。",
-            key, save, status, Buttons(cancel, done));
+        var body = session.HasMasterPassword
+            ? "还原备份、导出明文和重置忘记的主密码时都需要它。更换主密码不会改变这把密钥。请先将密钥文件保存到你选择的文件夹。"
+            : "换电脑、忘记短密钥、还原备份和导出明文时都需要它。请先将密钥文件保存到你选择的文件夹，并与保险库备份分开保管。";
+        window.Content = Content("这是你的长期加密密钥", body, key, save, status, Buttons(cancel, done));
         await ShowAsync(window, owner, session);
         key.Text = "";
         return saved && session.IsUnlocked;

@@ -22,4 +22,11 @@ internal static class TestVault
     {
         return Store().CreateSession(path, account, masterPassword, shortKey);
     }
+
+    public static VaultSession CreateLocalUnlocked(string path, string shortKey = "short-key")
+    {
+        var session = Store().CreateLocalSession(path, shortKey);
+        session.SaveEncryptionKeyFile(path + ".kpkey", session.PendingEncryptionKey);
+        return session;
+    }
 }

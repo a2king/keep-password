@@ -37,9 +37,11 @@ public class AutofillAndPathTests
     }
 
     [Theory]
-    [InlineData("飞书")]
-    [InlineData("新建连接 - DbX")]
-    public void Match_DesktopWithoutHostOffersPasswordAccountsAcrossSupportedKinds(string windowTitle)
+    [InlineData(AutofillOrigin.WindowsApplication, "飞书")]
+    [InlineData(AutofillOrigin.WindowsApplication, "新建连接 - DbX")]
+    [InlineData(AutofillOrigin.MacOsApplication, "飞书")]
+    [InlineData(AutofillOrigin.MacOsApplication, "Zoom")]
+    public void Match_DesktopWithoutHostOffersPasswordAccountsAcrossSupportedKinds(AutofillOrigin origin, string windowTitle)
     {
         var entries = new[] { VaultItemKind.Login, VaultItemKind.Server, VaultItemKind.Database, VaultItemKind.Cluster }
             .Select(kind => new VaultEntry
@@ -52,10 +54,11 @@ public class AutofillAndPathTests
 
         var matches = AutofillMatcher.Match(entries, new AutofillRequest
         {
-            Origin = AutofillOrigin.WindowsApplication,
+            Origin = origin,
             WindowTitle = windowTitle
         });
 
+        Assert.True(AutofillMatcher.IsDesktopOrigin(origin));
         Assert.Equal(entries.Length, matches.Count);
         foreach (var entry in entries)
         {

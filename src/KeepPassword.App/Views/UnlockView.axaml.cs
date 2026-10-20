@@ -35,9 +35,22 @@ public partial class UnlockView : UserControl
     {
         Dispatcher.UIThread.Post(() =>
         {
-            if (View?.ShowShortUnlock == true)
+            if (View is null)
+            {
+                return;
+            }
+
+            if (View.ShowShortUnlock)
             {
                 UnlockShortBox.Focus();
+            }
+            else if (View.ShowKeyUnlock || View.ShowKeyRecovery)
+            {
+                RecoveryKeyBox.Focus();
+            }
+            else if (View.IsCreate)
+            {
+                ShortBox.Focus();
             }
             else
             {
@@ -60,6 +73,8 @@ public partial class UnlockView : UserControl
         ShortBox.Text = "";
         ConfirmShortBox.Text = "";
         UnlockShortBox.Text = "";
+        KeyUnlockShortBox.Text = "";
+        KeyUnlockConfirmShortBox.Text = "";
         RecoveryKeyBox.Text = "";
         RecoverAnswer1Box.Text = "";
         RecoverAnswer2Box.Text = "";
@@ -149,6 +164,37 @@ public partial class UnlockView : UserControl
                     return;
                 }
             }
+            if (session.NeedsLocalKeyUpgrade
+                && TopLevel.GetTopLevel(this) is Window upgradeOwner
+                && !session.NeedsKeyFileSave)
+            {
+                Badge.StopSpin();
+                var upgrade = await Dialogs.ConfirmAsync(upgradeOwner, "升级保险库格式",
+                    "检测到旧版保险库。升级后将去掉主密码保护层，本机继续用短密钥解锁；换电脑或忘记短密钥时使用已保存的加密密钥文件。开启云同步前必须升级。现在升级吗？",
+                    "升级");
+                if (token.IsCancellationRequested || View != view)
+                {
+                    session.Dispose();
+                    return;
+                }
+
+                if (upgrade)
+                {
+                    try
+                    {
+                        await Task.Run(session.UpgradeToLocalKeyFormat);
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException or UnauthorizedAccessException)
+                    {
+                        view.Error = ex.Message;
+                        view.DropSession();
+                        _animating = false;
+                        FocusMaster();
+                        return;
+                    }
+                }
+            }
+
             token.ThrowIfCancellationRequested();
             await Badge.PlayTurnAsync();
             token.ThrowIfCancellationRequested();
@@ -192,10 +238,21 @@ public partial class UnlockView : UserControl
         _ = Motion.EnterAsync(UnlockForm, 4);
     }
 
+    private void OnUseEncryptionKey(object? sender, RoutedEventArgs e)
+    {
+        View?.UseEncryptionKey();
+        UnlockShortBox.Text = "";
+        RecoveryKeyBox.Focus();
+        _ = Motion.EnterAsync(UnlockForm, 4);
+    }
+
     private void OnUseShort(object? sender, RoutedEventArgs e)
     {
         View?.UseShortKey();
         MasterBox.Text = "";
+        KeyUnlockShortBox.Text = "";
+        KeyUnlockConfirmShortBox.Text = "";
+        RecoveryKeyBox.Text = "";
         UnlockShortBox.Focus();
         _ = Motion.EnterAsync(UnlockForm, 4);
     }
@@ -227,14 +284,29 @@ public partial class UnlockView : UserControl
 
         View.MasterPassword = MasterBox.Text ?? "";
         View.ConfirmMaster = View.IsRecovering ? RecoverConfirmBox.Text ?? "" : ConfirmMasterBox.Text ?? "";
-        View.ShortKey = View.IsCreate ? ShortBox.Text ?? "" : UnlockShortBox.Text ?? "";
-        View.ConfirmShort = ConfirmShortBox.Text ?? "";
+        if (View.IsCreate)
+        {
+            View.ShortKey = ShortBox.Text ?? "";
+            View.ConfirmShort = ConfirmShortBox.Text ?? "";
+        }
+        else if (View.ShowKeyUnlock)
+        {
+            View.ShortKey = KeyUnlockShortBox.Text ?? "";
+            View.ConfirmShort = KeyUnlockConfirmShortBox.Text ?? "";
+        }
+        else
+        {
+            View.ShortKey = UnlockShortBox.Text ?? "";
+            View.ConfirmShort = ConfirmShortBox.Text ?? "";
+        }
+
         if (View.IsRecovering)
         {
             View.Answer1 = RecoverAnswer1Box.Text ?? "";
             View.Answer2 = RecoverAnswer2Box.Text ?? "";
             View.Answer3 = RecoverAnswer3Box.Text ?? "";
         }
+
         View.EncryptionKey = RecoveryKeyBox.Text ?? "";
     }
 

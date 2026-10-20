@@ -9,7 +9,14 @@ namespace KeepPassword.Core.Vault;
 
 public sealed partial class VaultStore
 {
-    public const int FormatVersion = 2;
+    /// <summary>当前写入的保险库格式。v3 = 本地密钥模式（短密钥 + .kpkey，无主密码保护层）并带条目时间戳/墓碑。</summary>
+    public const int FormatVersion = 3;
+
+    /// <summary>独立随机密钥 + 主密码包裹层（仍可解锁，可升级到 v3）。</summary>
+    public const int IndependentKeyVersion = 2;
+
+    /// <summary>旧版：主密码直接派生数据密钥。</summary>
+    public const int LegacyPasswordVersion = 1;
 
     private static readonly JsonSerializerOptions EnvelopeOptions = new()
     {
@@ -39,6 +46,65 @@ public sealed partial class VaultStore
         using var session = CreateSession(path, account, masterPassword, shortKey, recovery);
     }
 
+    /// <summary>创建 v3 本地密钥保险库：仅短密钥 + 独立 .kpkey，无主密码保护层。</summary>
+    public VaultSession CreateLocalSession(string path, string shortKey, string account = "")
+    {
+        if (string.IsNullOrEmpty(shortKey))
+        {
+            throw new ArgumentException("请填写短密钥。", nameof(shortKey));
+        }
+
+        if (File.Exists(path))
+        {
+            throw new InvalidOperationException("保险库已存在。");
+        }
+
+        var trimmed = account.Trim();
+        if (trimmed.Length > 256)
+        {
+            throw new ArgumentException("账号过长。", nameof(account));
+        }
+
+        var kdf = new KdfMaterial(Profile, RandomNumberGenerator.GetBytes(Argon2Id.SaltLength));
+        var dataKey = RandomNumberGenerator.GetBytes(Argon2Id.HashLength);
+        var entries = new List<VaultEntry>();
+        byte[]? wrapKey = null;
+        var handedOff = false;
+        try
+        {
+            var shortKeyMaterial = HashShortKey(shortKey, Profile);
+            var (wrap, key) = CreateShortWrap(shortKey, Profile, dataKey);
+            wrapKey = key;
+            WriteFile(path, trimmed, kdf, shortKeyMaterial, dataKey, entries, formatVersion: FormatVersion);
+            try
+            {
+                WriteQuickUnlock(path, kdf.Salt, wrap);
+            }
+            catch
+            {
+                TryDeleteFile(path);
+                DeleteQuickUnlock(path);
+                throw;
+            }
+
+            handedOff = true;
+            return new VaultSession(path, trimmed, kdf, shortKeyMaterial, dataKey, entries, null, null, wrap, wrapKey,
+                formatVersion: FormatVersion);
+        }
+        finally
+        {
+            if (!handedOff)
+            {
+                CryptographicOperations.ZeroMemory(dataKey);
+                if (wrapKey is not null)
+                {
+                    CryptographicOperations.ZeroMemory(wrapKey);
+                }
+            }
+        }
+    }
+
+    /// <summary>创建 v2 保险库（主密码 + 短密钥 + 独立密钥）。测试与兼容路径仍可用；新用户界面走 <see cref="CreateLocalSession"/>。</summary>
     public VaultSession CreateSession(string path, string account, string masterPassword, string shortKey, RecoverySetup? recovery = null)
     {
         RequireSecrets(account, masterPassword, shortKey);
@@ -63,7 +129,8 @@ public sealed partial class VaultStore
             var shortKeyMaterial = HashShortKey(shortKey, Profile);
             var (wrap, key) = CreateShortWrap(shortKey, Profile, masterKey);
             wrapKey = key;
-            WriteFile(path, trimmed, kdf, shortKeyMaterial, masterKey, entries, passwordWrap: passwordWrap);
+            WriteFile(path, trimmed, kdf, shortKeyMaterial, masterKey, entries,
+                passwordWrap: passwordWrap, formatVersion: IndependentKeyVersion);
             try
             {
                 WriteQuickUnlock(path, kdf.Salt, wrap);
@@ -77,7 +144,7 @@ public sealed partial class VaultStore
 
             handedOff = true;
             return new VaultSession(path, trimmed, kdf, shortKeyMaterial, masterKey, entries, null, null, wrap, wrapKey,
-                passwordWrap: passwordWrap);
+                passwordWrap: passwordWrap, formatVersion: IndependentKeyVersion);
         }
         finally
         {
@@ -117,6 +184,12 @@ public sealed partial class VaultStore
         }
     }
 
+    public bool IsLocalKeyVault(string path)
+    {
+        var envelope = ReadEnvelope(path);
+        return envelope.Version >= FormatVersion && envelope.PasswordWrap is null;
+    }
+
     public VaultSession Unlock(string path, string masterPassword)
     {
         if (string.IsNullOrEmpty(masterPassword))
@@ -125,6 +198,11 @@ public sealed partial class VaultStore
         }
 
         var envelope = ReadEnvelope(path);
+        if (envelope.Version >= FormatVersion && envelope.PasswordWrap is null)
+        {
+            throw new InvalidOperationException("此保险库无主密码，请使用短密钥或加密密钥解锁。");
+        }
+
         var shortKeyDto = envelope.ShortKey ?? throw new InvalidDataException("保险库文件无法读取。");
         var kdfDto = envelope.Kdf ?? throw new InvalidDataException("保险库文件无法读取。");
         var cipher = envelope.Cipher ?? throw new InvalidDataException("保险库文件无法读取。");
@@ -176,7 +254,7 @@ public sealed partial class VaultStore
         }
 
         return new VaultSession(path, envelope.Account, kdf, shortKeyDto.ToMaterial(), masterKey, entries, recovery, labels, wrap, null, device,
-            envelope.PasswordWrap, envelope.KeyFileSaved);
+            envelope.PasswordWrap, envelope.KeyFileSaved, envelope.Version);
     }
 
     public VaultSession UnlockWithShortKey(string path, string shortKey)
@@ -240,7 +318,7 @@ public sealed partial class VaultStore
 
             handedOff = true;
             return new VaultSession(path, envelope.Account, kdf, shortKeyDto.ToMaterial(), masterKey, entries, recovery, labels, wrap, wrapKey,
-                passwordWrap: envelope.PasswordWrap, keyFileSaved: envelope.KeyFileSaved);
+                passwordWrap: envelope.PasswordWrap, keyFileSaved: envelope.KeyFileSaved, formatVersion: envelope.Version);
         }
         finally
         {
@@ -251,6 +329,76 @@ public sealed partial class VaultStore
                 {
                     CryptographicOperations.ZeroMemory(masterKey);
                 }
+            }
+        }
+    }
+
+    /// <summary>用加密密钥解锁（v3 新设备配对 / 忘记短密钥，或打开仅密钥保护的备份）。成功后需设置本机短密钥。</summary>
+    public VaultSession UnlockWithEncryptionKey(string path, string encryptionKey, string shortKey)
+    {
+        if (string.IsNullOrEmpty(shortKey))
+        {
+            throw new ArgumentException("请填写短密钥。", nameof(shortKey));
+        }
+
+        var envelope = ReadEnvelope(path);
+        if (envelope.Version < IndependentKeyVersion)
+        {
+            throw new InvalidOperationException("这是旧版保险库。请先用主密码解锁并升级。");
+        }
+
+        var shortKeyDto = envelope.ShortKey ?? throw new InvalidDataException("保险库文件无法读取。");
+        var kdfDto = envelope.Kdf ?? throw new InvalidDataException("保险库文件无法读取。");
+        var cipher = envelope.Cipher ?? throw new InvalidDataException("保险库文件无法读取。");
+        var kdf = kdfDto.ToMaterial();
+        var dataKey = VaultKeyFile.Parse(encryptionKey);
+        var handedOff = false;
+        try
+        {
+            List<VaultEntry> entries;
+            VaultLabels labels;
+            try
+            {
+                (entries, labels) = DecryptPayload(envelope.Account, dataKey, cipher, envelope.Version);
+            }
+            catch (CryptographicException)
+            {
+                throw new CredentialRejectedException("加密密钥不匹配，或保险库文件已损坏。");
+            }
+
+            RecoverySecrets? recovery;
+            try
+            {
+                recovery = UnwrapRecovery(envelope.Recovery, dataKey);
+            }
+            catch (CryptographicException)
+            {
+                CryptographicOperations.ZeroMemory(dataKey);
+                throw new InvalidDataException("保险库恢复数据已损坏。");
+            }
+
+            var shortKeyMaterial = HashShortKey(shortKey, Profile);
+            var (wrap, wrapKey) = CreateShortWrap(shortKey, Profile, dataKey);
+            WriteFile(path, envelope.Account, kdf, shortKeyMaterial, dataKey, entries, recovery, labels,
+                passwordWrap: envelope.PasswordWrap, keyFileSaved: true, formatVersion: envelope.Version);
+            try
+            {
+                WriteQuickUnlock(path, kdf.Salt, wrap);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                DeleteQuickUnlock(path);
+            }
+
+            handedOff = true;
+            return new VaultSession(path, envelope.Account, kdf, shortKeyMaterial, dataKey, entries, recovery, labels, wrap, wrapKey,
+                passwordWrap: envelope.PasswordWrap, keyFileSaved: true, formatVersion: envelope.Version);
+        }
+        finally
+        {
+            if (!handedOff)
+            {
+                CryptographicOperations.ZeroMemory(dataKey);
             }
         }
     }
@@ -296,7 +444,7 @@ public sealed partial class VaultStore
 
             handedOff = true;
             return new VaultSession(path, envelope.Account, kdf, shortKey, masterKey, entries, recovery, labels, null, null, true,
-                envelope.PasswordWrap, envelope.KeyFileSaved);
+                envelope.PasswordWrap, envelope.KeyFileSaved, envelope.Version);
         }
         finally
         {
@@ -317,7 +465,8 @@ public sealed partial class VaultStore
         RecoverySecrets? recovery = null,
         VaultLabels? labels = null,
         CipherDto? passwordWrap = null,
-        bool keyFileSaved = false)
+        bool keyFileSaved = false,
+        int? formatVersion = null)
     {
         var payload = new PayloadDto
         {
@@ -329,7 +478,7 @@ public sealed partial class VaultStore
         var plaintext = JsonSerializer.SerializeToUtf8Bytes(payload, PayloadOptions);
         try
         {
-            var version = passwordWrap is null ? 1 : FormatVersion;
+            var version = formatVersion ?? (passwordWrap is null ? LegacyPasswordVersion : IndependentKeyVersion);
             var (nonce, ciphertext, tag) = VaultCipher.Encrypt(masterKey, plaintext, PayloadAad(account, version));
             var envelope = new EnvelopeDto
             {
@@ -879,7 +1028,8 @@ public sealed partial class VaultStore
                 WriteFile(path, envelope.Account, kdf, envelope.ShortKey!.ToMaterial(), newMaster, entries, secrets, labels);
                 DeleteQuickUnlock(path);
                 handedOff = true;
-                return new VaultSession(path, envelope.Account, kdf, envelope.ShortKey.ToMaterial(), newMaster, entries, secrets, labels);
+                return new VaultSession(path, envelope.Account, kdf, envelope.ShortKey.ToMaterial(), newMaster, entries, secrets, labels,
+                    formatVersion: LegacyPasswordVersion);
             }
             catch
             {
@@ -964,7 +1114,7 @@ public sealed partial class VaultStore
 
     private static void ValidateEnvelope(EnvelopeDto envelope)
     {
-        if (envelope.Version is not (1 or FormatVersion)
+        if (envelope.Version is not (LegacyPasswordVersion or IndependentKeyVersion or FormatVersion)
             || !string.Equals(envelope.Format, "keep-password-vault", StringComparison.Ordinal)
             || envelope.Kdf is null
             || envelope.ShortKey is null
@@ -973,16 +1123,25 @@ public sealed partial class VaultStore
             throw new InvalidDataException("保险库文件版本不受支持。");
         }
 
-        if (envelope.Version == FormatVersion)
+        if (envelope.Version == IndependentKeyVersion)
         {
             ValidatePasswordWrap(envelope.PasswordWrap);
+        }
+        else if (envelope.Version == FormatVersion)
+        {
+            if (envelope.PasswordWrap is not null)
+            {
+                throw new InvalidDataException("保险库文件版本与密钥格式不匹配。");
+            }
         }
         else if (envelope.PasswordWrap is not null)
         {
             throw new InvalidDataException("保险库文件版本与密钥格式不匹配。");
         }
 
-        if (string.IsNullOrWhiteSpace(envelope.Account) || envelope.Account.Length > 256)
+        // v3 本地保险库允许空账号；v1/v2 仍要求非空。
+        if (envelope.Account.Length > 256
+            || (envelope.Version < FormatVersion && string.IsNullOrWhiteSpace(envelope.Account)))
         {
             throw new InvalidDataException("保险库文件无法读取。");
         }
@@ -1299,6 +1458,10 @@ public sealed partial class VaultStore
 
         public List<NodeDto>? Nodes { get; set; }
 
+        public DateTimeOffset? UpdatedAt { get; set; }
+
+        public DateTimeOffset? DeletedAt { get; set; }
+
         public static EntryDto From(VaultEntry entry) => new()
         {
             Id = entry.Id,
@@ -1307,7 +1470,7 @@ public sealed partial class VaultStore
             Name = entry.Name ?? "",
             Url = entry.Url ?? "",
             Note = entry.Note ?? "",
-            Accounts = entry.Accounts.Count == 0
+            Accounts = entry.IsDeleted || entry.Accounts.Count == 0
                 ? null
                 : entry.Accounts.Select(account => new AccountDto
                 {
@@ -1328,15 +1491,21 @@ public sealed partial class VaultStore
             SshKeyId = entry.SshKeyId,
             Nodes = entry.Nodes.Count == 0
                 ? null
-                : entry.Nodes.Select(node => new NodeDto { Name = node.Name, Role = node.Role, Host = node.Host, Port = node.Port, Service = node.Service }).ToList()
+                : entry.Nodes.Select(node => new NodeDto { Name = node.Name, Role = node.Role, Host = node.Host, Port = node.Port, Service = node.Service }).ToList(),
+            UpdatedAt = entry.UpdatedAt == default ? null : entry.UpdatedAt,
+            DeletedAt = entry.DeletedAt
         };
 
         public VaultEntry ToEntry()
         {
             var entry = Build();
-            ItemTemplates.MigrateLegacyFields(entry);
-            MigrateLegacyCredentials(entry);
-            ItemTemplates.AdoptLegacyKeyAuth(entry);
+            if (!entry.IsDeleted)
+            {
+                ItemTemplates.MigrateLegacyFields(entry);
+                MigrateLegacyCredentials(entry);
+                ItemTemplates.AdoptLegacyKeyAuth(entry);
+            }
+
             return entry;
         }
 
@@ -1409,7 +1578,9 @@ public sealed partial class VaultStore
                 Host = node.Host ?? "",
                 Port = node.Port ?? "",
                 Service = node.Service ?? ""
-            }).ToList() ?? []
+            }).ToList() ?? [],
+            UpdatedAt = UpdatedAt ?? default,
+            DeletedAt = DeletedAt
         };
     }
 

@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using KeepPassword.App.Services;
 using KeepPassword.Core.Autofill;
 using KeepPassword.Core.Import;
+using KeepPassword.Core.Sync;
 using KeepPassword.Core.Update;
 using KeepPassword.Core.Vault;
 
@@ -18,6 +19,7 @@ public partial class SettingsView : UserControl
     private VaultSession? _session;
     private VaultLocation? _location;
     private Action<bool>? _pauseWatcher;
+    private CloudSyncCoordinator? _sync;
 
     public SettingsView()
     {
@@ -26,6 +28,7 @@ public partial class SettingsView : UserControl
         AnimateStatus(DirectoryStatus);
         AnimateStatus(KeyStatus);
         AnimateStatus(UpdateStatus);
+        AnimateStatus(SyncStatusText);
         ThemeManager.ThemeChanged += UpdateThemeButtons;
         AppUpdateService.Changed += OnAppUpdateChanged;
     }
@@ -47,12 +50,25 @@ public partial class SettingsView : UserControl
     private Window Host => TopLevel.GetTopLevel(this) as Window
         ?? throw new InvalidOperationException("设置页尚未挂到窗口上。");
 
-    public void Show(VaultSession session, VaultLocation location, Action<bool>? pauseWatcher)
+    public void Show(VaultSession session, VaultLocation location, Action<bool>? pauseWatcher, CloudSyncCoordinator? sync = null)
     {
+        if (_sync is not null)
+        {
+            _sync.Changed -= OnSyncChanged;
+        }
+
         _session = session;
         _location = location;
         _pauseWatcher = pauseWatcher;
-        AccountText.Text = "当前账号：" + session.Account;
+        _sync = sync;
+        if (_sync is not null)
+        {
+            _sync.Changed += OnSyncChanged;
+        }
+
+        AccountText.Text = string.IsNullOrWhiteSpace(session.Account)
+            ? "本地保险库"
+            : "当前账号：" + session.Account;
         DirectoryBox.Text = location.Directory;
         LabelStatus.Text = "";
         DirectoryStatus.Text = "";
@@ -60,10 +76,12 @@ public partial class SettingsView : UserControl
         ErrorBox.IsVisible = false;
         UpdateThemeButtons(ThemeManager.CurrentTheme);
         UpdateMotionButtons();
+        UpdateStartupSwitches();
         UpdateHotkey(null);
         RebuildLabels();
         UpdateEncryptionKeyStatus();
         RefreshUpdateUi();
+        RefreshSyncUi();
         Scroller.Offset = default;
     }
 
@@ -139,10 +157,17 @@ public partial class SettingsView : UserControl
 
     public void Clear()
     {
+        if (_sync is not null)
+        {
+            _sync.Changed -= OnSyncChanged;
+        }
+
         _session = null;
         _location = null;
         _pauseWatcher = null;
+        _sync = null;
         ClearSecrets();
+        ClearSyncSecrets();
         NewSpaceBox.Text = "";
         NewTagBox.Text = "";
         SpaceList.Children.Clear();
@@ -323,6 +348,53 @@ public partial class SettingsView : UserControl
     private void OnMotionFull(object? sender, RoutedEventArgs e) => ApplyMotion(MotionPreferences.FullMode);
     private void OnMotionSystem(object? sender, RoutedEventArgs e) => ApplyMotion(MotionPreferences.SystemMode);
     private void OnMotionReduced(object? sender, RoutedEventArgs e) => ApplyMotion(MotionPreferences.ReducedMode);
+
+    private void OnLaunchAtStartupChanged(object? sender, RoutedEventArgs e)
+    {
+        if (_suspendStartupUi)
+        {
+            return;
+        }
+
+        var enabled = LaunchAtStartupSwitch.IsChecked == true;
+        var error = StartupPreferences.SetLaunchAtStartup(enabled);
+        StartMinimizedSwitch.IsEnabled = enabled;
+        StartupStatus.Text = error ?? (enabled
+            ? "已开启开机启动" + (StartupPreferences.StartMinimized ? "（最小化到托盘）。" : "。")
+            : "已关闭开机启动。");
+    }
+
+    private void OnStartMinimizedChanged(object? sender, RoutedEventArgs e)
+    {
+        if (_suspendStartupUi)
+        {
+            return;
+        }
+
+        var enabled = StartMinimizedSwitch.IsChecked == true;
+        var error = StartupPreferences.SetStartMinimized(enabled);
+        StartupStatus.Text = error ?? (enabled
+            ? "开机时将最小化到托盘。"
+            : "开机时将显示主窗口。");
+    }
+
+    private bool _suspendStartupUi;
+
+    private void UpdateStartupSwitches()
+    {
+        _suspendStartupUi = true;
+        try
+        {
+            LaunchAtStartupSwitch.IsChecked = StartupPreferences.LaunchAtStartup;
+            StartMinimizedSwitch.IsChecked = StartupPreferences.StartMinimized;
+            StartMinimizedSwitch.IsEnabled = StartupPreferences.LaunchAtStartup;
+            StartupStatus.Text = "";
+        }
+        finally
+        {
+            _suspendStartupUi = false;
+        }
+    }
 
     private void ApplyMotion(string mode)
     {
@@ -554,12 +626,22 @@ public partial class SettingsView : UserControl
         try
         {
             var session = _session;
-            await Task.Run(() => session.ChangeShortKey(master, next));
+            await Task.Run(() =>
+            {
+                if (session.HasMasterPassword)
+                {
+                    session.ChangeShortKey(master, next);
+                }
+                else
+                {
+                    session.ChangeShortKeyWithCurrent(master, next);
+                }
+            });
             NewKeyBox.Text = "";
             ConfirmBox.Text = "";
             KeyStatus.Text = "短密钥已更新。";
         }
-        catch (Exception ex) when (ex is CredentialRejectedException or ArgumentException)
+        catch (Exception ex) when (ex is CredentialRejectedException or ArgumentException or InvalidOperationException)
         {
             ShowError(ex.Message);
         }
@@ -568,6 +650,48 @@ public partial class SettingsView : UserControl
             SaveButton.IsEnabled = true;
             BusyText.IsVisible = false;
             MasterBox.Text = "";
+        }
+    }
+
+    private async void OnUpgradeLocalKey(object? sender, RoutedEventArgs e)
+    {
+        if (_session is not { IsUnlocked: true } session)
+        {
+            return;
+        }
+
+        try
+        {
+            if (session.NeedsKeyFileSave)
+            {
+                DirectoryStatus.Text = "请先永久保存加密密钥文件，再升级格式。";
+                await SavePendingKeyAsync(session);
+                if (_session != session || !session.IsUnlocked || session.NeedsKeyFileSave)
+                {
+                    return;
+                }
+            }
+
+            var ok = await Dialogs.ConfirmAsync(Host,
+                "升级到本地密钥格式",
+                "升级后将去掉主密码保护层，本机用短密钥解锁，换电脑或忘记短密钥时使用加密密钥文件。此操作不可逆，确认已妥善保管 .kpkey 后再继续。");
+            if (!ok || _session != session || !session.IsUnlocked)
+            {
+                return;
+            }
+
+            await Task.Run(session.UpgradeToLocalKeyFormat);
+            if (_session != session || !session.IsUnlocked)
+            {
+                return;
+            }
+
+            DirectoryStatus.Text = "已升级为本地密钥格式。";
+            UpdateEncryptionKeyStatus();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            ShowError(ex.Message);
         }
     }
 
@@ -740,14 +864,26 @@ public partial class SettingsView : UserControl
     private void UpdateEncryptionKeyStatus()
     {
         if (_session is not { IsUnlocked: true } session) return;
+        var localKey = !session.HasMasterPassword && session.FormatVersion >= VaultStore.FormatVersion;
+        MasterPasswordSection.IsVisible = session.HasMasterPassword || session.NeedsLocalKeyUpgrade;
+        ShortKeyHint.Text = localKey
+            ? "提交前必须验证当前短密钥。自动填入时仍会再确认一次。"
+            : "提交前必须验证当前主密码。短密钥也可以解锁保险库，自动填入时仍会再确认一次。";
+        VerifyLabel.Text = localKey ? "当前短密钥" : "当前主密码";
+        BusyText.Text = localKey ? "正在验证短密钥…" : "正在验证主密码…";
         MasterChangeHint.Text = session.UsesIndependentKey
-            ? "更换主密码不会改变加密密钥，之前保存的密钥文件仍然有效。"
+            ? (session.NeedsLocalKeyUpgrade
+                ? "可先继续使用主密码。建议升级到本地密钥格式：去掉主密码保护层，仅保留短密钥与加密密钥文件。"
+                : "更换主密码不会改变加密密钥，之前保存的密钥文件仍然有效。")
             : "此保险库仍使用旧版加密。更换一次主密码将升级为独立随机密钥，并提示保存密钥文件。";
         EncryptionKeyStatus.Text = !session.UsesIndependentKey
             ? "尚未升级。请先更换一次主密码，生成并永久保存独立加密密钥。"
             : session.NeedsKeyFileSave ? "密钥文件尚未保存，请选择文件夹完成保存。"
-            : "密钥文件已保存。还原备份、明文导出和重置主密码时，请提供你永久保管的密钥。";
+            : localKey
+                ? "密钥文件已保存。换电脑、忘记短密钥、还原备份和明文导出时，请提供你永久保管的密钥。"
+                : "密钥文件已保存。还原备份、明文导出和重置主密码时，请提供你永久保管的密钥。";
         SavePendingKeyButton.IsVisible = session.NeedsKeyFileSave;
+        UpgradeLocalKeyButton.IsVisible = session.NeedsLocalKeyUpgrade && !session.NeedsKeyFileSave;
     }
 
     private async void OnSavePendingKey(object? sender, RoutedEventArgs e)
@@ -763,6 +899,142 @@ public partial class SettingsView : UserControl
             return;
         }
         if (_session == session) UpdateEncryptionKeyStatus();
+    }
+
+    private void OnSyncChanged() => Dispatcher.UIThread.Post(RefreshSyncUi);
+
+    private void RefreshSyncUi()
+    {
+        var sync = _sync;
+        if (sync is null)
+        {
+            SyncStatusText.Text = "云同步服务未就绪。";
+            SyncBoundPanel.IsVisible = false;
+            SyncBindPanel.IsVisible = true;
+            return;
+        }
+
+        SyncStatusText.Text = sync.StatusMessage ?? "";
+        SyncBoundPanel.IsVisible = sync.IsBound;
+        SyncBindPanel.IsVisible = !sync.IsBound;
+        if (sync.IsBound)
+        {
+            SyncAccountText.Text = sync.Email ?? "";
+            SyncMetaText.Text =
+                $"云端版本 {sync.VaultVersion}"
+                + (string.IsNullOrEmpty(sync.BindingKeyFingerprint)
+                    ? ""
+                    : $" · 绑定密钥指纹 {sync.BindingKeyFingerprint}");
+        }
+    }
+
+    private async void OnSyncSendCode(object? sender, RoutedEventArgs e)
+    {
+        if (_sync is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _sync.RequestBindCodeAsync(SyncEmailBox.Text ?? "");
+        }
+        catch (Exception ex) when (ex is SyncApiException or ArgumentException or HttpRequestException or TaskCanceledException)
+        {
+            ShowError(ex.Message);
+        }
+    }
+
+    private async void OnPickBindingKey(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var path = await SafeStoragePickers.PickOpenFileAsync(Host, "选择绑定密钥文件",
+            [
+                new FilePickerFileType("Keep Password 绑定密钥") { Patterns = ["*.kpbind"] }
+            ], _pauseWatcher);
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                SyncBindingKeyBox.Text = File.ReadAllText(path);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            ShowError(ex.Message);
+        }
+    }
+
+    private async void OnSyncBind(object? sender, RoutedEventArgs e)
+    {
+        if (_sync is null || _session is null)
+        {
+            return;
+        }
+
+        if (_session.NeedsLocalKeyUpgrade)
+        {
+            ShowError("请先升级到本地密钥格式，再开启云同步。");
+            return;
+        }
+
+        try
+        {
+            await _sync.BindAsync(
+                SyncEmailBox.Text ?? "",
+                SyncPasswordBox.Text ?? "",
+                SyncBindingKeyBox.Text ?? "",
+                SyncCodeBox.Text ?? "");
+            ClearSyncSecrets();
+            VaultChanged?.Invoke(this, EventArgs.Empty);
+            RefreshSyncUi();
+        }
+        catch (Exception ex) when (ex is SyncApiException or InvalidOperationException or InvalidDataException
+                                       or ArgumentException or HttpRequestException or TaskCanceledException)
+        {
+            ShowError(ex.Message);
+        }
+    }
+
+    private async void OnSyncRefresh(object? sender, RoutedEventArgs e)
+    {
+        if (_sync is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _sync.RefreshAsync();
+            VaultChanged?.Invoke(this, EventArgs.Empty);
+            RefreshSyncUi();
+        }
+        catch (Exception ex) when (ex is SyncApiException or InvalidDataException or HttpRequestException)
+        {
+            ShowError(ex.Message);
+        }
+    }
+
+    private async void OnSyncDisconnect(object? sender, RoutedEventArgs e)
+    {
+        if (_sync is null)
+        {
+            return;
+        }
+
+        if (!await Dialogs.ConfirmAsync(Host, "断开云同步", "断开后本机不再上传/下载。本地保险库保留，可随时重新绑定。"))
+        {
+            return;
+        }
+
+        await _sync.DisconnectAsync();
+        RefreshSyncUi();
+    }
+
+    private void ClearSyncSecrets()
+    {
+        SyncPasswordBox.Text = "";
+        SyncBindingKeyBox.Text = "";
+        SyncCodeBox.Text = "";
     }
 
     private void ShowError(string message)

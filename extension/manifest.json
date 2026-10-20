@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Keep Password",
-  "version": "0.6.4",
+  "version": "0.7.0",
   "description": "聚焦密码框后显示 Keep Password 候选账号，经短密钥确认后填入登录信息",
   "permissions": ["nativeMessaging", "storage"],
   "action": {

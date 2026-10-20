@@ -7,11 +7,18 @@ namespace KeepPassword.Core.Vault;
 
 public sealed partial class VaultStore
 {
-    public bool UsesIndependentKey(string path) => ReadEnvelope(path).Version == FormatVersion;
+    public bool UsesIndependentKey(string path)
+    {
+        var version = ReadEnvelope(path).Version;
+        return version is IndependentKeyVersion or FormatVersion;
+    }
 
-    private static byte[] PayloadAad(string account, int version) => version == 1
-        ? VaultCipher.AssociatedData(account)
-        : Encoding.UTF8.GetBytes("keep-password/payload/v2|" + account);
+    private static byte[] PayloadAad(string account, int version) => version switch
+    {
+        LegacyPasswordVersion => VaultCipher.AssociatedData(account),
+        IndependentKeyVersion => Encoding.UTF8.GetBytes("keep-password/payload/v2|" + account),
+        _ => Encoding.UTF8.GetBytes("keep-password/payload/v3|" + account)
+    };
 
     private static byte[] PasswordWrapAad(string account) =>
         Encoding.UTF8.GetBytes("keep-password/password-wrap/v2|" + account);
@@ -46,13 +53,23 @@ public sealed partial class VaultStore
         }
     }
 
-    internal static void UpdateKeyHeader(string path, KdfMaterial kdf, CipherDto passwordWrap, bool keyFileSaved)
+    internal static void UpdateKeyHeader(string path, KdfMaterial kdf, CipherDto? passwordWrap, bool keyFileSaved)
     {
         var envelope = ReadEnvelope(path);
-        if (envelope.Version != FormatVersion)
+        if (envelope.Version is not (IndependentKeyVersion or FormatVersion))
         {
             throw new InvalidDataException("请先升级保险库密钥格式。");
         }
+
+        if (envelope.Version == IndependentKeyVersion)
+        {
+            ValidatePasswordWrap(passwordWrap);
+        }
+        else if (passwordWrap is not null)
+        {
+            throw new InvalidDataException("本地密钥保险库不能写入主密码保护层。");
+        }
+
         envelope.Kdf = KdfDto.From(kdf);
         envelope.PasswordWrap = passwordWrap;
         envelope.KeyFileSaved = keyFileSaved;
@@ -115,15 +132,51 @@ public sealed partial class VaultStore
         }
     }
 
+    /// <summary>用当前会话数据密钥解密另一份同密钥保险库字节（云同步合并用）。</summary>
+    public static IReadOnlyList<VaultEntry> ReadEntriesWithDataKey(byte[] fileBytes, byte[] dataKey)
+    {
+        ArgumentNullException.ThrowIfNull(fileBytes);
+        ArgumentNullException.ThrowIfNull(dataKey);
+        EnvelopeDto envelope;
+        try
+        {
+            envelope = JsonSerializer.Deserialize<EnvelopeDto>(fileBytes, EnvelopeOptions)
+                ?? throw new InvalidDataException("保险库文件无法读取。");
+            if (envelope.Format == "keep-password-backup")
+            {
+                ValidateBackupEnvelope(envelope);
+            }
+            else
+            {
+                ValidateEnvelope(envelope);
+            }
+        }
+        catch (Exception ex) when (ex is JsonException or FormatException)
+        {
+            throw new InvalidDataException("保险库文件无法读取。", ex);
+        }
+
+        RequireIndependentKey(envelope);
+        try
+        {
+            return DecryptPayload(envelope.Account, dataKey, envelope.Cipher!, envelope.Version).Entries;
+        }
+        catch (CryptographicException)
+        {
+            throw new CredentialRejectedException("加密密钥不匹配，或云端保险库已损坏。");
+        }
+    }
+
     internal static void ExportEncryptedBackup(string vaultPath, string destination)
     {
         var source = ReadEnvelope(vaultPath);
         RequireIndependentKey(source);
         // A portable backup contains no password-wrapped data key or quick-unlock material.
-        // Knowing a past master password alone cannot unlock an exported v2 backup.
+        // Knowing a past master password alone cannot unlock an exported backup.
+        var backupVersion = source.Version >= FormatVersion ? FormatVersion : IndependentKeyVersion;
         WriteEnvelope(destination, new EnvelopeDto
         {
-            Version = FormatVersion,
+            Version = backupVersion,
             Format = "keep-password-backup",
             Account = source.Account,
             Cipher = source.Cipher
@@ -132,7 +185,7 @@ public sealed partial class VaultStore
 
     private static void ValidateBackupEnvelope(EnvelopeDto envelope)
     {
-        if (envelope.Version != FormatVersion || string.IsNullOrWhiteSpace(envelope.Account)
+        if (envelope.Version is not (IndependentKeyVersion or FormatVersion)
             || envelope.Account.Length > 256 || envelope.PasswordWrap is not null
             || envelope.Kdf is not null || envelope.ShortKey is not null || envelope.Recovery is not null
             || envelope.Cipher is not { Algorithm: "aes-256-gcm" } cipher)
@@ -149,7 +202,13 @@ public sealed partial class VaultStore
         {
             throw new ArgumentException("请填写新的主密码。", nameof(newMasterPassword));
         }
+
         var envelope = ReadEnvelope(path);
+        if (envelope.Version >= FormatVersion && envelope.PasswordWrap is null)
+        {
+            throw new InvalidOperationException("此保险库无主密码。请改用加密密钥重置短密钥。");
+        }
+
         RequireIndependentKey(envelope);
         var dataKey = VaultKeyFile.Parse(encryptionKey);
         var handedOff = false;
@@ -161,7 +220,8 @@ public sealed partial class VaultStore
             UpdateKeyHeader(path, kdf, passwordWrap, envelope.KeyFileSaved);
             DeleteQuickUnlock(path);
             var session = new VaultSession(path, envelope.Account, kdf, envelope.ShortKey!.ToMaterial(), dataKey,
-                entries, labels: labels, passwordWrap: passwordWrap, keyFileSaved: envelope.KeyFileSaved);
+                entries, labels: labels, passwordWrap: passwordWrap, keyFileSaved: envelope.KeyFileSaved,
+                formatVersion: envelope.Version);
             handedOff = true;
             return session;
         }
@@ -180,7 +240,7 @@ public sealed partial class VaultStore
 
     private static void RequireIndependentKey(EnvelopeDto envelope)
     {
-        if (envelope.Version != FormatVersion)
+        if (envelope.Version is not (IndependentKeyVersion or FormatVersion))
         {
             throw new InvalidOperationException("这是旧版保险库。请先打开原保险库，在设置中更换主密码并保存加密密钥，再重新导出备份。");
         }

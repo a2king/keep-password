@@ -98,13 +98,12 @@ public class EncryptionKeyFlowTests
     }
 
     [AvaloniaFact]
-    public async Task CreationCancellationAndKeyRecovery_KeepDailyPasswordUnlock()
+    public async Task CreationCancellationAndKeyRecovery_KeepDailyShortUnlock()
     {
         using var fixture = new Fixture();
         var newPath = Path.Combine(fixture.Directory, "created.kpvault");
         var view = new UnlockViewModel(fixture.Store, newPath)
         {
-            Account = "created", MasterPassword = "first-master", ConfirmMaster = "first-master",
             ShortKey = "short", ConfirmShort = "short"
         };
         Assert.True(await view.SubmitAsync());
@@ -123,11 +122,11 @@ public class EncryptionKeyFlowTests
         Assert.True(recovery.ShowKeyRecovery);
         Assert.False(recovery.ShowLegacyRecovery);
         recovery.EncryptionKey = key;
-        recovery.MasterPassword = recovery.ConfirmMaster = "reset-master";
+        recovery.MasterPassword = recovery.ConfirmMaster = "reset-short";
         Assert.True(await recovery.SubmitAsync());
         Assert.Equal("", recovery.EncryptionKey);
         recovery.Session!.Dispose();
-        using var reopened = fixture.Store.Unlock(newPath, "reset-master");
+        using var reopened = fixture.Store.UnlockWithShortKey(newPath, "reset-short");
         reopened.VerifyEncryptionKey(key);
     }
 

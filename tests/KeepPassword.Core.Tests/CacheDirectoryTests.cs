@@ -196,6 +196,26 @@ public class CacheDirectoryTests
         Assert.Null(CacheDirectory.GetAutofillHotkey(settings));
     }
 
+    [Fact]
+    public void LaunchAtStartup_DefaultsTrue_AndPersists()
+    {
+        var root = NewRoot();
+        var settings = Path.Combine(root, "settings.json");
+
+        Assert.True(CacheDirectory.GetLaunchAtStartup(settings));
+        Assert.True(CacheDirectory.GetStartMinimized(settings));
+
+        CacheDirectory.SetLaunchAtStartup(settings, false);
+        CacheDirectory.SetStartMinimized(settings, false);
+        Assert.False(CacheDirectory.GetLaunchAtStartup(settings));
+        Assert.False(CacheDirectory.GetStartMinimized(settings));
+
+        CacheDirectory.SetLaunchAtStartup(settings, true);
+        CacheDirectory.SetStartMinimized(settings, true);
+        Assert.True(CacheDirectory.GetLaunchAtStartup(settings));
+        Assert.True(CacheDirectory.GetStartMinimized(settings));
+    }
+
     private static string NewRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "keep-password-tests", Guid.NewGuid().ToString("n"));
