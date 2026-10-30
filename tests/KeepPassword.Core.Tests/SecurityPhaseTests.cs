@@ -220,7 +220,7 @@ public class SecurityPhaseTests
         Assert.Contains("fill-request", content);
         Assert.DoesNotContain("host_permissions", manifest);
         Assert.Contains("fill-password", manifest);
-        Assert.Contains("\"version\": \"0.6.4\"", manifest);
+        Assert.Contains("\"version\": \"0.8.0\"", manifest);
     }
 
     [Fact]

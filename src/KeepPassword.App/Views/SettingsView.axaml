@@ -72,6 +72,19 @@
           </StackPanel>
         </Border>
 
+        <!-- 浏览器扩展商店 -->
+        <Border Classes="section">
+          <StackPanel>
+            <TextBlock Text="浏览器扩展" Classes="h2" Margin="0,0,0,4" />
+            <TextBlock Text="网页自动填充请安装 Edge 扩展。当前为私有上架，需通过商店页连接后才能安装；安装后按扩展说明注册 Native Messaging 宿主。"
+                       Classes="muted" TextWrapping="Wrap" Margin="0,0,0,12" />
+            <TextBlock x:Name="BrowserExtensionStatus" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,8" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="accent" Content="打开 Edge 扩展商店" Click="OnOpenEdgeExtensionStore" />
+              <Button Classes="ghost" Content="复制商店标识" Click="OnCopyEdgeStoreId" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
         <!-- 外观与主题设置 -->
         <Border Classes="section">
           <StackPanel>

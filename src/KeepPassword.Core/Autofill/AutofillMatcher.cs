@@ -61,7 +61,8 @@ public static class AutofillMatcher
 
         return candidates
             .Where(candidate => DomainGrouping.HostsMatch(candidate.Domain, pageHost))
-            .OrderBy(match => match.Name, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(match => AddressSimilarity(match.Domain, pageHost))
+            .ThenBy(match => match.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
@@ -112,12 +113,52 @@ public static class AutofillMatcher
 
         return matches
             .OrderByDescending(match => desktop && DomainGrouping.TitleContainsHost(title, match.Domain))
+            .ThenByDescending(match => AddressSimilarity(match.Domain, pageHost))
             .ThenBy(match => match.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
     public static bool IsDesktopOrigin(AutofillOrigin origin) =>
         origin is AutofillOrigin.WindowsApplication or AutofillOrigin.MacOsApplication;
+
+    /// <summary>
+    /// 主机名越接近当前页面，分数越高。完全相同最高，其次是相差更少的上级或子域。
+    /// </summary>
+    internal static int AddressSimilarity(string? entryHost, string? pageHost)
+    {
+        var entry = HostLabels(entryHost);
+        var page = HostLabels(pageHost);
+        if (entry.Length == 0 || page.Length == 0)
+        {
+            return 0;
+        }
+
+        var shared = 0;
+        while (shared < entry.Length && shared < page.Length
+            && string.Equals(entry[entry.Length - 1 - shared], page[page.Length - 1 - shared], StringComparison.Ordinal))
+        {
+            shared++;
+        }
+
+        var leftover = (entry.Length - shared) + (page.Length - shared);
+        return shared * 1000 - leftover * 10 - Math.Abs(entry.Length - page.Length);
+    }
+
+    private static string[] HostLabels(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return [];
+        }
+
+        var normalized = host.Trim().TrimEnd('.').ToLowerInvariant();
+        if (normalized.StartsWith("www.", StringComparison.Ordinal) && normalized.Length > 4)
+        {
+            normalized = normalized[4..];
+        }
+
+        return normalized.Split('.', StringSplitOptions.RemoveEmptyEntries);
+    }
 
     internal static bool IsEligible(VaultEntry entry, VaultAccount account, AutofillOrigin origin) =>
         (IsDesktopOrigin(origin) ? VaultItemKinds.HasAccounts(entry.Kind) : entry.Kind == VaultItemKind.Login)

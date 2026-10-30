@@ -77,6 +77,12 @@ public sealed class SyncApiClient : IDisposable
         return await ReadAsync<VaultUploadResponse>(response, ct);
     }
 
+    public async Task<bool> PingAsync(CancellationToken ct = default)
+    {
+        using var response = await _http.GetAsync("api/health", ct);
+        return response.IsSuccessStatusCode;
+    }
+
     public async Task UnbindSelfAsync(string deviceToken, CancellationToken ct = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "api/sync/device/unbind-self");

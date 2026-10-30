@@ -84,9 +84,11 @@ $SetupShaFile = Join-Path $Out "KeepPassword-Setup-win-x64.exe.sha256"
 
 Write-Host "== 打包浏览器扩展 =="
 $ExtensionZip = Join-Path $Out "KeepPassword-Chrome-Extension-$Version.zip"
+$EdgeExtensionZip = Join-Path $Out "KeepPassword-Edge-Extension-$Version.zip"
 [IO.Compression.ZipFile]::CreateFromDirectory("$Staging\extension", $ExtensionZip, [IO.Compression.CompressionLevel]::SmallestSize, $false)
+Copy-Item -LiteralPath $ExtensionZip -Destination $EdgeExtensionZip -Force
 
-$assets = Get-Item -LiteralPath $SetupExe, (Join-Path $Out "KeepPassword-win-x64.zip"), $ExtensionZip, $SetupShaFile
+$assets = Get-Item -LiteralPath $SetupExe, (Join-Path $Out "KeepPassword-win-x64.zip"), $ExtensionZip, $EdgeExtensionZip, $SetupShaFile
 $assets | ForEach-Object {
   if ($_.Name.EndsWith(".sha256")) {
     "{0}  {1}" -f $_.Name, (Get-Content -LiteralPath $_.FullName -Raw).Trim()

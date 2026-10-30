@@ -83,18 +83,74 @@ function addElement(parent, tag, className, text) {
   return element;
 }
 
-function positionChooser(root, password) {
-  if (!password || !password.getBoundingClientRect) return;
-  const rect = password.getBoundingClientRect();
-  const width = 360;
-  const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width));
-  const height = root.getBoundingClientRect ? root.getBoundingClientRect().height : 0;
-  let top = rect.bottom + 8;
-  if (height > 0 && top + height > window.innerHeight - 8) {
-    top = rect.top - height - 8;
+const CHOOSER_MAX_WIDTH = 360;
+const CHOOSER_GAP = 8;
+const CHOOSER_VISIBLE_ROWS = 5;
+
+function hostLabels(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return [];
+  let host = text;
+  try {
+    host = new URL(text.includes("://") ? text : `https://${text}`).hostname;
+  } catch (_error) {
+    host = text.split("/")[0].split(":")[0];
   }
-  root.style.left = `${left}px`;
-  root.style.top = `${Math.max(8, top)}px`;
+  const labels = host.replace(/\.$/, "").split(".").filter(Boolean);
+  return labels[0] === "www" && labels.length > 1 ? labels.slice(1) : labels;
+}
+
+function addressScore(entryHost, pageUrl) {
+  const entry = hostLabels(entryHost);
+  const page = hostLabels(pageUrl);
+  if (entry.length === 0 || page.length === 0) return 0;
+  let shared = 0;
+  while (shared < entry.length && shared < page.length && entry[entry.length - 1 - shared] === page[page.length - 1 - shared]) {
+    shared += 1;
+  }
+  const leftover = (entry.length - shared) + (page.length - shared);
+  return shared * 1000 - leftover * 10 - Math.abs(entry.length - page.length);
+}
+
+function sortCandidatesByAddress(candidates, pageUrl) {
+  return candidates
+    .map((candidate, index) => ({ candidate, index, score: addressScore(candidate && (candidate.domain || candidate.url), pageUrl) }))
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map((item) => item.candidate);
+}
+
+function chooserFrame(rect, viewportWidth) {
+  const left = Math.max(0, rect.left);
+  const width = Math.min(CHOOSER_MAX_WIDTH, Math.max(160, viewportWidth - left - CHOOSER_GAP));
+  return { left, top: rect.bottom + CHOOSER_GAP, width };
+}
+
+function positionChooser(root, password) {
+  if (!password || !password.getBoundingClientRect || typeof window === "undefined") return;
+  const frame = chooserFrame(password.getBoundingClientRect(), window.innerWidth);
+  root.style.left = `${frame.left}px`;
+  root.style.top = `${frame.top}px`;
+  root.style.width = `${frame.width}px`;
+  const list = chooser && chooser.list;
+  const row = list && list.querySelector ? list.querySelector(".candidate") : null;
+  if (!list || !row || !row.getBoundingClientRect) return;
+  const rowHeight = row.getBoundingClientRect().height;
+  if (rowHeight <= 0) return;
+  const room = window.innerHeight - frame.top - CHOOSER_GAP;
+  const header = Math.max(0, root.getBoundingClientRect().height - list.getBoundingClientRect().height);
+  const visible = Math.max(rowHeight, Math.min(rowHeight * CHOOSER_VISIBLE_ROWS, room - header));
+  list.style.maxHeight = `${visible}px`;
+  list.style.overflowY = "auto";
+}
+
+function trackChooser() {
+  if (typeof window === "undefined" || window.__kpChooserTracked) return;
+  window.__kpChooserTracked = true;
+  const refresh = () => {
+    if (chooser && chooser.password && chooser.password.isConnected) positionChooser(chooser.root, chooser.password);
+  };
+  window.addEventListener("scroll", refresh, true);
+  window.addEventListener("resize", refresh);
 }
 
 function showCandidates(candidates, password) {
@@ -106,16 +162,16 @@ function showCandidates(candidates, password) {
   const root = document.createElement("div");
   root.setAttribute("role", "dialog");
   root.setAttribute("aria-label", "Keep Password 账号选择");
-  root.style.cssText = "position:fixed;width:360px;z-index:2147483646;opacity:0;transform:translateY(-4px) scale(.985);transition:opacity 140ms ease,transform 140ms ease;";
+  root.style.cssText = "position:fixed;z-index:2147483646;opacity:0;transform:translateY(-4px) scale(.985);transition:opacity 140ms ease,transform 140ms ease;";
   const shadow = root.attachShadow ? root.attachShadow({ mode: "open" }) : root;
   const style = addElement(shadow, "style", "", `
     :host { all: initial; }
-    .box { box-sizing:border-box; width:100%; max-height:min(430px, calc(100vh - 24px)); overflow:auto; border:1px solid #d8dee8; border-radius:12px; background:#fff; color:#1f2937; box-shadow:0 12px 32px rgba(15,23,42,.22); font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    .box { box-sizing:border-box; width:100%; overflow:hidden; border:1px solid #d8dee8; border-radius:12px; background:#fff; color:#1f2937; box-shadow:0 12px 32px rgba(15,23,42,.22); font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
     .head { padding:13px 15px 9px; border-bottom:1px solid #edf0f4; display:flex; align-items:center; justify-content:space-between; }
     .brand { font-weight:650; font-size:14px; }
     .close { border:0; background:transparent; color:#7b8491; cursor:pointer; font-size:18px; line-height:1; padding:2px 4px; }
     .hint { padding:9px 15px 5px; color:#7b8491; font-size:12px; }
-    .list { padding:4px 8px 8px; }
+    .list { padding:4px 8px 8px; overflow-y:auto; }
     .candidate { width:100%; border:0; background:transparent; border-radius:9px; text-align:left; cursor:pointer; padding:9px 8px; display:block; }
     .candidate:hover,.candidate:focus { background:#edf5ff; outline:none; }
     .name { font-weight:600; color:#1d2939; }
@@ -169,7 +225,8 @@ function showCandidates(candidates, password) {
     if (event.key === "Escape") closeChooser();
   });
 
-  for (const candidate of candidates) {
+  const pageUrl = typeof location !== "undefined" ? location.href : "";
+  for (const candidate of sortCandidatesByAddress(candidates, pageUrl)) {
     const button = addElement(list, "button", "candidate");
     button.type = "button";
     addElement(button, "div", "name", candidate.name || "未命名");
@@ -187,6 +244,7 @@ function showCandidates(candidates, password) {
   }
 
   parent.appendChild(root);
+  trackChooser();
   positionChooser(root, password);
   requestAnimationFrame(() => {
     if (root.isConnected) {

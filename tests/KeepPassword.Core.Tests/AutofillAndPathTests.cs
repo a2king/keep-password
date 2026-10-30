@@ -36,6 +36,25 @@ public class AutofillAndPathTests
         Assert.Empty(AutofillMatcher.Match(entries, Request("https://example.com")));
     }
 
+    [Fact]
+    public void Match_OrdersBrowserCandidatesByHostSimilarity()
+    {
+        VaultEntry Entry(string name, string url) => new()
+        {
+            Name = name,
+            Url = url,
+            Accounts = [new VaultAccount { Username = name, Password = "pw" }]
+        };
+        var matches = AutofillMatcher.Match(
+        [
+            Entry("远", "https://shop.example.com"),
+            Entry("近", "https://login.example.com/account"),
+            Entry("根", "https://example.com")
+        ], Request("https://login.example.com/signin"));
+
+        Assert.Equal(["近", "根", "远"], matches.Select(match => match.Name).ToArray());
+    }
+
     [Theory]
     [InlineData(AutofillOrigin.WindowsApplication, "飞书")]
     [InlineData(AutofillOrigin.WindowsApplication, "新建连接 - DbX")]

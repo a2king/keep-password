@@ -302,10 +302,10 @@ dotnet run --project src\KeepPassword.App -c Release
 打 Windows 安装包：
 
 ```powershell
-pwsh -NoProfile -File artifacts\package.ps1 -Version v0.7.0
+pwsh -NoProfile -File artifacts\package.ps1 -Version v0.8.0
 ```
 
-产物在 `artifacts\v0.7.0\`：安装程序、便携包、浏览器扩展包 `KeepPassword-Chrome-Extension-v0.7.0.zip`，以及安装包校验文件 `KeepPassword-Setup-win-x64.exe.sha256`。
+产物在 `artifacts\v0.8.0\`：安装程序、便携包、`KeepPassword-Chrome-Extension-v0.8.0.zip`、`KeepPassword-Edge-Extension-v0.8.0.zip`，以及安装包校验文件 `KeepPassword-Setup-win-x64.exe.sha256`。
 
 发布到 GitHub Releases 时请一并上传：
 

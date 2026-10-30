@@ -9,6 +9,7 @@ using KeepPassword.App.Services;
 using KeepPassword.Core.Autofill;
 using KeepPassword.Core.Import;
 using KeepPassword.Core.Sync;
+using KeepPassword.Core.Browser;
 using KeepPassword.Core.Update;
 using KeepPassword.Core.Vault;
 
@@ -152,6 +153,46 @@ public partial class SettingsView : UserControl
         catch (Exception ex)
         {
             UpdateStatus.Text = "无法打开浏览器：" + ex.Message;
+        }
+    }
+
+    private void OnOpenEdgeExtensionStore(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = BrowserExtensionLinks.EdgeStoreUrl,
+                UseShellExecute = true
+            });
+            BrowserExtensionStatus.Text =
+                BrowserExtensionLinks.EdgeStoreIsPrivate
+                    ? $"已打开商店页。私有扩展需连接后安装；商店标识 {BrowserExtensionLinks.EdgeStoreId}。"
+                    : "已打开 Edge 扩展商店页。";
+        }
+        catch (Exception ex)
+        {
+            BrowserExtensionStatus.Text = "无法打开浏览器：" + ex.Message;
+        }
+    }
+
+    private async void OnCopyEdgeStoreId(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var top = TopLevel.GetTopLevel(this);
+            if (top?.Clipboard is null)
+            {
+                BrowserExtensionStatus.Text = "无法访问剪贴板。";
+                return;
+            }
+
+            await top.Clipboard.SetTextAsync(BrowserExtensionLinks.EdgeStoreId);
+            BrowserExtensionStatus.Text = $"已复制商店标识：{BrowserExtensionLinks.EdgeStoreId}";
+        }
+        catch (Exception ex)
+        {
+            BrowserExtensionStatus.Text = "复制失败：" + ex.Message;
         }
     }
 

@@ -100,7 +100,7 @@ public sealed class CloudSyncCoordinator : IDisposable
 
     public async Task RequestBindCodeAsync(string email, CancellationToken ct = default)
     {
-        using var api = new SyncApiClient(ResolveBaseUrl());
+        using var api = new SyncApiClient(await ResolveBaseUrlAsync(ct));
         await api.RequestDeviceCodeAsync(email.Trim(), ct);
         SetStatus("验证码已发送到邮箱（开发环境见服务器控制台）");
     }
@@ -125,7 +125,7 @@ public sealed class CloudSyncCoordinator : IDisposable
         var dataKey = session.CopyDataKey();
         try
         {
-            var service = new VaultSyncService(ResolveBaseUrl());
+            var service = new VaultSyncService(await ResolveBaseUrlAsync(ct));
             var request = new DeviceBindRequest
             {
                 Email = email.Trim(),
@@ -357,6 +357,17 @@ public sealed class CloudSyncCoordinator : IDisposable
         {
             return _state?.BaseUrl ?? SyncDefaults.BaseUrl;
         }
+    }
+
+    private async Task<string> ResolveBaseUrlAsync(CancellationToken ct)
+    {
+        string? saved;
+        lock (_gate)
+        {
+            saved = string.IsNullOrWhiteSpace(_state?.BaseUrl) ? null : _state.BaseUrl;
+        }
+
+        return saved ?? await SyncDefaults.PickBaseUrlAsync(ct);
     }
 
     private void SetStatus(string message)

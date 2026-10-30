@@ -2,6 +2,22 @@
 
 浏览器扩展通过 Native Messaging 宿主连接正在运行的 Keep Password 桌面端。安装桌面程序不会自动安装扩展或注册宿主，首次使用需要完成以下步骤。当前支持 Chrome / Edge 等 Chromium 浏览器，不支持 Firefox。
 
+## 从 Edge 商店安装（推荐）
+
+Edge 扩展已上架（私有）：[Microsoft Edge 加载项](https://microsoftedge.microsoft.com/addons/detail/lbkhkkkmnbhnnmimhadmjappokdfkpgd)
+
+- 商店标识：`0RDCKGQT5LVS`
+- CRX ID：`lbkhkkkmnbhnnmimhadmjappokdfkpgd`
+- 私有扩展需先通过商店页连接后才能安装。商店版 ID 固定，注册宿主时使用：
+
+```powershell
+.\register-windows.ps1 -ExtensionId lbkhkkkmnbhnnmimhadmjappokdfkpgd
+```
+
+也可在客户端「设置 → 浏览器扩展」打开商店页。
+
+## 从本地文件夹加载（开发 / 未上架浏览器）
+
 ## Windows 首次连接
 
 1. 启动并解锁 Keep Password。

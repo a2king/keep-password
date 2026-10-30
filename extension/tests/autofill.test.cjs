@@ -197,6 +197,30 @@ test("navigation or a replaced field while awaiting approval prevents filling", 
   }
 });
 
+test("candidates closer to the page address come first and the menu stays under the field", () => {
+  const sandbox = {
+    HTMLInputElement: function Input() {},
+    document: { addEventListener() {}, activeElement: null, createElement() { return { setAttribute() {}, style: {} }; } },
+    location: { href: "https://login.example.com/signin" },
+    chrome: { runtime: { onMessage: event(), sendMessage(_message, callback) { callback({ type: "ready" }); } } },
+    Event: class { constructor(type) { this.type = type; } },
+    setTimeout: () => 1,
+    clearTimeout() {},
+    URL
+  };
+  vm.runInNewContext(contentSource, sandbox);
+  const ordered = sandbox.sortCandidatesByAddress([
+    { domain: "shop.example.com", name: "远" },
+    { domain: "login.example.com", name: "近" },
+    { domain: "example.com", name: "根" }
+  ], sandbox.location.href);
+  assert.deepEqual(ordered.map((item) => item.name), ["近", "根", "远"]);
+  const frame = sandbox.chooserFrame({ left: 240, right: 420, top: 100, bottom: 132 }, 1000);
+  assert.equal(frame.left, 240);
+  assert.equal(frame.top, 140);
+  assert.ok(frame.left + frame.width <= 1000);
+});
+
 test("a read-only password box does not request credentials", () => {
   const harness = content();
   harness.password.readOnly = true;
