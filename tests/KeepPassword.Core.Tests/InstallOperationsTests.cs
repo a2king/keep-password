@@ -1,3 +1,4 @@
+using KeepPassword.Core.Browser;
 using KeepPassword.Core.Install;
 
 namespace KeepPassword.Core.Tests;
@@ -72,6 +73,42 @@ public class InstallOperationsTests
     private sealed class InlineProgress(Action<InstallProgress> report) : IProgress<InstallProgress>
     {
         public void Report(InstallProgress value) => report(value);
+    }
+
+    [Fact]
+    public void AllowedOrigins_AlwaysIncludesStoreExtensionAndKeepsOtherIds()
+    {
+        var origins = NativeHostRegistration.AllowedOrigins(
+        [
+            "chrome-extension://abcdefghijklmnopabcdefghijklmnop/",
+            "chrome-extension://REPLACE_WITH_EXTENSION_ID/",
+            "https://example.com/",
+            "chrome-extension://" + BrowserExtensionLinks.EdgeCrxId + "/"
+        ]);
+
+        Assert.Equal(
+            [
+                "chrome-extension://" + BrowserExtensionLinks.EdgeCrxId + "/",
+                "chrome-extension://" + BrowserExtensionLinks.SideloadExtensionId + "/",
+                "chrome-extension://abcdefghijklmnopabcdefghijklmnop/"
+            ],
+            origins);
+    }
+
+    [Fact]
+    public void ExtensionIdForPath_MatchesEdgeUnpackedInstall()
+    {
+        const string path = @"C:\Users\PC\AppData\Local\Microsoft\Edge\User Data\Default\UnpackedExtensions\KeepPassword-Edge-Extension-v0.8.1_61888_323497420";
+        Assert.Equal("liclplkejbafhnncmaimeljddjbbkklo", NativeHostRegistration.ExtensionIdForPath(path));
+    }
+
+    [Fact]
+    public void ExtensionIdForPublicKey_MatchesPackagedManifest()
+    {
+        var manifestPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "extension", "manifest.json"));
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var key = document.RootElement.GetProperty("key").GetString();
+        Assert.Equal(BrowserExtensionLinks.SideloadExtensionId, NativeHostRegistration.ExtensionIdForPublicKey(key!));
     }
 
     [Fact]

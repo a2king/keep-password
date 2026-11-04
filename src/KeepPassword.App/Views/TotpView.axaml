@@ -5,6 +5,28 @@
              x:Class="KeepPassword.App.Views.TotpView"
              x:DataType="vm:TotpPageViewModel"
              Background="Transparent">
+  <UserControl.Styles>
+    <Style Selector="Button.totp-code">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Accent}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="10,2" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.totp-code /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.totp-code:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.AccentSoft}" />
+    </Style>
+    <Style Selector="Button.totp-code:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Selection}" />
+    </Style>
+  </UserControl.Styles>
   <DockPanel Margin="28,24" MaxWidth="760">
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,18">
       <Border Width="36" Height="36" CornerRadius="10" Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1">
@@ -12,7 +34,8 @@
       </Border>
       <StackPanel VerticalAlignment="Center" Spacing="2">
         <TextBlock Text="两步验证码 (TOTP)" Classes="h1" FontSize="20" />
-        <TextBlock Text="实时计算当前有效的 6 位验证码，30 秒自动刷新。" Classes="muted" />
+        <TextBlock Text="点击数字即可复制。验证码每 30 秒自动刷新。" Classes="muted" />
+        <TextBlock x:Name="CopyStatus" Classes="muted" IsVisible="False" />
       </StackPanel>
     </StackPanel>
 
@@ -28,15 +51,20 @@
                   <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" />
                   <TextBlock Text="{Binding RemainingText}" Classes="muted mono" Margin="0,4,0,0" FontSize="12" />
                 </StackPanel>
-                <SelectableTextBlock Grid.Column="1"
-                                     Text="{Binding Code}"
-                                     Classes="mono"
-                                     FontSize="28"
-                                     FontWeight="Bold"
-                                     LetterSpacing="2.5"
-                                     Foreground="{DynamicResource Kp.Accent}"
-                                     VerticalAlignment="Center"
-                                     Margin="20,0" />
+                <Button Grid.Column="1"
+                        Classes="totp-code"
+                        ToolTip.Tip="点击复制"
+                        Click="OnCopy"
+                        Tag="{Binding Code}"
+                        VerticalAlignment="Center"
+                        Margin="12,0">
+                  <TextBlock Text="{Binding Code}"
+                             Classes="mono"
+                             FontSize="28"
+                             FontWeight="Bold"
+                             LetterSpacing="2.5"
+                             Foreground="{DynamicResource Kp.Accent}" />
+                </Button>
                 <Button Grid.Column="2" Classes="icon" Width="34" Height="34" ToolTip.Tip="复制验证码" Click="OnCopy" Tag="{Binding Code}" VerticalAlignment="Center">
                   <PathIcon Data="{StaticResource Icon.Copy}" Width="17" Height="17" />
                 </Button>

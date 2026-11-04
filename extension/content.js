@@ -16,7 +16,7 @@ function showStatus(response, silent = false) {
   };
   let text = response.message || messages[response.type] || "没有可填入的记录。";
   if (/native messaging host not found|specified native messaging host|access to the specified native messaging host/i.test(text)) {
-    text = "浏览器尚未连接 Keep Password。请按扩展目录中的 README.md 完成注册。";
+    text = "浏览器还没有连上 Keep Password。请先打开桌面端，然后完全退出并重新打开 Edge 后再试。";
   }
   if (!notice) {
     notice = document.createElement("div");
@@ -33,6 +33,60 @@ function isPassword(input) {
   return input instanceof HTMLInputElement && input.type === "password" && input.isConnected && !input.disabled && !input.readOnly;
 }
 
+function isVisibleField(input) {
+  if (!input || input.hidden) return false;
+  if (typeof input.getClientRects === "function" && input.getClientRects().length === 0) return false;
+  if (typeof window !== "undefined" && typeof window.getComputedStyle === "function") {
+    const style = window.getComputedStyle(input);
+    if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+  }
+  return true;
+}
+
+function looksLikeLoginPage() {
+  let path = "";
+  try {
+    path = new URL(location.href).pathname;
+  } catch (_error) {
+    path = String((location && (location.pathname || location.href)) || "");
+  }
+  return /signin|sign-in|login|log-in|identifier|\/auth(?:\/|$)/i.test(path);
+}
+
+function pageHasPassword() {
+  if (!document.querySelectorAll) return false;
+  return Array.from(document.querySelectorAll('input[type="password"]')).some((input) => isPassword(input) && isVisibleField(input));
+}
+
+function isIdentifier(input) {
+  if (!(input instanceof HTMLInputElement) || !input.isConnected || input.disabled || input.readOnly || isPassword(input)) return false;
+  const type = (input.getAttribute("type") || "text").toLowerCase();
+  if (!["text", "email", "tel"].includes(type)) return false;
+  if (!isVisibleField(input)) return false;
+  const autocomplete = (input.getAttribute("autocomplete") || "").toLowerCase().split(/\s+/).filter(Boolean);
+  const name = `${input.getAttribute("name") || ""} ${input.getAttribute("id") || ""}`.toLowerCase();
+  const loginPage = looksLikeLoginPage();
+  const explicitUsername = autocomplete.includes("username")
+    || /(^|[^a-z])(identifier|username|loginfmt)([^a-z]|$)/.test(name);
+  const emailOnLogin = loginPage && (type === "email" || autocomplete.includes("email") || name.includes("email"));
+  if (!explicitUsername && !emailOnLogin) return false;
+  if (!loginPage && !autocomplete.includes("username")) return false;
+  return !pageHasPassword();
+}
+
+function isLoginField(input) {
+  return isPassword(input) || isIdentifier(input);
+}
+
+function fillLogin(field, result) {
+  if (isPassword(field)) {
+    fill(usernameFor(field), result.username || "");
+    fill(field, result.password || "");
+    return;
+  }
+  fill(field, result.username || "");
+}
+
 function closeChooser() {
   if (!chooser) return;
   const current = chooser;
@@ -41,7 +95,7 @@ function closeChooser() {
 }
 
 function rememberPassword(input, automatic = true) {
-  if (!isPassword(input)) return;
+  if (!isLoginField(input)) return;
   focused = input;
   focusVersion += 1;
   if (!automatic || Date.now() < suppressFocusUntil) return;
@@ -193,7 +247,9 @@ function showCandidates(candidates, password) {
   addElement(head, "div", "brand", "选择 Keep Password 账号");
   const close = addElement(head, "button", "close", "×");
   close.type = "button";
-  addElement(box, "div", "hint", `${candidates.length} 个匹配账号，选择后输入短密钥授权`);
+  addElement(box, "div", "hint", isPassword(password)
+    ? `${candidates.length} 个匹配账号，选择后输入短密钥授权`
+    : "选择账号并输入短密钥后填入用户名，然后自行点击下一步");
   const list = addElement(box, "div", "list");
   const key = addElement(box, "div", "key");
   addElement(key, "div", "key-label", "短密钥");
@@ -255,7 +311,7 @@ function showCandidates(candidates, password) {
 }
 
 function requestCandidateFill(candidate, shortKey) {
-  if (!chooser || !chooser.password || !isPassword(chooser.password)) {
+  if (!chooser || !chooser.password || !isLoginField(chooser.password)) {
     closeChooser();
     return;
   }
@@ -277,13 +333,12 @@ function requestCandidateFill(candidate, shortKey) {
       return;
     }
     try {
-      if (requestVersion !== focusVersion || location.href !== requestedUrl || !isPassword(password) || focused !== password) {
-        showStatus({ type: "error", message: "登录页面或密码框已变化，请重新点击密码框。" });
+      if (requestVersion !== focusVersion || location.href !== requestedUrl || !isLoginField(password) || focused !== password) {
+        showStatus({ type: "error", message: "登录页面或输入框已变化，请重新点击。" });
         return;
       }
       suppressFocusUntil = Date.now() + 1600;
-      fill(usernameFor(password), result.username || "");
-      fill(password, result.password || "");
+      fillLogin(password, result);
       closeChooser();
       showStatus({ type: "filled" });
     } catch (_error) {
@@ -310,8 +365,8 @@ function requestCandidates(password, automatic, sendResponse) {
     // Keep compatibility with a host from before the candidate protocol. It is
     // still safe because that response was already produced after confirmation.
     if (result?.type === "fill") {
-      if (requestVersion !== focusVersion || location.href !== requestedUrl || !isPassword(password) || focused !== password) {
-        const changed = { type: "error", message: "登录页面或密码框已变化，请重新点击密码框。" };
+      if (requestVersion !== focusVersion || location.href !== requestedUrl || !isLoginField(password) || focused !== password) {
+        const changed = { type: "error", message: "登录页面或输入框已变化，请重新点击。" };
         result.username = "";
         result.password = "";
         showStatus(changed, automatic);
@@ -320,8 +375,7 @@ function requestCandidates(password, automatic, sendResponse) {
       }
       suppressFocusUntil = Date.now() + 1600;
       try {
-        fill(usernameFor(password), result.username || "");
-        fill(password, result.password || "");
+        fillLogin(password, result);
         showStatus({ type: "filled" }, automatic);
         sendResponse({ type: "filled" });
       } catch (_error) {
@@ -335,7 +389,7 @@ function requestCandidates(password, automatic, sendResponse) {
       return;
     }
     if (result?.type === "candidates" && Array.isArray(result.candidates)) {
-      if (requestVersion !== focusVersion || !isPassword(password) || focused !== password) {
+      if (requestVersion !== focusVersion || !isLoginField(password) || focused !== password) {
         sendResponse({ type: "ready" });
         return;
       }
@@ -357,15 +411,15 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("pointerdown", (event) => {
   if (chooser && event.target !== chooser.password && !chooser.root.contains(event.target)) closeChooser();
 }, true);
-if (document.activeElement) rememberPassword(document.activeElement, false);
+if (document.activeElement) rememberPassword(document.activeElement, isIdentifier(document.activeElement));
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || message.type !== "fill-request") return false;
   const automatic = message.automatic === true;
   const active = document.activeElement;
-  const password = isPassword(active) ? active : focused;
-  if (!isPassword(password)) {
-    const result = { type: "error", message: "请先聚焦密码框，再使用扩展按钮或快捷键。" };
+  const password = isLoginField(active) ? active : focused;
+  if (!isLoginField(password)) {
+    const result = { type: "error", message: "请先聚焦用户名或密码框，再使用扩展按钮或快捷键。" };
     showStatus(result, automatic);
     sendResponse(result);
     return false;

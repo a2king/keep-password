@@ -209,7 +209,7 @@ public sealed class MainViewModel : ViewModelBase
     public bool ShowEmpty => Entries.Count == 0;
 
     public string EmptyText => _all.Count == 0
-        ? "还没有条目。点「+ 新建」选择类型，或导入 CSV。"
+        ? "还没有条目。点「+ 新建」选择类型。CSV 可在设置中导入。"
         : "当前筛选条件下没有匹配的条目。";
 
     public bool CanUndoImport => _lastImport.Count > 0;

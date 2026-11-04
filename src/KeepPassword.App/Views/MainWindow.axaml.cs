@@ -5,12 +5,10 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
-using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
-using KeepPassword.Core.Import;
 using KeepPassword.Core.Security;
 using KeepPassword.Core.Totp;
 using KeepPassword.Core.Vault;
@@ -588,58 +586,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnUndoImport(object? sender, RoutedEventArgs e)
-    {
-        if (View is not { CanUndoImport: true })
-        {
-            return;
-        }
-
-        if (await Dialogs.ConfirmAsync(this, "撤销导入", "将删除上一次导入创建的全部条目（导入后修改过的也会删除）。确定撤销吗？"))
-        {
-            View.UndoImport();
-        }
-    }
-
-    private async void OnImport(object? sender, RoutedEventArgs e)
-    {
-        if (View is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var path = await SafeStoragePickers.PickOpenFileAsync(
-                this,
-                "导入 CSV",
-                [new FilePickerFileType("CSV") { Patterns = ["*.csv", "*.tsv", "*.txt"] }],
-                _pauseWatcher);
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return;
-            }
-
-            var text = await File.ReadAllTextAsync(path);
-            var table = CsvImporter.ReadTable(text);
-            if (table.Headers.Count == 0 || table.Rows.Count == 0)
-            {
-                await Dialogs.AlertAsync(this, "无法导入", "CSV 文件为空，或只有表头没有数据行。");
-                return;
-            }
-
-            var entries = await new ImportWizardWindow(table, Path.GetFileName(path)).ShowDialog<IReadOnlyList<VaultEntry>?>(this);
-            if (entries is { Count: > 0 })
-            {
-                View.ApplyImport(entries);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or FormatException or ArgumentException or InvalidOperationException or UnauthorizedAccessException)
-        {
-            await Dialogs.AlertAsync(this, "无法导入", ex.Message);
-        }
-    }
-
     private void OnNavItems(object? sender, RoutedEventArgs e) => ShowPage(ItemsPage);
 
     private void OnNavGenerator(object? sender, RoutedEventArgs e)
@@ -693,7 +639,7 @@ public partial class MainWindow : Window
 
         if (_activePage != SettingsPage)
         {
-            SettingsRoot.Show(_session, _location, _pauseWatcher, _cloudSync);
+            SettingsRoot.Show(_session, _location, _pauseWatcher, _cloudSync, View);
         }
 
         ShowPage(SettingsPage);

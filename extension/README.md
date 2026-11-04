@@ -1,6 +1,6 @@
 # 连接 Chrome / Edge
 
-浏览器扩展通过 Native Messaging 宿主连接正在运行的 Keep Password 桌面端。安装桌面程序不会自动安装扩展或注册宿主，首次使用需要完成以下步骤。当前支持 Chrome / Edge 等 Chromium 浏览器，不支持 Firefox。
+浏览器扩展通过 Native Messaging 宿主连接正在运行的 Keep Password 桌面端。当前支持 Chrome / Edge 等 Chromium 浏览器，不支持 Firefox。
 
 ## 从 Edge 商店安装（推荐）
 
@@ -8,13 +8,10 @@ Edge 扩展已上架（私有）：[Microsoft Edge 加载项](https://microsofte
 
 - 商店标识：`0RDCKGQT5LVS`
 - CRX ID：`lbkhkkkmnbhnnmimhadmjappokdfkpgd`
-- 私有扩展需先通过商店页连接后才能安装。商店版 ID 固定，注册宿主时使用：
 
-```powershell
-.\register-windows.ps1 -ExtensionId lbkhkkkmnbhnnmimhadmjappokdfkpgd
-```
+商店版的扩展 ID 是固定的。安装包里的扩展也带固定 ID。安装或启动桌面端时，会把这两个 ID 写进当前 Windows 用户的 Native Messaging 注册表，并认领本机 Edge、Chrome 里已经装好的 Keep Password 扩展。不必再运行注册脚本。私有扩展仍需先通过商店页连接后才能安装。也可在客户端「设置 → 浏览器扩展」打开商店页。
 
-也可在客户端「设置 → 浏览器扩展」打开商店页。
+桌面端和扩展可以不分先后安装。如果扩展是后装的，重新打开一次桌面端，再完全退出并重新打开浏览器。换电脑、重装系统，或桌面端换了安装目录之后，同样再启动一次桌面端即可。
 
 ## 从本地文件夹加载（开发 / 未上架浏览器）
 
@@ -71,7 +68,7 @@ Release 中的 `KeepPassword-Chrome-Extension-<版本>.zip` 与安装目录里�
 | 无法访问当前密码框 | 刷新登录网页，重新点击密码框；浏览器设置页、扩展商店等受限页面不能注入扩展 |
 | 密码框已变化 | 网站在确认过程中更新了表单，重新点击当前密码框再填充 |
 
-扩展当前识别普通网页中的 `<input type="password">`，包括允许注入脚本的 iframe。关闭的 Shadow DOM、自绘输入框或把密码框伪装成其他控件的网站仍可能无法识别。
+扩展识别普通网页中的密码框。登录被拆成两步时，也会识别单独的用户名页，例如 Google 的 `/signin/identifier`：填入用户名后需要你自己点击下一步，进入密码页后再填充密码。同一页里已经有密码框时，仍等你点到密码框再出现候选。关闭的 Shadow DOM、自绘输入框或把密码框伪装成其他控件的网站仍可能无法识别。
 
 ## 开发目录使用
 

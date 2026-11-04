@@ -13,7 +13,7 @@ function showResult(tabId, response) {
   };
   let message = response && (response.message || messages[response.type]);
   if (message && /native messaging host not found|specified native messaging host|access to the specified native messaging host/i.test(message)) {
-    message = "浏览器尚未连接 Keep Password，请按 extension/README.md 注册本机宿主和当前扩展 ID。";
+    message = "浏览器还没有连上 Keep Password。请先打开桌面端，然后完全退出并重新打开 Edge 后再试。";
   }
   message = message || "无法完成填充，请检查 Keep Password 是否已启动。";
   const success = response && ["filled", "candidates", "ready"].includes(response.type);

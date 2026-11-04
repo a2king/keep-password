@@ -39,6 +39,8 @@ public partial class TotpView : UserControl
             return;
         }
 
+        CopyStatus.Text = "已复制。若 30 秒后剪贴板仍是该验证码，会自动清除。";
+        CopyStatus.IsVisible = true;
         await SecretClipboard.CopyAsync(clipboard, code);
     }
 }

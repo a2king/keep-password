@@ -4,6 +4,9 @@ namespace KeepPassword.Core.Browser;
 public static class BrowserExtensionLinks
 {
     public const string EdgeCrxId = "lbkhkkkmnbhnnmimhadmjappokdfkpgd";
+
+    /// <summary>安装包里的扩展带固定公钥，本地安装的 ID 不随目录变化。</summary>
+    public const string SideloadExtensionId = "bibdfccmihfikkeofkdelgkafliopchk";
     public const string EdgeStoreId = "0RDCKGQT5LVS";
     public const string EdgeProductId = "86f41962-78cf-4dae-a65f-19bd2bad5e8a";
 

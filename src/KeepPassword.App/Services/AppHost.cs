@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using KeepPassword.App.Platform;
 using KeepPassword.App.Views;
 using KeepPassword.Core.Autofill;
+using KeepPassword.Core.Install;
 using KeepPassword.Core.Messaging;
 using KeepPassword.Core.Vault;
 
@@ -57,6 +58,7 @@ public sealed class AppHost : IDisposable
         }
 
         _activation.StartListening(ShowFromTray);
+        NativeHostRegistration.TryRegisterInstalledHost();
         InstallTray();
         _server.Start();
         AppUpdateService.ExitApplication = Shutdown;

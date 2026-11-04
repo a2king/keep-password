@@ -174,7 +174,7 @@ test("host registration and locked-vault errors are visible in the page", () => 
     const harness = content();
     harness.receive({ type: "fill-request" }, {}, () => {});
     harness.requests[0].callback(response);
-    assert.match(harness.notices.at(-1), response.type === "locked" ? /先解锁/ : /尚未连接/);
+    assert.match(harness.notices.at(-1), response.type === "locked" ? /先解锁/ : /还没有连上/);
     assert.equal(harness.password.value, "");
   }
 });
@@ -219,6 +219,94 @@ test("candidates closer to the page address come first and the menu stays under 
   assert.equal(frame.left, 240);
   assert.equal(frame.top, 140);
   assert.ok(frame.left + frame.width <= 1000);
+});
+
+function openContent({ href, active = 0, inputs }) {
+  const requests = [];
+  const notices = [];
+  class Input {
+    constructor(type, attrs = {}) {
+      this.type = type;
+      this.attrs = { type, ...attrs };
+      this.isConnected = true;
+      this.disabled = false;
+      this.readOnly = false;
+      this.hidden = false;
+      this.events = [];
+      this._value = "";
+    }
+    get value() { return this._value; }
+    set value(next) { this._value = next; }
+    getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null; }
+    focus() {}
+    dispatchEvent(value) { this.events.push(value.type); }
+  }
+  const fields = inputs.map(([type, attrs]) => new Input(type, attrs));
+  const document = {
+    title: "Sign in",
+    activeElement: fields[active],
+    addEventListener() {},
+    createElement() { return { setAttribute() {}, style: {}, remove() {} }; },
+    documentElement: { appendChild(value) { notices.push(value.textContent); } },
+    querySelectorAll(selector) {
+      return selector === 'input[type="password"]' ? fields.filter((field) => field.type === "password") : [];
+    }
+  };
+  const location = { href };
+  const chrome = { runtime: {
+    onMessage: event(),
+    sendMessage(message, callback) {
+      if (message.type === "discover" || message.type === "discover-candidates") requests.push({ message, callback });
+      else callback({ type: "ready" });
+    }
+  } };
+  vm.runInNewContext(contentSource, {
+    HTMLInputElement: Input, document, location, chrome, URL,
+    Event: class { constructor(type) { this.type = type; } },
+    setTimeout: () => 1, clearTimeout() {}
+  });
+  return { fields, requests, notices, receive: chrome.runtime.onMessage.listeners[0] };
+}
+
+test("google identifier page fills the username without a password field", () => {
+  const harness = openContent({
+    href: "https://accounts.google.com/v3/signin/identifier?flowName=GlifWebSignIn",
+    inputs: [["email", { name: "identifier", id: "identifierId", autocomplete: "username" }]]
+  });
+  let result;
+  assert.equal(harness.receive({ type: "fill-request" }, {}, (response) => { result = response; }), true);
+  const secret = { type: "fill", username: "ada@gmail.com", password: "secret" };
+  harness.requests[0].callback(secret);
+  assert.equal(harness.fields[0].value, "ada@gmail.com");
+  assert.equal(result.type, "filled");
+  assert.equal(secret.password, "");
+  assert.match(harness.notices.at(-1), /已填入/);
+});
+
+test("an email field outside a login page does not request credentials", () => {
+  const harness = openContent({
+    href: "https://shop.example/contact",
+    inputs: [["email", { name: "email", id: "email" }]]
+  });
+  let result;
+  harness.receive({ type: "fill-request" }, {}, (response) => { result = response; });
+  assert.equal(harness.requests.length, 0);
+  assert.equal(result.type, "error");
+  assert.equal(harness.fields[0].value, "");
+});
+
+test("a username field on a page that already shows a password waits for the password field", () => {
+  const harness = openContent({
+    href: "https://real.example/login",
+    inputs: [
+      ["text", { name: "username", autocomplete: "username" }],
+      ["password", { name: "password" }]
+    ]
+  });
+  let result;
+  harness.receive({ type: "fill-request" }, {}, (response) => { result = response; });
+  assert.equal(harness.requests.length, 0);
+  assert.equal(result.type, "error");
 });
 
 test("a read-only password box does not request credentials", () => {

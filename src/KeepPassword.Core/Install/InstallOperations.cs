@@ -146,6 +146,12 @@ public static class InstallOperations
         {
             progress?.Report(new InstallProgress(CopyEnd, "正在写入卸载信息…", "写入卸载信息（当前用户注册表）"));
             WriteWindowsUninstallInfo(targetRoot);
+            var hostExe = Path.Combine(targetRoot, "KeepPassword.NativeHost.exe");
+            if (File.Exists(hostExe))
+            {
+                progress?.Report(new InstallProgress(94, "正在连接浏览器扩展…", "登记 Edge 扩展的本机连接"));
+                NativeHostRegistration.Register(hostExe);
+            }
             if (options.CreateStartMenuShortcut)
             {
                 progress?.Report(new InstallProgress(95, "正在创建快捷方式…", "创建开始菜单快捷方式"));

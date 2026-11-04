@@ -65,16 +65,16 @@
               <TextBlock Text="条目" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
             </StackPanel>
           </Button>
-          <Button x:Name="NavGenerator" Classes="nav" Click="OnNavGenerator" ToolTip.Tip="密码生成器">
-            <StackPanel Spacing="4" HorizontalAlignment="Center">
-              <PathIcon Data="{StaticResource Icon.Generator}" Width="20" Height="20" />
-              <TextBlock Text="生成器" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
-            </StackPanel>
-          </Button>
           <Button x:Name="NavTotp" Classes="nav" Click="OnTotp" ToolTip.Tip="双重验证码 (TOTP)">
             <StackPanel Spacing="4" HorizontalAlignment="Center">
               <PathIcon Data="{StaticResource Icon.Totp}" Width="20" Height="20" />
               <TextBlock Text="验证码" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button x:Name="NavGenerator" Classes="nav" Click="OnNavGenerator" ToolTip.Tip="密码生成器">
+            <StackPanel Spacing="4" HorizontalAlignment="Center">
+              <PathIcon Data="{StaticResource Icon.Generator}" Width="20" Height="20" />
+              <TextBlock Text="生成器" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
             </StackPanel>
           </Button>
           <Button x:Name="NavAudit" Classes="nav" Click="OnAudit" ToolTip.Tip="密码安全审计">
@@ -137,8 +137,6 @@
               </Button>
             </Grid>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="10,0,0,0">
-              <Button Classes="soft" Content="导入 CSV" Click="OnImport" />
-              <Button Classes="soft" Content="{Binding UndoImportText}" IsVisible="{Binding CanUndoImport}" Click="OnUndoImport" />
               <Button Classes="accent" Content="+ 新建">
                 <Button.Flyout>
                   <MenuFlyout Placement="BottomEdgeAlignedRight">

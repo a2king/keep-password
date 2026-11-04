@@ -6,10 +6,12 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using KeepPassword.App.Services;
+using KeepPassword.App.ViewModels;
 using KeepPassword.Core.Autofill;
 using KeepPassword.Core.Import;
 using KeepPassword.Core.Sync;
 using KeepPassword.Core.Browser;
+using KeepPassword.Core.Install;
 using KeepPassword.Core.Update;
 using KeepPassword.Core.Vault;
 
@@ -18,6 +20,7 @@ namespace KeepPassword.App.Views;
 public partial class SettingsView : UserControl
 {
     private VaultSession? _session;
+    private MainViewModel? _vault;
     private VaultLocation? _location;
     private Action<bool>? _pauseWatcher;
     private CloudSyncCoordinator? _sync;
@@ -27,6 +30,7 @@ public partial class SettingsView : UserControl
         InitializeComponent();
         AnimateStatus(LabelStatus);
         AnimateStatus(DirectoryStatus);
+        AnimateStatus(CsvStatus);
         AnimateStatus(KeyStatus);
         AnimateStatus(UpdateStatus);
         AnimateStatus(SyncStatusText);
@@ -51,7 +55,7 @@ public partial class SettingsView : UserControl
     private Window Host => TopLevel.GetTopLevel(this) as Window
         ?? throw new InvalidOperationException("设置页尚未挂到窗口上。");
 
-    public void Show(VaultSession session, VaultLocation location, Action<bool>? pauseWatcher, CloudSyncCoordinator? sync = null)
+    public void Show(VaultSession session, VaultLocation location, Action<bool>? pauseWatcher, CloudSyncCoordinator? sync = null, MainViewModel? vault = null)
     {
         if (_sync is not null)
         {
@@ -59,6 +63,7 @@ public partial class SettingsView : UserControl
         }
 
         _session = session;
+        _vault = vault;
         _location = location;
         _pauseWatcher = pauseWatcher;
         _sync = sync;
@@ -73,6 +78,8 @@ public partial class SettingsView : UserControl
         DirectoryBox.Text = location.Directory;
         LabelStatus.Text = "";
         DirectoryStatus.Text = "";
+        CsvStatus.Text = "";
+        UpdateUndoImport();
         KeyStatus.Text = "";
         ErrorBox.IsVisible = false;
         UpdateThemeButtons(ThemeManager.CurrentTheme);
@@ -165,10 +172,7 @@ public partial class SettingsView : UserControl
                 FileName = BrowserExtensionLinks.EdgeStoreUrl,
                 UseShellExecute = true
             });
-            BrowserExtensionStatus.Text =
-                BrowserExtensionLinks.EdgeStoreIsPrivate
-                    ? $"已打开商店页。私有扩展需连接后安装；商店标识 {BrowserExtensionLinks.EdgeStoreId}。"
-                    : "已打开 Edge 扩展商店页。";
+            BrowserExtensionStatus.Text = "已打开 Edge 扩展商店。";
         }
         catch (Exception ex)
         {
@@ -176,24 +180,9 @@ public partial class SettingsView : UserControl
         }
     }
 
-    private async void OnCopyEdgeStoreId(object? sender, RoutedEventArgs e)
+    private void OnRepairEdgeExtension(object? sender, RoutedEventArgs e)
     {
-        try
-        {
-            var top = TopLevel.GetTopLevel(this);
-            if (top?.Clipboard is null)
-            {
-                BrowserExtensionStatus.Text = "无法访问剪贴板。";
-                return;
-            }
-
-            await top.Clipboard.SetTextAsync(BrowserExtensionLinks.EdgeStoreId);
-            BrowserExtensionStatus.Text = $"已复制商店标识：{BrowserExtensionLinks.EdgeStoreId}";
-        }
-        catch (Exception ex)
-        {
-            BrowserExtensionStatus.Text = "复制失败：" + ex.Message;
-        }
+        BrowserExtensionStatus.Text = NativeHostRegistration.RepairInstalledHost();
     }
 
     public void Clear()
@@ -204,6 +193,7 @@ public partial class SettingsView : UserControl
         }
 
         _session = null;
+        _vault = null;
         _location = null;
         _pauseWatcher = null;
         _sync = null;
@@ -216,8 +206,10 @@ public partial class SettingsView : UserControl
         AccountText.Text = "";
         LabelStatus.Text = "";
         DirectoryStatus.Text = "";
+        CsvStatus.Text = "";
         KeyStatus.Text = "";
         ErrorBox.IsVisible = false;
+        UpdateUndoImport();
     }
 
     private void ClearSecrets()
@@ -856,6 +848,73 @@ public partial class SettingsView : UserControl
         {
             ShowError(ex.Message);
         }
+    }
+
+    private async void OnImportCsv(object? sender, RoutedEventArgs e)
+    {
+        if (_vault is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var path = await SafeStoragePickers.PickOpenFileAsync(
+                Host,
+                "导入 CSV",
+                [new FilePickerFileType("CSV") { Patterns = ["*.csv", "*.tsv", "*.txt"] }],
+                _pauseWatcher);
+            if (string.IsNullOrWhiteSpace(path) || _vault is null)
+            {
+                return;
+            }
+
+            var text = await File.ReadAllTextAsync(path);
+            var table = CsvImporter.ReadTable(text);
+            if (table.Headers.Count == 0 || table.Rows.Count == 0)
+            {
+                await Dialogs.AlertAsync(Host, "无法导入", "CSV 文件为空，或只有表头没有数据行。");
+                return;
+            }
+
+            var entries = await new ImportWizardWindow(table, Path.GetFileName(path)).ShowDialog<IReadOnlyList<VaultEntry>?>(Host);
+            if (entries is { Count: > 0 } && _vault is not null)
+            {
+                var count = _vault.ApplyImport(entries);
+                CsvStatus.Text = $"已导入 {count} 条。可在本次打开期间撤销。";
+                ErrorBox.IsVisible = false;
+                UpdateUndoImport();
+            }
+        }
+        catch (Exception ex) when (ex is IOException or FormatException or ArgumentException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            ShowError(ex.Message);
+        }
+    }
+
+    private async void OnUndoCsvImport(object? sender, RoutedEventArgs e)
+    {
+        if (_vault is not { CanUndoImport: true })
+        {
+            return;
+        }
+
+        if (!await Dialogs.ConfirmAsync(Host, "撤销导入", "将删除上一次导入创建的全部条目（导入后修改过的也会删除）。确定撤销吗？"))
+        {
+            return;
+        }
+
+        var removed = _vault.UndoImport();
+        CsvStatus.Text = $"已撤销导入，移除 {removed} 条。";
+        ErrorBox.IsVisible = false;
+        UpdateUndoImport();
+    }
+
+    private void UpdateUndoImport()
+    {
+        var canUndo = _vault is { CanUndoImport: true };
+        UndoImportButton.IsVisible = canUndo;
+        UndoImportButton.Content = canUndo ? _vault!.UndoImportText : "撤销导入";
     }
 
     private async void OnExportCsv(object? sender, RoutedEventArgs e)
