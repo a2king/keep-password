@@ -28,8 +28,11 @@ public static class PasswordReveal
         {
             box.InnerRightContent = null;
             box.RevealPassword = false;
+            box.Classes.Remove("has-reveal");
             return;
         }
+
+        box.Classes.Add("has-reveal");
 
         var icon = new PathIcon { Width = 15, Height = 15 };
         var button = new Button

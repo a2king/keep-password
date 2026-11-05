@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="using:KeepPassword.App.Controls.Details" xmlns:views="using:KeepPassword.App.Views.Details"
+             x:Class="KeepPassword.App.Views.Details.DetailPanelView" x:CompileBindings="False"
+             Background="{DynamicResource Detail.Background}" FontFamily="{DynamicResource Detail.Font.Ui}" FontSize="13">
+  <UserControl.DataTemplates>
+    <DataTemplate DataType="views:LoginDetailContent"><views:LoginDetailView /></DataTemplate>
+    <DataTemplate DataType="views:ServerDetailContent"><views:ServerDetailView /></DataTemplate>
+    <DataTemplate DataType="views:DatabaseDetailContent"><views:DatabaseDetailView /></DataTemplate>
+  </UserControl.DataTemplates>
+  <Grid RowDefinitions="104,*,80">
+    <d:DetailHeader x:Name="HeaderControl" />
+    <ScrollViewer x:Name="DetailScroll" Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="18" Margin="20,12,20,20">
+        <ContentControl x:Name="SceneHost" HorizontalContentAlignment="Stretch" />
+        <d:AccountSection x:Name="AccountsSection">
+          <!-- 快捷操作放进账号区，位于账号页签下方，随所选账号变化。 -->
+          <d:AccountSection.Actions>
+            <d:QuickActionBar x:Name="QuickActions" />
+          </d:AccountSection.Actions>
+        </d:AccountSection>
+        <StackPanel Spacing="10">
+          <TextBlock Text="其他信息" FontSize="12" FontWeight="Medium" Margin="3,0,0,0" Foreground="{DynamicResource Detail.TextMuted}" />
+          <d:DetailGroup Margin="0">
+            <StackPanel>
+              <d:ChipsEditor x:Name="SpaceEditor" Label="空间" Placeholder="添加空间" />
+              <d:ChipsEditor x:Name="TagsEditor" Label="标签" Placeholder="添加标签" Multiple="True" />
+              <d:FieldRow x:Name="NoteEditor" Label="备注" Placeholder="添加备注" Multiline="True" CanCopy="False" IsDividerVisible="False" />
+            </StackPanel>
+          </d:DetailGroup>
+        </StackPanel>
+        <StackPanel x:Name="CustomSection" Spacing="10" IsVisible="False">
+          <TextBlock Text="自定义字段" FontSize="12" FontWeight="Medium" Margin="3,0,0,0" Foreground="{DynamicResource Detail.TextMuted}" />
+          <d:DetailGroup Margin="0"><StackPanel x:Name="CustomHost" /></d:DetailGroup>
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+    <d:SaveBar x:Name="Footer" Grid.Row="2" />
+    <d:ToastHost x:Name="Toast" Grid.Row="1" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="12,8" ZIndex="10" />
+  </Grid>
+</UserControl>

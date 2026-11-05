@@ -1,0 +1,178 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="using:KeepPassword.App.Controls"
+        x:CompileBindings="False">
+  <Styles.Resources>
+    <!-- 分段选项：本身不画背景，玻璃块由 SegmentedControl 统一绘制并滑动。 -->
+    <ControlTheme x:Key="Glass.SegmentItemTheme" TargetType="ListBoxItem">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource GlassTextSecondary}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusAdorner" Value="{x:Null}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <!-- Background 透明而非 null：整格都可点击，不只是文字。 -->
+          <ContentPresenter x:Name="PART_ContentPresenter"
+                            Background="{TemplateBinding Background}"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Padding="{TemplateBinding Padding}"
+                            Foreground="{TemplateBinding Foreground}"
+                            FontWeight="{TemplateBinding FontWeight}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+        </ControlTemplate>
+      </Setter>
+      <!-- 悬停未选中项：文字深一档，不加背景。 -->
+      <Style Selector="^:pointerover:not(:selected)">
+        <Setter Property="Foreground" Value="{DynamicResource GlassTextHover}" />
+      </Style>
+      <!-- 选中：Accent 文字 + SemiBold。等宽 UniformGrid 布局下字重变化不改变格宽，不会抖动。 -->
+      <Style Selector="^:selected">
+        <Setter Property="Foreground" Value="{DynamicResource GlassAccentText}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+      </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type c:SegmentedControl}" TargetType="c:SegmentedControl">
+      <Setter Property="ItemContainerTheme" Value="{StaticResource Glass.SegmentItemTheme}" />
+      <Setter Property="Background" Value="{DynamicResource GlassTroughBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource GlassTroughStroke}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <!-- 凹槽内边距 4、全圆角（高 34+4×2+1×2=44 → 半径 22）。 -->
+      <Setter Property="Padding" Value="4" />
+      <Setter Property="CornerRadius" Value="22" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="FontSize" Value="13.5" />
+      <Setter Property="Focusable" Value="True" />
+      <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+      <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+      <!-- 等宽选项：UniformGrid 让每格宽度固定，选中加粗不会挤动邻居。 -->
+      <Setter Property="ItemsPanel">
+        <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
+      </Setter>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Panel>
+            <!-- 焦点环画在凹槽外圈，不占布局尺寸。 -->
+            <Border x:Name="PART_FocusRing" Margin="-3" CornerRadius="25" BorderThickness="2"
+                    BorderBrush="{DynamicResource GlassFocusRing}" Opacity="0" IsHitTestVisible="False" />
+            <!-- 凹槽不裁剪内容：玻璃块的柔和投影需要越过凹槽内边距。 -->
+            <Border x:Name="PART_Trough" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" Padding="{TemplateBinding Padding}"
+                    BoxShadow="{DynamicResource GlassTroughShadow}">
+              <Panel x:Name="PART_SelectionRoot">
+                <!-- 滑块层在选项下方；滑块位置由 SegmentedControl.UpdateThumb 按选中项 Bounds 计算。 -->
+                <Canvas x:Name="PART_SelectionLayer" IsHitTestVisible="False">
+                  <Panel x:Name="PART_Thumb" IsVisible="False" RenderTransform="translate(0px, 0px)">
+                    <Border x:Name="PART_ThumbVisual" CornerRadius="18"
+                            Background="{DynamicResource GlassThumbBrush}" BorderBrush="{DynamicResource GlassThumbStroke}"
+                            BorderThickness="1" BoxShadow="{DynamicResource GlassThumbShadow}" RenderTransform="scale(1, 1)">
+                      <c:GlassHighlight />
+                    </Border>
+                  </Panel>
+                </Canvas>
+                <ItemsPresenter x:Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+              </Panel>
+            </Border>
+          </Panel>
+        </ControlTemplate>
+      </Setter>
+      <!-- 滑块滑动：位移 + 宽度，480ms 轻回弹。代码在非选中变化（缩放、首次出现）时临时撤掉过渡直接落位。 -->
+      <Style Selector="^ /template/ Panel#PART_Thumb">
+        <Setter Property="Transitions">
+          <Transitions>
+            <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource Glass.SlideDuration}" Easing="{StaticResource Glass.SpringEasing}" />
+            <DoubleTransition Property="Width" Duration="{StaticResource Glass.SlideDuration}" Easing="{StaticResource Glass.SpringEasing}" />
+          </Transitions>
+        </Setter>
+      </Style>
+      <!-- 按压形变画在内层，与外层位移互不干扰；松开时同一缓动回弹。 -->
+      <Style Selector="^ /template/ Border#PART_ThumbVisual">
+        <Setter Property="Transitions">
+          <Transitions>
+            <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource Glass.PressDuration}" Easing="{StaticResource Glass.SpringEasing}" />
+          </Transitions>
+        </Setter>
+      </Style>
+      <Style Selector="^:pressed /template/ Border#PART_ThumbVisual">
+        <Setter Property="RenderTransform" Value="scale(1.07, 1.12)" />
+      </Style>
+      <Style Selector="^:keyboard-focus /template/ Border#PART_FocusRing">
+        <Setter Property="Opacity" Value="1" />
+      </Style>
+      <!-- 禁用：整体 45%，禁用后不再收到指针事件，悬停/按压自然失效。 -->
+      <Style Selector="^:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+      </Style>
+
+      <!-- compact：嵌入 32px 高的详情行。26+3×2+1×2=34，行内用 Padding=2 → 32。 -->
+      <Style Selector="^.compact">
+        <Setter Property="Padding" Value="2" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="FontSize" Value="12.5" />
+      </Style>
+      <Style Selector="^.compact /template/ Border#PART_ThumbVisual">
+        <Setter Property="CornerRadius" Value="13" />
+      </Style>
+      <Style Selector="^.compact /template/ Border#PART_FocusRing">
+        <Setter Property="CornerRadius" Value="19" />
+      </Style>
+
+      <!--
+        wrap：项数不定（账号切换）。按内容宽度排列，放不下就换行，所有账号一眼可见、单击即切换，
+        不再出现横向滚动条。滑块按选中项的 X/Y 定位，跨行切换时斜向滑过去。
+      -->
+      <Style Selector="^.wrap">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="ItemsPanel">
+          <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" ItemSpacing="2" LineSpacing="2" /></ItemsPanelTemplate>
+        </Setter>
+      </Style>
+      <Style Selector="^.wrap /template/ Border#PART_ThumbVisual">
+        <Setter Property="BoxShadow" Value="{DynamicResource GlassThumbShadowCompact}" />
+      </Style>
+      <Style Selector="^.wrap /template/ Border#PART_FocusRing">
+        <Setter Property="CornerRadius" Value="17" />
+      </Style>
+    </ControlTheme>
+  </Styles.Resources>
+
+  <!--
+    App.axaml 里有全局 ListBoxItem 样式（Padding 12,10 / Margin 0,2 / CornerRadius 10）。
+    普通 Style 的优先级高于 ControlTheme 的 Setter，所以尺寸必须在这里用更具体的选择器覆盖，
+    否则选项会被撑高并被凹槽裁掉文字（之前"认证"文字不可见就是这个原因）。
+  -->
+  <Style Selector="c|SegmentedControl ListBoxItem">
+    <Setter Property="Height" Value="34" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="12,0" />
+    <Setter Property="Margin" Value="0" />
+    <Setter Property="CornerRadius" Value="18" />
+  </Style>
+  <Style Selector="c|SegmentedControl.compact ListBoxItem">
+    <Setter Property="Height" Value="26" />
+    <Setter Property="Padding" Value="10,0" />
+  </Style>
+  <!-- 不定宽的页签不加粗选中项，否则选中时宽度变化会推动后面的页签、甚至改变换行位置。 -->
+  <Style Selector="c|SegmentedControl.wrap ListBoxItem:selected">
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+  <!-- 文字颜色 200ms 渐变；比 App.axaml 的通用 ContentPresenter 过渡更具体，因此优先。 -->
+  <Style Selector="c|SegmentedControl ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Foreground" Duration="{StaticResource Glass.ColorDuration}" Easing="CubicEaseOut" />
+      </Transitions>
+    </Setter>
+  </Style>
+  <!-- 单独禁用某一项（控件本身可用）时，该项 45% 不透明度。 -->
+  <Style Selector="c|SegmentedControl:not(:disabled) ListBoxItem:disabled">
+    <Setter Property="Opacity" Value="0.45" />
+  </Style>
+</Styles>

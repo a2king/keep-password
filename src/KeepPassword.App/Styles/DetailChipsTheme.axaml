@@ -1,0 +1,73 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="using:KeepPassword.App.Controls.Details"
+        x:CompileBindings="False">
+  <Styles.Resources>
+    <ControlTheme x:Key="{x:Type d:ChipsEditor}" TargetType="d:ChipsEditor">
+      <Setter Property="MinHeight" Value="44" />
+      <Setter Property="FontFamily" Value="{DynamicResource Detail.Font.Ui}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid ColumnDefinitions="64,12,*" Margin="16,7" MinHeight="30">
+            <TextBlock Text="{TemplateBinding Label}" Foreground="{DynamicResource Detail.TextMuted}" FontSize="12" VerticalAlignment="Center" />
+            <WrapPanel Grid.Column="2" x:Name="PART_Flow" VerticalAlignment="Center">
+              <Button x:Name="PART_Add" Classes="detail-chip-add" Content="+ 添加" ToolTip.Tip="添加标签或空间" />
+              <!-- 输入框与下方建议面板同宽（面板宽度绑定到输入框实际宽度）。 -->
+              <TextBox x:Name="PART_Input" Width="180" MinHeight="26" Height="26" Padding="6,3" Margin="0,2,0,2" BorderThickness="1"
+                       Background="{DynamicResource Detail.GroupBackground}" BorderBrush="{DynamicResource Detail.Border}"
+                       Foreground="{DynamicResource Detail.Text}" FontSize="12" Watermark="{TemplateBinding Placeholder}" IsVisible="False" />
+            </WrapPanel>
+            <!-- 外层留 12px 透明边距承载阴影（避免被弹出窗口裁成硬边），HorizontalOffset=-12 抵消，让面板与输入框左对齐。 -->
+            <Popup x:Name="PART_Suggestions" PlacementTarget="{Binding #PART_Input}" Placement="BottomEdgeAlignedLeft" VerticalOffset="0" HorizontalOffset="-12"
+                   IsLightDismissEnabled="True" OverlayDismissEventPassThrough="False" WindowManagerAddShadowHint="False">
+              <Border Margin="12,4,12,16" Width="{Binding #PART_Input.Bounds.Width}"
+                      Background="{DynamicResource Detail.GroupBackground}" BorderBrush="{DynamicResource Detail.Border}" BorderThickness="1" CornerRadius="10"
+                      Padding="4" BoxShadow="{DynamicResource Detail.PopupShadow}">
+                <ScrollViewer MaxHeight="200" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="PART_Options" /></ScrollViewer>
+              </Border>
+            </Popup>
+          </Grid>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:editing /template/ Button#PART_Add"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="^:editing /template/ TextBox#PART_Input"><Setter Property="IsVisible" Value="True" /></Style>
+    </ControlTheme>
+  </Styles.Resources>
+  <!-- 已选芯片保持22px；移除键是独立可Tab访问的按钮。 -->
+  <Style Selector="Border.detail-chip">
+    <Setter Property="Background" Value="{DynamicResource Detail.AccentSoft}" /><Setter Property="CornerRadius" Value="11" />
+    <Setter Property="Height" Value="22" /><Setter Property="Padding" Value="9,0,3,0" /><Setter Property="Margin" Value="0,2,6,2" />
+  </Style>
+  <Style Selector="TextBlock.detail-chip-text">
+    <Setter Property="Foreground" Value="{DynamicResource Detail.AccentText}" /><Setter Property="FontSize" Value="12" />
+    <Setter Property="VerticalAlignment" Value="Center" /><Setter Property="MaxWidth" Value="170" /><Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+  <Style Selector="Button.detail-chip-remove">
+    <Setter Property="Theme" Value="{StaticResource Detail.IconButtonTheme}" /><Setter Property="Width" Value="20" /><Setter Property="Height" Value="20" />
+    <Setter Property="Foreground" Value="{DynamicResource Detail.AccentText}" /><Setter Property="FontSize" Value="14" /><Setter Property="Opacity" Value="0.85" />
+  </Style>
+  <!-- 移除 × 常驻清晰显示，鼠标经过不再变化；键盘焦点仍加亮。 -->
+  <Style Selector="Button.detail-chip-remove:focus-visible"><Setter Property="Opacity" Value="1" /></Style>
+  <Style Selector="Button.detail-chip-add">
+    <Setter Property="Background" Value="Transparent" /><Setter Property="Foreground" Value="{DynamicResource Detail.TextMuted}" />
+    <Setter Property="Height" Value="22" /><Setter Property="MinHeight" Value="0" /><Setter Property="Padding" Value="8,0" /><Setter Property="Margin" Value="0,2,0,2" />
+    <Setter Property="FontSize" Value="12" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid>
+          <Rectangle Stroke="{DynamicResource Detail.Border}" StrokeThickness="1" StrokeDashArray="2,2" RadiusX="11" RadiusY="11" />
+          <ContentPresenter Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="Button.detail-chip-add:focus-visible"><Setter Property="Foreground" Value="{DynamicResource Detail.AccentText}" /></Style>
+  <Style Selector="Button.detail-chip-option">
+    <Setter Property="Background" Value="Transparent" /><Setter Property="Foreground" Value="{DynamicResource Detail.Text}" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" /><Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="Padding" Value="10,6" /><Setter Property="MinHeight" Value="30" /><Setter Property="BorderThickness" Value="0" /><Setter Property="CornerRadius" Value="6" /><Setter Property="FontSize" Value="12" />
+  </Style>
+  <Style Selector="Button.detail-chip-option:pointerover /template/ ContentPresenter, Button.detail-chip-option.highlight /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource Detail.Hover}" /></Style>
+  <Style Selector="TextBlock.detail-chip-empty"><Setter Property="Foreground" Value="{DynamicResource Detail.TextMuted}" /><Setter Property="FontSize" Value="12" /><Setter Property="Margin" Value="10,7" /></Style>
+  <Style Selector=".no-motion d|ChipsEditor Button, d|ChipsEditor.no-motion Button, .no-motion d|ChipsEditor Border, d|ChipsEditor.no-motion Border"><Setter Property="Transitions" Value="{x:Null}" /></Style>
+</Styles>

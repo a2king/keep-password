@@ -215,10 +215,19 @@ test("candidates closer to the page address come first and the menu stays under 
     { domain: "example.com", name: "根" }
   ], sandbox.location.href);
   assert.deepEqual(ordered.map((item) => item.name), ["近", "根", "远"]);
-  const frame = sandbox.chooserFrame({ left: 240, right: 420, top: 100, bottom: 132 }, 1000);
+  // 普通宽度的输入框：候选框与输入框左右对齐、同宽，位于下方 8px。
+  const frame = sandbox.chooserFrame({ left: 240, right: 640, top: 100, bottom: 132 }, 1000);
   assert.equal(frame.left, 240);
   assert.equal(frame.top, 140);
-  assert.ok(frame.left + frame.width <= 1000);
+  assert.equal(frame.width, 400);
+  // 很窄的输入框：保持左对齐，宽度不小于 260（短密钥输入行需要空间）。
+  const narrow = sandbox.chooserFrame({ left: 240, right: 420, top: 100, bottom: 132 }, 1000);
+  assert.equal(narrow.left, 240);
+  assert.equal(narrow.width, 260);
+  // 靠近视口右边：整体左移，不超出视口。
+  const edge = sandbox.chooserFrame({ left: 900, right: 980, top: 100, bottom: 132 }, 1000);
+  assert.equal(edge.width, 260);
+  assert.ok(edge.left + edge.width <= 1000 - 8);
 });
 
 function openContent({ href, active = 0, inputs }) {

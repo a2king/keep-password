@@ -1,0 +1,193 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="using:KeepPassword.App.Controls"
+        x:CompileBindings="False">
+  <Styles.Resources>
+    <!-- 下拉项：高 38、圆角 12、左右内边距 12；选中项右侧 ✓，未选中项 ✓ 透明但仍占位，文字不抖动。 -->
+    <ControlTheme x:Key="{x:Type ComboBoxItem}" TargetType="ComboBoxItem">
+      <!-- MinHeight 而非 Height：单行项正好 38，两行项（如 SSH 密钥名称+指纹）可以长高而不被裁字。 -->
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="Padding" Value="12,2" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource GlassTextPrimary}" />
+      <Setter Property="FontSize" Value="13.5" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusAdorner" Value="{x:Null}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="PART_ItemSurface" Background="{TemplateBinding Background}"
+                  CornerRadius="{TemplateBinding CornerRadius}" Padding="{TemplateBinding Padding}">
+            <Grid ColumnDefinitions="*,8,16">
+              <ContentPresenter x:Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                Foreground="{TemplateBinding Foreground}" FontWeight="{TemplateBinding FontWeight}"
+                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+              <!-- PART_Check 属于下拉项模板，不在 ComboBox 模板里，chevron 的旋转规则碰不到它。 -->
+              <Path x:Name="PART_Check" Grid.Column="2" Width="16" Height="16" Stretch="None"
+                    Data="{StaticResource Glass.Icon.Check}" Stroke="{DynamicResource GlassAccent}"
+                    StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round"
+                    VerticalAlignment="Center" Opacity="0" IsHitTestVisible="False" />
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^ /template/ Border#PART_ItemSurface">
+        <Setter Property="Transitions">
+          <Transitions>
+            <BrushTransition Property="Background" Duration="{StaticResource Glass.HoverDuration}" />
+          </Transitions>
+        </Setter>
+      </Style>
+      <!-- 悬停与键盘高亮（↑↓ 移动焦点）同一视觉。 -->
+      <Style Selector="^:pointerover, ^:focus">
+        <Setter Property="Background" Value="{DynamicResource GlassAccentSoft}" />
+      </Style>
+      <Style Selector="^:selected">
+        <Setter Property="Foreground" Value="{DynamicResource GlassAccentText}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+      </Style>
+      <Style Selector="^:selected /template/ Path#PART_Check">
+        <Setter Property="Opacity" Value="1" />
+      </Style>
+      <Style Selector="^:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+      </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type ComboBox}" TargetType="ComboBox">
+      <Setter Property="MinHeight" Value="42" />
+      <Setter Property="Padding" Value="14,0,8,0" />
+      <Setter Property="CornerRadius" Value="14" />
+      <!-- 实心白底 + 1px 细边框，不再用半透明凹槽，背后的卡片/列表不会透出来。 -->
+      <Setter Property="Background" Value="{DynamicResource GlassFieldBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource GlassFieldStroke}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource GlassTextPrimary}" />
+      <Setter Property="PlaceholderForeground" Value="{DynamicResource GlassTextSecondary}" />
+      <Setter Property="FontSize" Value="13.5" />
+      <!-- 8 项 × 38 + 内边距 6×2 + 描边 = 318：第 9 项起出现滚动，最大高度 320。 -->
+      <Setter Property="MaxDropDownHeight" Value="320" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusAdorner" Value="{x:Null}" />
+      <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+      <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Panel>
+            <Border x:Name="PART_FocusRing" Margin="-3" CornerRadius="17" BorderThickness="2"
+                    BorderBrush="{DynamicResource GlassFocusRing}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="PART_Trough" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+            <Grid ColumnDefinitions="*,Auto" Margin="{TemplateBinding Padding}">
+              <TextBlock x:Name="PART_Placeholder" Text="{TemplateBinding PlaceholderText}"
+                         Foreground="{TemplateBinding PlaceholderForeground}" VerticalAlignment="Center"
+                         TextTrimming="CharacterEllipsis"
+                         IsVisible="{TemplateBinding SelectionBoxItem, Converter={x:Static ObjectConverters.IsNull}}" />
+              <ContentControl x:Name="PART_SelectionBox" Content="{TemplateBinding SelectionBoxItem}"
+                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+              <!--
+                已知坑：旋转只绑定这一个 x:Name 元素（选择器 ^:dropdownopen /template/ Path#PART_Chevron）。
+                不能用 "ComboBox:dropdownopen Path" 这类后代通配：下拉项属于 ComboBox 的逻辑后代，会把 ✓ 一起转成 ^。
+              -->
+              <Path x:Name="PART_Chevron" Grid.Column="1" Width="16" Height="16" Margin="8,0,4,0" Stretch="None"
+                    Data="{StaticResource Glass.Icon.Chevron}" Stroke="{DynamicResource GlassTextSecondary}"
+                    StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round"
+                    VerticalAlignment="Center" IsHitTestVisible="False" RenderTransform="rotate(0deg)" />
+            </Grid>
+            <!--
+              Popup 圆角与阴影：弹出窗口本身是方形且背景透明（WindowManagerAddShadowHint=False 关掉系统方形阴影），
+              圆角由内部 Border 绘制；外围留出 24/44px 透明边距承载大阴影，HorizontalOffset=-24 抵消左边距，
+              使可见面板与触发器左对齐、宽度一致，上边距 6 即"距触发器 6px"。
+            -->
+            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen, Mode=TwoWay}"
+                   PlacementTarget="PART_Trough" Placement="BottomEdgeAlignedLeft" HorizontalOffset="-24"
+                   IsLightDismissEnabled="True" InheritsTransform="True" WindowManagerAddShadowHint="False">
+              <Panel Margin="24,6,24,44" Background="{x:Null}">
+                <Border x:Name="PART_PopupSurface" c:GlassPopupReveal.IsEnabled="True"
+                        Width="{Binding Bounds.Width, RelativeSource={RelativeSource TemplatedParent}}"
+                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                        Background="{DynamicResource GlassPopupSolidBrush}" BorderBrush="{DynamicResource GlassFieldStroke}"
+                        BorderThickness="1" CornerRadius="18" Padding="6" ClipToBounds="True"
+                        BoxShadow="{DynamicResource GlassPopupShadow}"
+                        Opacity="0" RenderTransformOrigin="50%,0%" RenderTransform="translate(0px, -6px) scale(0.96, 0.96)">
+                  <ScrollViewer HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
+                    <ItemsPresenter x:Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                  </ScrollViewer>
+                </Border>
+              </Panel>
+            </Popup>
+          </Panel>
+        </ControlTemplate>
+      </Setter>
+
+      <Style Selector="^ /template/ Border#PART_Trough">
+        <Setter Property="Transitions">
+          <Transitions>
+            <BrushTransition Property="BorderBrush" Duration="{StaticResource Glass.HoverDuration}" />
+          </Transitions>
+        </Setter>
+      </Style>
+      <Style Selector="^:pointerover /template/ Border#PART_Trough">
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassHoverStroke}" />
+      </Style>
+      <Style Selector="^:dropdownopen /template/ Border#PART_Trough">
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassOpenStroke}" />
+      </Style>
+      <Style Selector="^:focus-visible /template/ Border#PART_FocusRing">
+        <Setter Property="Opacity" Value="1" />
+      </Style>
+      <Style Selector="^ /template/ Path#PART_Chevron">
+        <Setter Property="Transitions">
+          <Transitions>
+            <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource Glass.ChevronDuration}" Easing="CubicEaseOut" />
+          </Transitions>
+        </Setter>
+      </Style>
+      <!-- 只旋转触发器模板里的 PART_Chevron，下拉项的 ✓ 在 ComboBoxItem 模板里，不受影响。 -->
+      <Style Selector="^:dropdownopen /template/ Path#PART_Chevron">
+        <Setter Property="RenderTransform" Value="rotate(180deg)" />
+      </Style>
+      <!-- 打开动画：淡入 180ms；缩放 0.96→1 与上移 -6→0 共 300ms 轻回弹，以顶部居中为原点。 -->
+      <Style Selector="^ /template/ Border#PART_PopupSurface">
+        <Setter Property="Transitions">
+          <Transitions>
+            <DoubleTransition Property="Opacity" Duration="{StaticResource Glass.PopupFadeDuration}" Easing="CubicEaseOut" />
+            <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource Glass.PopupMoveDuration}" Easing="{StaticResource Glass.SpringEasing}" />
+          </Transitions>
+        </Setter>
+      </Style>
+      <!-- revealed 类由 GlassPopupReveal 在面板挂载后的下一帧添加，保证过渡每次都能播放。 -->
+      <Style Selector="^ /template/ Border#PART_PopupSurface.revealed">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="RenderTransform" Value="translate(0px, 0px) scale(1, 1)" />
+      </Style>
+      <Style Selector="^:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+        <Setter Property="Cursor" Value="Arrow" />
+      </Style>
+
+      <!-- compact：嵌入 32px 高的详情行 -->
+      <Style Selector="^.compact">
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="10,0,4,0" />
+        <Setter Property="FontSize" Value="13" />
+      </Style>
+      <Style Selector="^.compact /template/ Border#PART_FocusRing">
+        <Setter Property="CornerRadius" Value="13" />
+      </Style>
+    </ControlTheme>
+  </Styles.Resources>
+</Styles>

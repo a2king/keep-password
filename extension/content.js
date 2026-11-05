@@ -137,7 +137,7 @@ function addElement(parent, tag, className, text) {
   return element;
 }
 
-const CHOOSER_MAX_WIDTH = 360;
+const CHOOSER_MIN_WIDTH = 260;
 const CHOOSER_GAP = 8;
 const CHOOSER_VISIBLE_ROWS = 5;
 
@@ -173,9 +173,13 @@ function sortCandidatesByAddress(candidates, pageUrl) {
     .map((item) => item.candidate);
 }
 
+// 候选框与输入框左右对齐、同宽；输入框太窄时保持左对齐但不窄于 CHOOSER_MIN_WIDTH（短密钥输入行需要空间），
+// 超出视口右边时整体左移，始终留出 CHOOSER_GAP 边距。
 function chooserFrame(rect, viewportWidth) {
-  const left = Math.max(0, rect.left);
-  const width = Math.min(CHOOSER_MAX_WIDTH, Math.max(160, viewportWidth - left - CHOOSER_GAP));
+  const inputWidth = Math.max(0, (rect.right ?? rect.left) - rect.left);
+  const room = Math.max(0, viewportWidth - CHOOSER_GAP * 2);
+  const width = Math.min(room, Math.max(CHOOSER_MIN_WIDTH, inputWidth));
+  const left = Math.max(CHOOSER_GAP, Math.min(rect.left, viewportWidth - CHOOSER_GAP - width));
   return { left, top: rect.bottom + CHOOSER_GAP, width };
 }
 

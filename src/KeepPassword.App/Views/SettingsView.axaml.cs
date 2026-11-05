@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using KeepPassword.App.Controls;
 using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
 using KeepPassword.Core.Autofill;
@@ -25,9 +26,14 @@ public partial class SettingsView : UserControl
     private Action<bool>? _pauseWatcher;
     private CloudSyncCoordinator? _sync;
 
+    // 初始为 true：XAML 加载时分段控件会自动选中第 0 项，此时不能当作用户选择（否则会误切到"浅色"）。
+    private bool _syncingSegments = true;
+
     public SettingsView()
     {
         InitializeComponent();
+        SelectSegment(ThemeSegments, Array.IndexOf(ThemeOrder, ThemeManager.CurrentTheme));
+        SelectSegment(MotionSegments, Array.IndexOf(MotionOrder, MotionPreferences.CurrentMode));
         AnimateStatus(LabelStatus);
         AnimateStatus(DirectoryStatus);
         AnimateStatus(CsvStatus);
@@ -36,6 +42,7 @@ public partial class SettingsView : UserControl
         AnimateStatus(SyncStatusText);
         ThemeManager.ThemeChanged += UpdateThemeButtons;
         AppUpdateService.Changed += OnAppUpdateChanged;
+        _syncingSegments = false;
     }
 
     private static void AnimateStatus(TextBlock status)
@@ -201,8 +208,8 @@ public partial class SettingsView : UserControl
         ClearSyncSecrets();
         NewSpaceBox.Text = "";
         NewTagBox.Text = "";
-        SpaceList.Children.Clear();
-        TagList.Children.Clear();
+        ClearChips(SpaceList);
+        ClearChips(TagList);
         AccountText.Text = "";
         LabelStatus.Text = "";
         DirectoryStatus.Text = "";
@@ -244,48 +251,123 @@ public partial class SettingsView : UserControl
         _ = Motion.EnterAsync(TagList, 4);
     }
 
-    private void FillLabelList(StackPanel panel, IReadOnlyList<string> names, Func<string, int> count, bool isSpace)
+    // 芯片式列表：每个名称是一个小芯片（名称 + 使用数 + 改名 / 删除图标），XAML 里的新增输入框固定在最后。
+    private void FillLabelList(WrapPanel panel, IReadOnlyList<string> names, Func<string, int> count, bool isSpace)
     {
-        panel.Children.Clear();
-        if (names.Count == 0)
-        {
-            var empty = new TextBlock { Text = isSpace ? "还没有空间分类。" : "还没有账号标签。" };
-            empty.Classes.Add("muted");
-            panel.Children.Add(empty);
-            return;
-        }
-
+        ClearChips(panel);
+        var index = 0;
         foreach (var name in names)
         {
-            var box = new TextBox { Text = name };
-            var usage = new TextBlock
-            {
-                Text = $"{count(name)} 个账号",
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                Margin = new Avalonia.Thickness(10, 0, 4, 0)
-            };
-            usage.Classes.Add("muted");
-            var rename = new Button { Content = "修改名称", Margin = new Avalonia.Thickness(4, 0, 0, 0) };
-            rename.Classes.Add("soft");
-            rename.Click += (_, _) => RenameLabel(name, box.Text ?? "", isSpace);
-            var delete = new Button { Content = "删除", Margin = new Avalonia.Thickness(4, 0, 0, 0) };
-            delete.Classes.Add("danger");
-            delete.Click += async (_, _) => await DeleteLabelAsync(name, count(name), isSpace);
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto,Auto") };
-            Grid.SetColumn(usage, 1);
-            Grid.SetColumn(rename, 2);
-            Grid.SetColumn(delete, 3);
-            row.Children.Add(box);
-            row.Children.Add(usage);
-            row.Children.Add(rename);
-            row.Children.Add(delete);
-            panel.Children.Add(row);
+            panel.Children.Insert(index++, LabelChip(name, count(name), isSpace));
         }
     }
 
-    private void OnAddSpace(object? sender, RoutedEventArgs e) => AddLabel(NewSpaceBox, isSpace: true);
+    // 只移除芯片，保留末尾的新增输入框。
+    private static void ClearChips(WrapPanel panel)
+    {
+        foreach (var chip in panel.Children.OfType<Border>().ToList())
+        {
+            panel.Children.Remove(chip);
+        }
+    }
 
-    private void OnAddTag(object? sender, RoutedEventArgs e) => AddLabel(NewTagBox, isSpace: false);
+    private Border LabelChip(string name, int usage, bool isSpace)
+    {
+        // 名称用 TextBlock 作为按钮内容，悬停时才能单独给文字加下划线。
+        var title = new Button { Content = new TextBlock { Text = name }, Classes = { "label-chip-name" } };
+        ToolTip.SetTip(title, "点击改名");
+        var editor = new TextBox { Text = name, Classes = { "label-chip-input" }, IsVisible = false };
+        Avalonia.Automation.AutomationProperties.SetName(editor, $"重命名「{name}」");
+        Avalonia.Automation.AutomationProperties.SetName(title, name);
+        var countText = new TextBlock { Text = usage.ToString(), Classes = { "label-chip-count" } };
+        ToolTip.SetTip(countText, $"{usage} 个账号在用");
+        var rename = ChipIcon("Detail.Icon.Edit", $"重命名「{name}」", danger: false);
+        var delete = ChipIcon("Detail.Icon.Close", $"删除「{name}」", danger: true);
+        var row = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Children = { title, editor, countText, rename, delete } };
+        var chip = new Border { Classes = { "label-chip" }, Child = row };
+        // 按名称取同一色相的浅底 / 深字 / 描边；同名在任何地方都是同一种颜色，切换亮暗主题时自动换成对应的一套。
+        chip.Bind(Border.BackgroundProperty, this.GetResourceObservable(LabelPalette.Background(name)));
+        chip.Bind(Border.BorderBrushProperty, this.GetResourceObservable(LabelPalette.Border(name)));
+        foreach (var button in new[] { title, rename, delete })
+        {
+            button.Bind(Button.ForegroundProperty, this.GetResourceObservable(LabelPalette.Foreground(name)));
+        }
+        countText.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable(LabelPalette.Foreground(name)));
+        var done = true;
+
+        void ShowEditor(bool editing)
+        {
+            chip.Classes.Set("editing", editing);
+            title.IsVisible = countText.IsVisible = rename.IsVisible = !editing;
+            editor.IsVisible = editing;
+        }
+        void BeginRename()
+        {
+            done = false;
+            editor.Text = name;
+            ShowEditor(true);
+            editor.Focus();
+            editor.SelectAll();
+        }
+        // 回车与失去焦点都会走到这里，done 防止同一次改名提交两遍。
+        void EndRename(bool save)
+        {
+            if (done) return;
+            done = true;
+            var value = editor.Text ?? "";
+            ShowEditor(false);
+            if (save && !string.IsNullOrWhiteSpace(value) && LabelName.Normalize(value) != name)
+            {
+                RenameLabel(name, value, isSpace);
+            }
+        }
+
+        title.Click += (_, _) => BeginRename();
+        rename.Click += (_, _) => BeginRename();
+        delete.Click += async (_, _) => await DeleteLabelAsync(name, usage, isSpace);
+        editor.KeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Enter or Key.Escape)) return;
+            e.Handled = true;
+            EndRename(save: e.Key == Key.Enter);
+        };
+        editor.LostFocus += (_, _) => EndRename(save: true);
+        return chip;
+    }
+
+    // 芯片上的小图标按钮：22px 圆形，图标 12px，常驻显示；删除图标悬停时变红。
+    private Button ChipIcon(string resource, string hint, bool danger)
+    {
+        // × 按 16px 网格的原始尺寸绘制（视觉 7px），铅笔缩放到 11px，两者视觉重量一致、不抢名称。
+        var icon = danger
+            ? new Avalonia.Controls.Shapes.Path { Width = 16, Height = 16, Stretch = Avalonia.Media.Stretch.None }
+            : new Avalonia.Controls.Shapes.Path { Width = 11, Height = 11, Stretch = Avalonia.Media.Stretch.Uniform };
+        icon.StrokeThickness = 1.3;
+        icon.StrokeLineCap = Avalonia.Media.PenLineCap.Round;
+        icon.StrokeJoin = Avalonia.Media.PenLineJoin.Round;
+        icon.Bind(Avalonia.Controls.Shapes.Path.DataProperty, this.GetResourceObservable(resource));
+        icon.Bind(Avalonia.Controls.Shapes.Shape.StrokeProperty, new Avalonia.Data.Binding("Foreground")
+            { RelativeSource = new Avalonia.Data.RelativeSource(Avalonia.Data.RelativeSourceMode.FindAncestor) { AncestorType = typeof(Avalonia.Controls.Presenters.ContentPresenter) } });
+        var button = new Button { Content = icon, Classes = { "label-chip-icon" } };
+        if (danger) button.Classes.Add("danger-icon");
+        ToolTip.SetTip(button, hint);
+        Avalonia.Automation.AutomationProperties.SetName(button, hint);
+        return button;
+    }
+
+    private void OnAddSpaceKeyDown(object? sender, KeyEventArgs e) => OnAddKeyDown(e, NewSpaceBox, isSpace: true);
+
+    private void OnAddTagKeyDown(object? sender, KeyEventArgs e) => OnAddKeyDown(e, NewTagBox, isSpace: false);
+
+    // 在末尾输入框里回车即新增；Esc 清空输入。
+    private void OnAddKeyDown(KeyEventArgs e, TextBox box, bool isSpace)
+    {
+        if (e.Key == Key.Escape) { box.Text = ""; e.Handled = true; return; }
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        if (!string.IsNullOrWhiteSpace(box.Text)) AddLabel(box, isSpace);
+    }
 
     private void AddLabel(TextBox box, bool isSpace)
     {
@@ -333,7 +415,7 @@ public partial class SettingsView : UserControl
 
         var effect = isSpace ? "这些账号会变为未分类。" : "这些账号会去掉该标签。";
         var message = usage == 0 ? $"确定删除「{name}」吗？" : $"「{name}」正被 {usage} 个账号使用，{effect}确定删除吗？";
-        if (!await Dialogs.ConfirmAsync(Host, isSpace ? "删除空间分类" : "删除账号标签", message))
+        if (!await Dialogs.ConfirmDangerAsync(Host, isSpace ? "删除空间分类" : "删除账号标签", message))
         {
             return;
         }
@@ -374,13 +456,31 @@ public partial class SettingsView : UserControl
         }
     }
 
-    private void OnThemeLight(object? sender, RoutedEventArgs e) => ApplyTheme(ThemeManager.LightTheme);
-    private void OnThemeDark(object? sender, RoutedEventArgs e) => ApplyTheme(ThemeManager.DarkTheme);
-    private void OnThemeSystem(object? sender, RoutedEventArgs e) => ApplyTheme(ThemeManager.SystemTheme);
+    private static readonly string[] ThemeOrder = [ThemeManager.LightTheme, ThemeManager.DarkTheme, ThemeManager.SystemTheme];
+    private static readonly string[] MotionOrder = [MotionPreferences.FullMode, MotionPreferences.SystemMode, MotionPreferences.ReducedMode];
 
-    private void OnMotionFull(object? sender, RoutedEventArgs e) => ApplyMotion(MotionPreferences.FullMode);
-    private void OnMotionSystem(object? sender, RoutedEventArgs e) => ApplyMotion(MotionPreferences.SystemMode);
-    private void OnMotionReduced(object? sender, RoutedEventArgs e) => ApplyMotion(MotionPreferences.ReducedMode);
+    // 分段切换只把选中索引翻译成原来的 ApplyTheme / ApplyMotion；程序同步选中项时不重复保存设置。
+    private void OnThemeSegmentChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingSegments || ThemeSegments is null || ThemeSegments.SelectedIndex is < 0 or >= 3) return;
+        var theme = ThemeOrder[ThemeSegments.SelectedIndex];
+        if (theme != ThemeManager.CurrentTheme) ApplyTheme(theme);
+    }
+
+    private void OnMotionSegmentChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingSegments || MotionSegments is null || MotionSegments.SelectedIndex is < 0 or >= 3) return;
+        var mode = MotionOrder[MotionSegments.SelectedIndex];
+        if (mode != MotionPreferences.CurrentMode) ApplyMotion(mode);
+    }
+
+    private void SelectSegment(SegmentedControl segments, int index)
+    {
+        var previous = _syncingSegments;
+        _syncingSegments = true;
+        try { segments.SelectedIndex = Math.Max(0, index); }
+        finally { _syncingSegments = previous; }
+    }
 
     private void OnLaunchAtStartupChanged(object? sender, RoutedEventArgs e)
     {
@@ -446,9 +546,7 @@ public partial class SettingsView : UserControl
     private void UpdateMotionButtons()
     {
         var mode = MotionPreferences.CurrentMode;
-        SetSegment(MotionFullBtn, mode == MotionPreferences.FullMode);
-        SetSegment(MotionSystemBtn, mode == MotionPreferences.SystemMode);
-        SetSegment(MotionReducedBtn, mode == MotionPreferences.ReducedMode);
+        SelectSegment(MotionSegments, Array.IndexOf(MotionOrder, mode));
         MotionStatus.Text = mode switch
         {
             MotionPreferences.ReducedMode => "立即切换页面和面板，保留基础操作反馈。",
@@ -564,21 +662,7 @@ public partial class SettingsView : UserControl
 
     private void UpdateThemeButtons(string theme)
     {
-        SetSegment(ThemeLightBtn, theme == ThemeManager.LightTheme);
-        SetSegment(ThemeDarkBtn, theme == ThemeManager.DarkTheme);
-        SetSegment(ThemeSystemBtn, theme == ThemeManager.SystemTheme);
-    }
-
-    private static void SetSegment(Button button, bool selected)
-    {
-        if (selected)
-        {
-            button.Classes.Add("selected");
-        }
-        else
-        {
-            button.Classes.Remove("selected");
-        }
+        SelectSegment(ThemeSegments, Array.IndexOf(ThemeOrder, theme));
     }
 
     private void OnCancel(object? sender, RoutedEventArgs e)
@@ -705,9 +789,10 @@ public partial class SettingsView : UserControl
                 }
             }
 
-            var ok = await Dialogs.ConfirmAsync(Host,
+            var ok = await Dialogs.ConfirmDangerAsync(Host,
                 "升级到本地密钥格式",
-                "升级后将去掉主密码保护层，本机用短密钥解锁，换电脑或忘记短密钥时使用加密密钥文件。此操作不可逆，确认已妥善保管 .kpkey 后再继续。");
+                "升级后将去掉主密码保护层，本机用短密钥解锁，换电脑或忘记短密钥时使用加密密钥文件。此操作不可逆，确认已妥善保管 .kpkey 后再继续。",
+                "确认升级");
             if (!ok || _session != session || !session.IsUnlocked)
             {
                 return;
@@ -809,7 +894,7 @@ public partial class SettingsView : UserControl
         }
 
         var targetSession = _session;
-        if (!await Dialogs.ConfirmAsync(Host, "还原加密备份", "还原会替换当前保险库中的全部条目。请准备该备份对应的加密密钥文件；还原后使用当前保险库的加密密钥保存。"))
+        if (!await Dialogs.ConfirmDangerAsync(Host, "还原加密备份", "还原会替换当前保险库中的全部条目。请准备该备份对应的加密密钥文件；还原后使用当前保险库的加密密钥保存。", "替换并还原"))
         {
             return;
         }
@@ -899,7 +984,7 @@ public partial class SettingsView : UserControl
             return;
         }
 
-        if (!await Dialogs.ConfirmAsync(Host, "撤销导入", "将删除上一次导入创建的全部条目（导入后修改过的也会删除）。确定撤销吗？"))
+        if (!await Dialogs.ConfirmDangerAsync(Host, "撤销导入", "将删除上一次导入创建的全部条目（导入后修改过的也会删除）。确定撤销吗？", "撤销导入"))
         {
             return;
         }
@@ -1121,7 +1206,7 @@ public partial class SettingsView : UserControl
             return;
         }
 
-        if (!await Dialogs.ConfirmAsync(Host, "断开云同步", "断开后本机不再上传/下载。本地保险库保留，可随时重新绑定。"))
+        if (!await Dialogs.ConfirmDangerAsync(Host, "断开云同步", "断开后本机不再上传/下载。本地保险库保留，可随时重新绑定。", "断开"))
         {
             return;
         }

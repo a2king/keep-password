@@ -70,6 +70,13 @@ public static class Motion
         }
 
         state.WindowAttached = true;
+        void UpdatePreferences()
+        {
+            if (IsEnabled) window.Classes.Remove("no-motion");
+            else window.Classes.Add("no-motion");
+        }
+        UpdatePreferences();
+        MotionPreferences.Changed += UpdatePreferences;
         window.Opened += (_, _) =>
         {
             if (window.Content is Control content)
@@ -77,7 +84,11 @@ public static class Motion
                 _ = EnterAsync(content, 10);
             }
         };
-        window.Closed += (_, _) => ResetTree(window);
+        window.Closed += (_, _) =>
+        {
+            MotionPreferences.Changed -= UpdatePreferences;
+            ResetTree(window);
+        };
     }
 
     private static State GetState(Control control) => States.GetValue(control, target =>

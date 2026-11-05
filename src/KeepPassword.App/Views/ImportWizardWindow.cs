@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
@@ -56,6 +57,7 @@ public sealed class ImportWizardWindow : Window
             Width = 220,
             HorizontalAlignment = HorizontalAlignment.Left
         };
+        AutomationProperties.SetName(_kindBox, "导入为条目类型");
         _kindBox.SelectionChanged += (_, _) => RebuildMapping();
 
         _mappingError.Foreground = Brush("Kp.Danger");
@@ -147,6 +149,7 @@ public sealed class ImportWizardWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 Margin = new Thickness(0, 4, 0, 4)
             };
+            AutomationProperties.SetName(box, $"第 {column + 1} 列映射到");
             box.SelectionChanged += (_, _) => Recompute();
             Grid.SetRow(name, column);
             Grid.SetRow(sample, column);

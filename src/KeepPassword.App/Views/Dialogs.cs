@@ -18,6 +18,10 @@ public static class Dialogs
     public static Task<bool> ConfirmAsync(Window owner, string title, string message, string okText) =>
         ShowAsync(owner, title, message, confirm: true, okText);
 
+    /// <summary>删除、撤销、放弃修改等不可恢复操作：确认按钮为红底白字。</summary>
+    public static Task<bool> ConfirmDangerAsync(Window owner, string title, string message, string okText = "删除") =>
+        ShowAsync(owner, title, message, confirm: true, okText, danger: true);
+
     /// <summary>返回所选项的下标，取消时返回 -1。</summary>
     public static async Task<int> ChooseAsync(Window owner, string title, string message, IReadOnlyList<string> options, string okText)
     {
@@ -32,7 +36,7 @@ public static class Dialogs
         return accepted ? list.SelectedIndex : -1;
     }
 
-    private static async Task<bool> ShowAsync(Window owner, string title, string message, bool confirm, string? okText = null, Control? extra = null)
+    private static async Task<bool> ShowAsync(Window owner, string title, string message, bool confirm, string? okText = null, Control? extra = null, bool danger = false)
     {
         var window = new Window
         {
@@ -83,7 +87,7 @@ public static class Dialogs
         }
 
         var ok = new Button { Content = okText ?? (confirm ? "确定" : "知道了"), MinWidth = 76 };
-        ok.Classes.Add("accent");
+        ok.Classes.Add(danger ? "danger" : "accent");
         ok.Click += (_, _) =>
         {
             accepted = true;

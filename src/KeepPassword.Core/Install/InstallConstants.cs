@@ -18,7 +18,7 @@ public static class InstallConstants
         @"Software\Google\Chrome\NativeMessagingHosts\" + NativeHostName,
         @"Software\Microsoft\Edge\NativeMessagingHosts\" + NativeHostName
     ];
-    public const string Version = "0.8.5";
+    public const string Version = "0.9.0";
 
     public static string DefaultInstallDirectory()
     {

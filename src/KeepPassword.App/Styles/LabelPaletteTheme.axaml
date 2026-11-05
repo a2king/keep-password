@@ -1,0 +1,33 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!--
+    空间 / 标签芯片配色：8 个柔和色相（蓝、青、绿、琥珀、橙、玫红、紫、石板灰）。
+    每个名称按名字稳定地映射到一个色相（见 Views/LabelPalette.cs），同名在任何地方颜色都一样。
+    每个色相三项：Bg 浅底、Fg 同色系深字、Border 同色系描边。文字对比度均 ≥ 4.5:1（WCAG AA）。
+  -->
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="Label.0.Bg" Color="#E8F0FE" /><SolidColorBrush x:Key="Label.0.Fg" Color="#1D4ED8" /><SolidColorBrush x:Key="Label.0.Border" Color="#BFD4FB" />
+      <SolidColorBrush x:Key="Label.1.Bg" Color="#E0F5F3" /><SolidColorBrush x:Key="Label.1.Fg" Color="#0F766E" /><SolidColorBrush x:Key="Label.1.Border" Color="#B3E5DE" />
+      <SolidColorBrush x:Key="Label.2.Bg" Color="#E6F4EA" /><SolidColorBrush x:Key="Label.2.Fg" Color="#166534" /><SolidColorBrush x:Key="Label.2.Border" Color="#BFE3C9" />
+      <SolidColorBrush x:Key="Label.3.Bg" Color="#FDF3DC" /><SolidColorBrush x:Key="Label.3.Fg" Color="#92400E" /><SolidColorBrush x:Key="Label.3.Border" Color="#F5DDA3" />
+      <SolidColorBrush x:Key="Label.4.Bg" Color="#FDECE0" /><SolidColorBrush x:Key="Label.4.Fg" Color="#B4380A" /><SolidColorBrush x:Key="Label.4.Border" Color="#F8CFB2" />
+      <SolidColorBrush x:Key="Label.5.Bg" Color="#FCE8EE" /><SolidColorBrush x:Key="Label.5.Fg" Color="#BE123C" /><SolidColorBrush x:Key="Label.5.Border" Color="#F5C2D1" />
+      <SolidColorBrush x:Key="Label.6.Bg" Color="#EFEAFD" /><SolidColorBrush x:Key="Label.6.Fg" Color="#6D28D9" /><SolidColorBrush x:Key="Label.6.Border" Color="#D6CAF8" />
+      <SolidColorBrush x:Key="Label.7.Bg" Color="#EEF0F4" /><SolidColorBrush x:Key="Label.7.Fg" Color="#475569" /><SolidColorBrush x:Key="Label.7.Border" Color="#D5DAE3" />
+      <!-- 芯片内小图标悬停底：半透明深色，叠在任何色相上都只是略深一档。 -->
+      <SolidColorBrush x:Key="Label.IconHover" Color="#14000000" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="Label.0.Bg" Color="#1E2A44" /><SolidColorBrush x:Key="Label.0.Fg" Color="#93B4F8" /><SolidColorBrush x:Key="Label.0.Border" Color="#2F4470" />
+      <SolidColorBrush x:Key="Label.1.Bg" Color="#16302E" /><SolidColorBrush x:Key="Label.1.Fg" Color="#7DD3C8" /><SolidColorBrush x:Key="Label.1.Border" Color="#24524C" />
+      <SolidColorBrush x:Key="Label.2.Bg" Color="#18301F" /><SolidColorBrush x:Key="Label.2.Fg" Color="#86D3A0" /><SolidColorBrush x:Key="Label.2.Border" Color="#285237" />
+      <SolidColorBrush x:Key="Label.3.Bg" Color="#36290F" /><SolidColorBrush x:Key="Label.3.Fg" Color="#F3C969" /><SolidColorBrush x:Key="Label.3.Border" Color="#5A4419" />
+      <SolidColorBrush x:Key="Label.4.Bg" Color="#3A2414" /><SolidColorBrush x:Key="Label.4.Fg" Color="#F5A97A" /><SolidColorBrush x:Key="Label.4.Border" Color="#603A20" />
+      <SolidColorBrush x:Key="Label.5.Bg" Color="#3A1A24" /><SolidColorBrush x:Key="Label.5.Fg" Color="#F49AB4" /><SolidColorBrush x:Key="Label.5.Border" Color="#62293B" />
+      <SolidColorBrush x:Key="Label.6.Bg" Color="#2A2142" /><SolidColorBrush x:Key="Label.6.Fg" Color="#BBA5F7" /><SolidColorBrush x:Key="Label.6.Border" Color="#45366E" />
+      <SolidColorBrush x:Key="Label.7.Bg" Color="#262A31" /><SolidColorBrush x:Key="Label.7.Fg" Color="#B6BFCC" /><SolidColorBrush x:Key="Label.7.Border" Color="#3C424D" />
+      <SolidColorBrush x:Key="Label.IconHover" Color="#1FFFFFFF" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

@@ -1,0 +1,351 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+        xmlns:views="using:KeepPassword.App.Views">
+  <Styles.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="CardBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="CardBorderBrush" Color="#163C3C43" />
+          <SolidColorBrush x:Key="CardHoverBorderBrush" Color="#662F7CF6" />
+          <!-- 选中底色为白色叠加约 6% 蓝色，悬停仅加深至约 9%。 -->
+          <SolidColorBrush x:Key="CardSelectedBackground" Color="#F3F7FE" />
+          <SolidColorBrush x:Key="CardSelectedHoverBackground" Color="#ECF3FE" />
+          <SolidColorBrush x:Key="CardSelectedBorderBrush" Color="#992F7CF6" />
+          <SolidColorBrush x:Key="CardAccentBrush" Color="#2F7CF6" />
+          <SolidColorBrush x:Key="CardFocusRingBrush" Color="#A62F7CF6" />
+          <SolidColorBrush x:Key="CardTextBrush" Color="#1D1D1F" />
+          <Color x:Key="CardSpotlightColor">#202F7CF6</Color>
+          <BoxShadows x:Key="CardShadowRest">0 1 2 0 #0A000000</BoxShadows>
+          <BoxShadows x:Key="CardShadowHover">0 8 24 0 #14000000</BoxShadows>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="CardBackground" Color="#29292C" />
+          <SolidColorBrush x:Key="CardBorderBrush" Color="#24EBEBF5" />
+          <SolidColorBrush x:Key="CardHoverBorderBrush" Color="#665CAEFF" />
+          <!-- 暗色表面叠加约 5.5% / 9% 蓝色，保留中性的卡片层级。 -->
+          <SolidColorBrush x:Key="CardSelectedBackground" Color="#2C3138" />
+          <SolidColorBrush x:Key="CardSelectedHoverBackground" Color="#2E363F" />
+          <SolidColorBrush x:Key="CardSelectedBorderBrush" Color="#805CAEFF" />
+          <SolidColorBrush x:Key="CardAccentBrush" Color="#64B5FF" />
+          <SolidColorBrush x:Key="CardFocusRingBrush" Color="#B364B5FF" />
+          <SolidColorBrush x:Key="CardTextBrush" Color="#F5F5F7" />
+          <Color x:Key="CardSpotlightColor">#2264B5FF</Color>
+          <BoxShadows x:Key="CardShadowRest">0 1 2 0 #0A0D2542</BoxShadows>
+          <BoxShadows x:Key="CardShadowHover">0 8 24 0 #140D2542</BoxShadows>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+
+      <!-- 所有过渡有限时长；光标移动只更新光晕中心，没有常驻动画或逐帧循环。 -->
+      <sys:TimeSpan x:Key="CardTransitionDuration">0:0:0.18</sys:TimeSpan>
+      <sys:TimeSpan x:Key="CardSpotlightTransitionDuration">0:0:0.15</sys:TimeSpan>
+
+      <!-- 可复用的列表项主题，支持常规 ItemsSource 与 ItemTemplate。 -->
+      <ControlTheme x:Key="CardItemTheme" TargetType="ListBoxItem">
+        <Setter Property="Background" Value="{DynamicResource CardBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource CardTextBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Focusable" Value="True" />
+        <Setter Property="UseLayoutRounding" Value="True" />
+        <Setter Property="ZIndex" Value="0" />
+        <Setter Property="views:SpotlightBehavior.IsEnabled" Value="True" />
+        <Setter Property="Template">
+          <ControlTemplate>
+            <!-- 始终保留 1px 边框；焦点环与强调条叠加绘制，不改变内容布局。 -->
+            <Grid x:Name="PART_CardRoot" Background="Transparent" RenderTransformOrigin="50%,50%">
+              <Border x:Name="PART_CardSurface"
+                      Background="{TemplateBinding Background}"
+                      BorderBrush="{TemplateBinding BorderBrush}"
+                      BorderThickness="{TemplateBinding BorderThickness}"
+                      CornerRadius="{TemplateBinding CornerRadius}"
+                      IsHitTestVisible="False" />
+              <!-- 仅光晕层按圆角 ClipToBounds，外层不裁剪投影。 -->
+              <Border x:Name="PART_Spotlight"
+                      CornerRadius="{TemplateBinding CornerRadius}"
+                      ClipToBounds="True"
+                      IsHitTestVisible="False" />
+              <Grid RowDefinitions="2*,6*,2*" IsHitTestVisible="False">
+                <Border x:Name="PART_SelectionAccent"
+                        Grid.Row="1" Width="3"
+                        HorizontalAlignment="Left"
+                        Margin="1,0,0,0" CornerRadius="1.5"
+                        Background="{DynamicResource CardAccentBrush}"
+                        RenderTransformOrigin="50%,50%" />
+              </Grid>
+              <ContentPresenter x:Name="PART_ContentPresenter"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                Padding="{TemplateBinding Padding}"
+                                Margin="{TemplateBinding BorderThickness}"
+                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                RecognizesAccessKey="True" />
+              <Border x:Name="PART_FocusRing"
+                      Margin="-3"
+                      CornerRadius="13"
+                      BorderThickness="2"
+                      BorderBrush="{DynamicResource CardFocusRingBrush}"
+                      IsHitTestVisible="False" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^ /template/ Grid#PART_CardRoot">
+          <Setter Property="RenderTransform" Value="translate(0px, 0px)" />
+          <Setter Property="Transitions">
+            <Transitions>
+              <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+            </Transitions>
+          </Setter>
+        </Style>
+        <Style Selector="^ /template/ Border#PART_CardSurface">
+          <Setter Property="BoxShadow" Value="{DynamicResource CardShadowRest}" />
+          <Setter Property="Transitions">
+            <Transitions>
+              <BrushTransition Property="Background" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+              <BrushTransition Property="BorderBrush" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+              <BoxShadowsTransition Property="BoxShadow" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+            </Transitions>
+          </Setter>
+        </Style>
+        <Style Selector="^ /template/ Border#PART_Spotlight">
+          <Setter Property="Opacity" Value="0" />
+          <Setter Property="Transitions">
+            <Transitions>
+              <DoubleTransition Property="Opacity" Duration="{StaticResource CardSpotlightTransitionDuration}" Easing="CubicEaseOut" />
+            </Transitions>
+          </Setter>
+        </Style>
+        <Style Selector="^ /template/ Border#PART_SelectionAccent">
+          <Setter Property="Opacity" Value="0" />
+          <Setter Property="RenderTransform" Value="scale(1, 0)" />
+          <Setter Property="Transitions">
+            <Transitions>
+              <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+              <DoubleTransition Property="Opacity" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+            </Transitions>
+          </Setter>
+        </Style>
+        <Style Selector="^ /template/ Border#PART_FocusRing">
+          <Setter Property="Opacity" Value="0" />
+          <Setter Property="Transitions">
+            <Transitions>
+              <DoubleTransition Property="Opacity" Duration="{StaticResource CardSpotlightTransitionDuration}" Easing="CubicEaseOut" />
+            </Transitions>
+          </Setter>
+        </Style>
+        <!-- ZIndex 避免相邻项盖住投影；宿主 ScrollViewer.Padding=12 留出边缘空间。 -->
+        <Style Selector="^:pointerover:not(:selected):not(:disabled)">
+          <Setter Property="ZIndex" Value="10" />
+        </Style>
+        <Style Selector="^:selected:pointerover:not(:disabled)">
+          <Setter Property="ZIndex" Value="1" />
+        </Style>
+        <Style Selector="^:pointerover:not(:selected):not(:disabled) /template/ Border#PART_CardSurface">
+          <Setter Property="BorderBrush" Value="{DynamicResource CardHoverBorderBrush}" />
+          <Setter Property="BoxShadow" Value="{DynamicResource CardShadowHover}" />
+        </Style>
+        <Style Selector="^:selected /template/ Border#PART_CardSurface">
+          <Setter Property="Background" Value="{DynamicResource CardSelectedBackground}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource CardSelectedBorderBrush}" />
+          <Setter Property="BoxShadow" Value="{DynamicResource CardShadowRest}" />
+        </Style>
+        <Style Selector="^:selected:pointerover:not(:disabled) /template/ Border#PART_CardSurface">
+          <Setter Property="Background" Value="{DynamicResource CardSelectedHoverBackground}" />
+        </Style>
+        <Style Selector="^:selected /template/ Grid#PART_CardRoot">
+          <Setter Property="RenderTransform" Value="translate(0px, 0px)" />
+        </Style>
+        <Style Selector="^:selected /template/ Border#PART_SelectionAccent">
+          <Setter Property="Opacity" Value="1" />
+          <Setter Property="RenderTransform" Value="scale(1, 1)" />
+        </Style>
+        <Style Selector="^:focus-visible /template/ Border#PART_FocusRing">
+          <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:disabled /template/ Grid#PART_CardRoot">
+          <Setter Property="Opacity" Value="0.55" />
+        </Style>
+        <Style Selector="^:disabled /template/ Border#PART_Spotlight">
+          <Setter Property="IsVisible" Value="False" />
+        </Style>
+      </ControlTheme>
+
+      <!-- 保留客户端现有 Button 事件和按行虚拟化，仅替换卡片模板。 -->
+      <ControlTheme x:Key="CardButtonTheme" TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource CardBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource CardTextBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Focusable" Value="True" />
+        <Setter Property="UseLayoutRounding" Value="True" />
+        <Setter Property="ZIndex" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="views:SpotlightBehavior.IsEnabled" Value="True" />
+        <Setter Property="Template">
+          <ControlTemplate>
+            <!-- 始终保留 1px 边框；焦点环与强调条叠加绘制，不改变内容布局。 -->
+            <Grid x:Name="PART_CardRoot" Background="Transparent" RenderTransformOrigin="50%,50%">
+              <Border x:Name="PART_CardSurface"
+                      Background="{TemplateBinding Background}"
+                      BorderBrush="{TemplateBinding BorderBrush}"
+                      BorderThickness="{TemplateBinding BorderThickness}"
+                      CornerRadius="{TemplateBinding CornerRadius}"
+                      IsHitTestVisible="False" />
+              <!-- 仅光晕层按圆角 ClipToBounds，外层不裁剪投影。 -->
+              <Border x:Name="PART_Spotlight"
+                      CornerRadius="{TemplateBinding CornerRadius}"
+                      ClipToBounds="True"
+                      IsHitTestVisible="False" />
+              <Grid RowDefinitions="2*,6*,2*" IsHitTestVisible="False">
+                <Border x:Name="PART_SelectionAccent"
+                        Grid.Row="1" Width="3"
+                        HorizontalAlignment="Left"
+                        Margin="1,0,0,0" CornerRadius="1.5"
+                        Background="{DynamicResource CardAccentBrush}"
+                        RenderTransformOrigin="50%,50%" />
+              </Grid>
+              <ContentPresenter x:Name="PART_ContentPresenter"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                Padding="{TemplateBinding Padding}"
+                                Margin="{TemplateBinding BorderThickness}"
+                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                RecognizesAccessKey="True" />
+              <Border x:Name="PART_FocusRing"
+                      Margin="-3"
+                      CornerRadius="13"
+                      BorderThickness="2"
+                      BorderBrush="{DynamicResource CardFocusRingBrush}"
+                      IsHitTestVisible="False" />
+            </Grid>
+          </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^ /template/ Grid#PART_CardRoot">
+          <Setter Property="RenderTransform" Value="translate(0px, 0px)" />
+          <Setter Property="Transitions">
+            <Transitions>
+              <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+            </Transitions>
+          </Setter>
+        </Style>
+        <Style Selector="^ /template/ Border#PART_CardSurface">
+          <Setter Property="BoxShadow" Value="{DynamicResource CardShadowRest}" />
+          <Setter Property="Transitions">
+            <Transitions>
+              <BrushTransition Property="Background" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+              <BrushTransition Property="BorderBrush" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+              <BoxShadowsTransition Property="BoxShadow" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+            </Transitions>
+          </Setter>
+        </Style>
+        <Style Selector="^ /template/ Border#PART_Spotlight">
+          <Setter Property="Opacity" Value="0" />
+          <Setter Property="Transitions">
+            <Transitions>
+              <DoubleTransition Property="Opacity" Duration="{StaticResource CardSpotlightTransitionDuration}" Easing="CubicEaseOut" />
+            </Transitions>
+          </Setter>
+        </Style>
+        <Style Selector="^ /template/ Border#PART_SelectionAccent">
+          <Setter Property="Opacity" Value="0" />
+          <Setter Property="RenderTransform" Value="scale(1, 0)" />
+          <Setter Property="Transitions">
+            <Transitions>
+              <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+              <DoubleTransition Property="Opacity" Duration="{StaticResource CardTransitionDuration}" Easing="CubicEaseOut" />
+            </Transitions>
+          </Setter>
+        </Style>
+        <Style Selector="^ /template/ Border#PART_FocusRing">
+          <Setter Property="Opacity" Value="0" />
+          <Setter Property="Transitions">
+            <Transitions>
+              <DoubleTransition Property="Opacity" Duration="{StaticResource CardSpotlightTransitionDuration}" Easing="CubicEaseOut" />
+            </Transitions>
+          </Setter>
+        </Style>
+        <!-- ZIndex 避免相邻项盖住投影；宿主 ScrollViewer.Padding=12 留出边缘空间。 -->
+        <Style Selector="^:pointerover:not(.selected):not(:disabled)">
+          <Setter Property="ZIndex" Value="10" />
+        </Style>
+        <Style Selector="^.selected:pointerover:not(:disabled)">
+          <Setter Property="ZIndex" Value="1" />
+        </Style>
+        <Style Selector="^:pointerover:not(.selected):not(:disabled) /template/ Border#PART_CardSurface">
+          <Setter Property="BorderBrush" Value="{DynamicResource CardHoverBorderBrush}" />
+          <Setter Property="BoxShadow" Value="{DynamicResource CardShadowHover}" />
+        </Style>
+        <Style Selector="^.selected /template/ Border#PART_CardSurface">
+          <Setter Property="Background" Value="{DynamicResource CardSelectedBackground}" />
+          <Setter Property="BorderBrush" Value="{DynamicResource CardSelectedBorderBrush}" />
+          <Setter Property="BoxShadow" Value="{DynamicResource CardShadowRest}" />
+        </Style>
+        <Style Selector="^.selected:pointerover:not(:disabled) /template/ Border#PART_CardSurface">
+          <Setter Property="Background" Value="{DynamicResource CardSelectedHoverBackground}" />
+        </Style>
+        <Style Selector="^.selected /template/ Grid#PART_CardRoot">
+          <Setter Property="RenderTransform" Value="translate(0px, 0px)" />
+        </Style>
+        <Style Selector="^.selected /template/ Border#PART_SelectionAccent">
+          <Setter Property="Opacity" Value="1" />
+          <Setter Property="RenderTransform" Value="scale(1, 1)" />
+        </Style>
+        <Style Selector="^:focus-visible /template/ Border#PART_FocusRing">
+          <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:pressed">
+          <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:disabled /template/ Grid#PART_CardRoot">
+          <Setter Property="Opacity" Value="0.55" />
+        </Style>
+        <Style Selector="^:disabled /template/ Border#PART_Spotlight">
+          <Setter Property="IsVisible" Value="False" />
+        </Style>
+      </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <!-- 卡片按下不降低整体透明度，避免全局 Button 按下样式冲淡文字与选中反馈。 -->
+  <Style Selector="Button.account-card:pressed, Button.filter-card:pressed">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+
+  <!-- 卡片自身或任意公共祖先的 no-motion 类都能立即关闭动效。 -->
+  <Style Selector="Button.no-motion, ListBoxItem.no-motion, .no-motion Button, .no-motion ListBoxItem">
+    <Setter Property="views:SpotlightBehavior.IsMotionEnabled" Value="False" />
+  </Style>
+  <Style Selector="Button.no-motion /template/ Grid#PART_CardRoot, ListBoxItem.no-motion /template/ Grid#PART_CardRoot, .no-motion Button /template/ Grid#PART_CardRoot, .no-motion ListBoxItem /template/ Grid#PART_CardRoot">
+    <Setter Property="Transitions" Value="{x:Null}" />
+    <Setter Property="RenderTransform" Value="translate(0px, 0px)" />
+  </Style>
+  <Style Selector="Button.no-motion /template/ Border#PART_CardSurface, ListBoxItem.no-motion /template/ Border#PART_CardSurface, .no-motion Button /template/ Border#PART_CardSurface, .no-motion ListBoxItem /template/ Border#PART_CardSurface">
+    <Setter Property="Transitions" Value="{x:Null}" />
+    <Setter Property="BoxShadow" Value="{DynamicResource CardShadowRest}" />
+  </Style>
+  <Style Selector="Button.no-motion /template/ Border#PART_Spotlight, ListBoxItem.no-motion /template/ Border#PART_Spotlight, .no-motion Button /template/ Border#PART_Spotlight, .no-motion ListBoxItem /template/ Border#PART_Spotlight">
+    <Setter Property="Transitions" Value="{x:Null}" />
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="Button.no-motion /template/ Border#PART_SelectionAccent, ListBoxItem.no-motion /template/ Border#PART_SelectionAccent, .no-motion Button /template/ Border#PART_SelectionAccent, .no-motion ListBoxItem /template/ Border#PART_SelectionAccent">
+    <Setter Property="Transitions" Value="{x:Null}" />
+  </Style>
+  <Style Selector="Button.no-motion /template/ Border#PART_FocusRing, ListBoxItem.no-motion /template/ Border#PART_FocusRing, .no-motion Button /template/ Border#PART_FocusRing, .no-motion ListBoxItem /template/ Border#PART_FocusRing">
+    <Setter Property="Transitions" Value="{x:Null}" />
+  </Style>
+</Styles>

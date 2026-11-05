@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Keep Password",
-  "version": "0.8.6",
+  "version": "0.9.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvaYsk74/a0DuJ43DnwYy6EzIMrFDwlYD7uSZBbTdpGU5AfXFEDRNCK1ypa4cFOgedZ6gfUm6osGCT6koxkU7KCqNVXtdLhODzf0aaxTmEEwE8worNVfZnAv6MJMqfqblKdf9APhfdfEDsAqFBxO+1IECxy7X2r5t3+03iPwbm5lHHTodOIKRIefxSCgzQwP4Dosek4Np287BRC40ujdS25rQ+HW80gP2Gmpj209tay4KIOCEb02gEnBK2QgkhEzj+4SfzwTNazXSy0a/bkjizoVe0ZY5ZEVvPDzFNhYp8to7AKK3DxTfF6tgYb+2PSO+AE3pANLU8cnFeAJwftvg5QIDAQAB",
   "description": "聚焦密码框后显示 Keep Password 候选账号，经短密钥确认后填入登录信息",
   "permissions": ["nativeMessaging", "storage"],

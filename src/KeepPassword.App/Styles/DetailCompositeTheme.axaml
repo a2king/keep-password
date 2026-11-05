@@ -1,0 +1,218 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="using:KeepPassword.App.Controls.Details"
+        xmlns:dv="using:KeepPassword.App.Views.Details"
+        xmlns:c="using:KeepPassword.App.Controls"
+        xmlns:views="using:KeepPassword.App.Views"
+        x:CompileBindings="False">
+  <Styles.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="Detail.SaveBackground" Color="#293148" />
+          <SolidColorBrush x:Key="Detail.SaveText" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Detail.SaveMuted" Color="#D2D9E8" />
+          <SolidColorBrush x:Key="Detail.SaveBorder" Color="#45516C" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="Detail.SaveBackground" Color="#30384C" />
+          <SolidColorBrush x:Key="Detail.SaveText" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Detail.SaveMuted" Color="#D2D9E8" />
+          <SolidColorBrush x:Key="Detail.SaveBorder" Color="#4C5874" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    <ControlTheme x:Key="{x:Type d:DetailHeader}" TargetType="d:DetailHeader">
+      <!-- 头部固定高度，长标题只省略，不挤压内容或改变详情滚动位置。 -->
+      <Setter Property="Height" Value="104" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{DynamicResource Detail.Background}" BorderBrush="{DynamicResource Detail.Divider}"
+                  BorderThickness="0,0,0,1" Padding="20,10,16,8">
+            <Grid ColumnDefinitions="52,12,*,32,32,32" RowDefinitions="38,24,18">
+              <Border Grid.RowSpan="2" Background="{DynamicResource Detail.AccentSoft}" Width="52" Height="52"
+                      CornerRadius="14" VerticalAlignment="Center">
+                <Path Data="{TemplateBinding KindIcon}" Width="25" Height="25" Stretch="Uniform"
+                      Stroke="{DynamicResource Detail.AccentText}" StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent" />
+              </Border>
+              <Grid Grid.Column="2">
+                <Button x:Name="PART_TitleButton" Classes="detail-title" HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left" ToolTip.Tip="编辑名称">
+                  <TextBlock Text="{TemplateBinding Title}" FontSize="20" FontWeight="SemiBold"
+                             TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Detail.Text}" />
+                </Button>
+                <TextBox x:Name="PART_TitleEditor" Text="{Binding Title, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                         FontSize="20" FontWeight="SemiBold" Padding="4,2" MinHeight="36" Height="36"
+                         Watermark="条目名称" VerticalContentAlignment="Center" />
+              </Grid>
+              <Button x:Name="PART_Favorite" Grid.Column="3" Classes="detail-icon" ToolTip.Tip="切换收藏">
+                <Path Data="{DynamicResource Detail.Icon.Star}" Width="16" Height="16" Stretch="None" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.4" StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent" />
+              </Button>
+              <Button x:Name="PART_More" Grid.Column="4" Classes="detail-icon" ToolTip.Tip="更多操作">
+                <Path Data="{DynamicResource Detail.Icon.More}" Width="16" Height="16" Stretch="None" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentPresenter}}" StrokeThickness="2.2" StrokeLineCap="Round" Fill="Transparent" />
+              </Button>
+              <Button x:Name="PART_CloseButton" Grid.Column="5" Classes="detail-icon" ToolTip.Tip="关闭详情 (Esc)">
+                <Path Data="{DynamicResource Detail.Icon.Close}" Width="16" Height="16" Stretch="None" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentPresenter}}" StrokeThickness="1.4" StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent" />
+              </Button>
+              <Grid Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="4" ColumnDefinitions="Auto,8,*" Margin="4,0,0,0">
+                <Border CornerRadius="5" Background="{DynamicResource Detail.Hover}" Padding="6,2" VerticalAlignment="Center">
+                  <TextBlock Text="{TemplateBinding KindLabel}" FontSize="11" Foreground="{DynamicResource Detail.TextMuted}" />
+                </Border>
+                <TextBlock Grid.Column="2" Text="{TemplateBinding Subtitle}" FontSize="12"
+                           Foreground="{DynamicResource Detail.TextMuted}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              </Grid>
+              <TextBlock Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="4" Text="{TemplateBinding ValidationMessage}"
+                         FontSize="11" Foreground="{DynamicResource Detail.Danger}" TextTrimming="CharacterEllipsis" Margin="4,0,0,0" />
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^ /template/ TextBox#PART_TitleEditor"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="^:editing /template/ TextBox#PART_TitleEditor"><Setter Property="IsVisible" Value="True" /></Style>
+      <Style Selector="^:editing /template/ Button#PART_TitleButton"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="^:favorite /template/ Button#PART_Favorite"><Setter Property="Foreground" Value="{DynamicResource Detail.Star}" /></Style>
+      <Style Selector="^:invalid /template/ TextBox#PART_TitleEditor"><Setter Property="BorderBrush" Value="{DynamicResource Detail.Danger}" /></Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type d:QuickActionBar}" TargetType="d:QuickActionBar">
+      <Setter Property="Margin" Value="-3,0" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" />
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type d:SaveBar}" TargetType="d:SaveBar">
+      <!-- 始终预留底部槽位；胶囊显隐只改变透明度和位移，不重新排版正文。 -->
+      <Setter Property="Height" Value="80" />
+      <Setter Property="Opacity" Value="0" />
+      <Setter Property="RenderTransform" Value="translate(0px, 8px)" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <DoubleTransition Property="Opacity" Duration="0:0:0.25" Easing="CubicEaseOut" />
+          <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.25" Easing="CubicEaseOut" />
+        </Transitions>
+      </Setter>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{DynamicResource Detail.SaveBackground}" BorderBrush="{DynamicResource Detail.SaveBorder}"
+                  BorderThickness="1" CornerRadius="16" Margin="16,4,16,10" Padding="12,7,12,8" BoxShadow="{DynamicResource Detail.PopupShadow}">
+            <Grid RowDefinitions="18,30" ColumnDefinitions="*,Auto,8,Auto">
+              <TextBlock Grid.ColumnSpan="4" Text="{TemplateBinding Message}" FontSize="11"
+                         Foreground="{DynamicResource Detail.SaveMuted}" TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="{TemplateBinding Message}" />
+              <Button x:Name="PART_Cancel" Grid.Row="1" Grid.Column="1" Classes="detail-save-cancel"
+                      Content="{TemplateBinding CancelLabel}" />
+              <Button x:Name="PART_SaveButton" Grid.Row="1" Grid.Column="3" Classes="detail-save-primary"
+                      Content="{TemplateBinding SaveLabel}" IsEnabled="{TemplateBinding CanSave}" MinWidth="96" />
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:shown"><Setter Property="Opacity" Value="1" /><Setter Property="RenderTransform" Value="translate(0px, 0px)" /></Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type d:AccountSection}" TargetType="d:AccountSection">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <StackPanel Spacing="10">
+            <Grid ColumnDefinitions="*,32">
+              <TextBlock Text="{TemplateBinding HeaderText}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource Detail.TextMuted}"
+                         Margin="3,0,0,0" VerticalAlignment="Center" />
+              <Button x:Name="PART_Remove" Grid.Column="1" Classes="detail-icon" ToolTip.Tip="账号操作">
+                <Path Data="{DynamicResource Detail.Icon.More}" Width="16" Height="16" Stretch="None" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentPresenter}}" StrokeThickness="2.2" StrokeLineCap="Round" Fill="Transparent" />
+              </Button>
+            </Grid>
+            <Grid x:Name="PART_TabStrip" ColumnDefinitions="*,8,32">
+              <!-- 账号数量不定：wrap 放不下就换行，全部账号可见、单击切换，没有横向滚动条。 -->
+              <c:SegmentedControl x:Name="PART_Accounts" Classes="compact wrap" AutomationProperties.Name="切换账号" />
+              <Button x:Name="PART_Add" Grid.Column="2" Classes="detail-icon" VerticalAlignment="Top" IsEnabled="{TemplateBinding CanAdd}" ToolTip.Tip="添加账号">
+                <Path Data="{DynamicResource Detail.Icon.Add}" Width="16" Height="16" Stretch="None" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentPresenter}}" StrokeThickness="1.4" StrokeLineCap="Round" Fill="Transparent" />
+              </Button>
+            </Grid>
+            <!-- 快捷操作紧跟在账号页签下面：它复制的是当前账号的值，切换页签时一起变化。 -->
+            <!-- 没有可用操作时快捷栏自身隐藏，这里同步隐藏，避免 StackPanel 多留一段空白间距。 -->
+            <ContentPresenter x:Name="PART_Actions" Content="{TemplateBinding Actions}"
+                              IsVisible="{Binding $self.Content.IsVisible, FallbackValue=False}" />
+            <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" />
+            <Button x:Name="PART_AddBelow" Classes="detail-title" IsEnabled="{TemplateBinding CanAdd}" HorizontalAlignment="Left"
+                    Foreground="{DynamicResource Detail.AccentText}" Content="＋ 添加账号" FontSize="12" Margin="0,-2,0,0" />
+          </StackPanel>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <!-- 复用 FieldRow 的编辑/复制语义，仅收紧同一行中的端口布局。 -->
+  <Style Selector="d|FieldRow.detail-endpoint-host /template/ Button#PART_EditButton, d|FieldRow.detail-endpoint-port /template/ Button#PART_EditButton">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="d|FieldRow.detail-endpoint-port /template/ Border#PART_Divider"><Setter Property="IsVisible" Value="False" /></Style>
+
+  <!-- 保存栏两个按钮与全局文字按钮一致：蓝底白字 + 1px 描边。 -->
+  <Style Selector="Button.detail-save-cancel, Button.detail-save-primary">
+    <Setter Property="Padding" Value="12,4" /><Setter Property="CornerRadius" Value="8" />
+    <Setter Property="FontSize" Value="12" /><Setter Property="MinHeight" Value="30" /><Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Background" Value="{DynamicResource Kp.Button.Primary}" /><Setter Property="Foreground" Value="White" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.PrimaryBorder}" /><Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector="Button.detail-save-primary:disabled /template/ ContentPresenter">
+    <Setter Property="Opacity" Value="0.45" /><Setter Property="Background" Value="{DynamicResource Kp.Button.Primary}" /><Setter Property="Foreground" Value="White" />
+  </Style>
+  <Style Selector="Button.detail-icon">
+    <Setter Property="Width" Value="32" /><Setter Property="Height" Value="32" />
+    <Setter Property="Padding" Value="0" /><Setter Property="CornerRadius" Value="8" />
+    <Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Detail.TextMuted}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" /><Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.detail-title">
+    <Setter Property="Padding" Value="4,2" /><Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" /><Setter Property="CornerRadius" Value="8" />
+  </Style>
+  <Style Selector="Button.detail-action">
+    <Setter Property="Padding" Value="12,6" /><Setter Property="CornerRadius" Value="8" />
+    <Setter Property="BorderThickness" Value="1" /><Setter Property="BorderBrush" Value="{DynamicResource Detail.Border}" />
+    <Setter Property="Background" Value="{DynamicResource Detail.GroupBackground}" />
+    <Setter Property="Foreground" Value="{DynamicResource Detail.Text}" />
+  </Style>
+  <!-- 紧凑快捷操作：图标与文字同一行，高 34（原来上下排列高 62）。 -->
+  <Style Selector="Button.detail-quick-action">
+    <Setter Property="Padding" Value="8,6" /><Setter Property="MinHeight" Value="34" />
+    <Setter Property="CornerRadius" Value="10" /><Setter Property="BorderThickness" Value="1" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" /><Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Detail.Border}" />
+    <Setter Property="Background" Value="{DynamicResource Detail.GroupBackground}" />
+    <Setter Property="Foreground" Value="{DynamicResource Detail.AccentText}" />
+  </Style>
+  <Style Selector="Button.detail-icon:focus-visible /template/ ContentPresenter, Button.detail-action:focus-visible /template/ ContentPresenter, Button.detail-quick-action:focus-visible /template/ ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource Detail.Focus}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector=".no-motion Button.detail-quick-action /template/ ContentPresenter, .no-motion d|SaveBar, d|SaveBar.no-motion">
+    <Setter Property="Transitions" Value="{x:Null}" />
+  </Style>
+
+  <!--
+    详情页鼠标悬停不做任何视觉变化。Fluent 自带的按钮主题会在 :pointerover / :pressed 时给模板内
+    ContentPresenter 换成灰色底和默认前景色，所以这里在详情面板范围内把两种状态都"钉回"按钮自身的颜色。
+    按下时只保留全局的 0.84 透明度反馈。下拉建议列表里的选项（detail-chip-option）是列表项，保留悬停高亮。
+  -->
+  <Style Selector="dv|DetailPanelView Button:not(.detail-chip-option):pointerover /template/ ContentPresenter,
+                   dv|DetailPanelView Button:not(.detail-chip-option):pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{Binding $parent[Button].Background}" />
+    <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
+    <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+  </Style>
+  <!-- 详情面板里的玻璃控件：分段文字、下拉与开关的描边，鼠标经过都不变。 -->
+  <Style Selector="dv|DetailPanelView ListBoxItem:pointerover:not(:selected)">
+    <Setter Property="Foreground" Value="{DynamicResource GlassTextSecondary}" />
+  </Style>
+  <Style Selector="dv|DetailPanelView ComboBox:pointerover:not(:dropdownopen) /template/ Border#PART_Trough">
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassFieldStroke}" />
+  </Style>
+  <Style Selector="dv|DetailPanelView ToggleSwitch:pointerover /template/ Border#PART_TrackOff">
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassTroughStroke}" />
+  </Style>
+</Styles>

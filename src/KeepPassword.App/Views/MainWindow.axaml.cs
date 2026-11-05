@@ -4,9 +4,11 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using KeepPassword.App.Controls;
 using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
 using KeepPassword.Core.Security;
@@ -18,7 +20,8 @@ namespace KeepPassword.App.Views;
 public partial class MainWindow : Window
 {
     private const double AccountCardMinWidth = 270;
-    private readonly DispatcherTimer _totpTimer;
+    private IDisposable? _legacyTotpSubscription;
+    private Guid? _presentedDetailId;
     private VaultStore? _store;
     private VaultSession? _session;
     private VaultLocation? _location;
@@ -33,6 +36,8 @@ public partial class MainWindow : Window
     private readonly TranslateTransform _detailTranslation = new();
     private bool _detailLayoutOpen;
     private bool _updatingAccountColumns;
+    private bool _kindFiltersExpanded;
+    private bool _tagFiltersExpanded;
     private int _detailRevision;
 
     public bool AllowClose { get; set; }
@@ -46,8 +51,13 @@ public partial class MainWindow : Window
         InitializeComponent();
         _detailTranslation.X = DetailHost.Width;
         DetailHost.RenderTransform = _detailTranslation;
-        _totpTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _totpTimer.Tick += (_, _) => View?.RefreshTotp();
+        ModernDetail.SaveRequested += () => OnSave(this, new RoutedEventArgs());
+        ModernDetail.CloseRequested += () => OnCloseDetail(this, new RoutedEventArgs());
+        ModernDetail.DeleteRequested += () => OnDelete(this, new RoutedEventArgs());
+        ModernDetail.FavoriteRequested += () => OnToggleFavorite(this, new RoutedEventArgs());
+        ModernDetail.ScanRequested += field => OnScanTotpField(new Button { Tag = field }, new RoutedEventArgs());
+        ModernDetail.RemoveAccountRequested += account => OnRemoveAccount(new Button { Tag = account }, new RoutedEventArgs());
+        ModernDetail.RemoveCustomFieldRequested += field => OnRemoveCustomField(new Button { Tag = field }, new RoutedEventArgs());
         UnlockRoot.Unlocked += session => Unlocked?.Invoke(session);
         SettingsRoot.VaultChanged += (_, _) => View?.Reload();
         SettingsRoot.LockRequested += (_, _) => LockRequested?.Invoke(this, EventArgs.Empty);
@@ -66,14 +76,20 @@ public partial class MainWindow : Window
             ?? Task.FromResult<IReadOnlyList<BreachFinding>>([]);
         AccountScroller.SizeChanged += (_, _) => UpdateAccountColumns();
         UpdateThemeButtonState(ThemeManager.CurrentTheme);
+        UpdateMotionPreference();
+        MotionPreferences.Changed += UpdateMotionPreference;
         ThemeManager.ThemeChanged += UpdateThemeButtonState;
         AppUpdateService.Changed += OnAppUpdateChanged;
         UpdateSettingsBadge();
         Closed += (_, _) =>
         {
             ThemeManager.ThemeChanged -= UpdateThemeButtonState;
+            MotionPreferences.Changed -= UpdateMotionPreference;
             AppUpdateService.Changed -= OnAppUpdateChanged;
             ObserveView(null);
+            ModernDetail.SetEditor(null);
+            _legacyTotpSubscription?.Dispose();
+            _legacyTotpSubscription = null;
             CancelMotion();
         };
         Opened += (_, _) =>
@@ -105,6 +121,12 @@ public partial class MainWindow : Window
 
     public MainViewModel? View => VaultRoot.DataContext as MainViewModel;
 
+    private void UpdateMotionPreference()
+    {
+        if (Motion.IsEnabled) Classes.Remove("no-motion");
+        else Classes.Add("no-motion");
+    }
+
     public void ShowUnlockScreen()
     {
         if (_store is null || _location is null)
@@ -112,7 +134,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        _totpTimer.Stop();
+        ResetFilterExpansion();
+        _legacyTotpSubscription?.Dispose();
+        _legacyTotpSubscription = null;
+        ModernDetail.SetEditor(null);
         // Never retain a password view for a closing animation when locking.
         VaultRoot.IsVisible = false;
         CancelMotion();
@@ -154,6 +179,7 @@ public partial class MainWindow : Window
     public void ShowVault(VaultSession session)
     {
         _session = session;
+        ResetFilterExpansion();
         VaultRoot.DataContext = new MainViewModel(session, _platformAutofill);
         ObserveView(View);
         ShowPage(ItemsPage, animate: false);
@@ -161,7 +187,6 @@ public partial class MainWindow : Window
         UpdateAccountColumns();
         UnlockRoot.ClearSecrets();
         UnlockRoot.IsVisible = false;
-        _totpTimer.Start();
         _ = Motion.EnterAsync(VaultRoot, 6);
     }
 
@@ -221,7 +246,7 @@ public partial class MainWindow : Window
 
     private void UpdateAccountColumns()
     {
-        var width = AccountScroller.Bounds.Width;
+        var width = AccountScroller.Bounds.Width - AccountScroller.Padding.Left - AccountScroller.Padding.Right;
         if (width > 0)
         {
             // Resizing can change the column count, but must not fade the list on every breakpoint.
@@ -253,6 +278,76 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnToggleKindFilters(object? sender, RoutedEventArgs e)
+    {
+        _kindFiltersExpanded = !_kindFiltersExpanded;
+        UpdateFilterExpansion(
+            KindFiltersList,
+            KindFiltersCollapsedIcon,
+            KindFiltersExpandedIcon,
+            sender as Button,
+            _kindFiltersExpanded,
+            "类型筛选");
+    }
+
+    private void OnToggleTagFilters(object? sender, RoutedEventArgs e)
+    {
+        _tagFiltersExpanded = !_tagFiltersExpanded;
+        UpdateFilterExpansion(
+            TagFiltersList,
+            TagFiltersCollapsedIcon,
+            TagFiltersExpandedIcon,
+            sender as Button,
+            _tagFiltersExpanded,
+            "标签筛选");
+    }
+
+    private void UpdateFilterExpansion(
+        ItemsControl list,
+        PathIcon collapsedIcon,
+        PathIcon expandedIcon,
+        Button? toggleButton,
+        bool expanded,
+        string label)
+    {
+        if (expanded)
+        {
+            // Height is set in XAML for the compact default state. Clearing the
+            // local value lets the WrapPanel measure all filter rows naturally.
+            list.ClearValue(Layoutable.HeightProperty);
+        }
+        else
+        {
+            list.Height = 48;
+        }
+
+        collapsedIcon.IsVisible = !expanded;
+        expandedIcon.IsVisible = expanded;
+        if (toggleButton is not null)
+        {
+            ToolTip.SetTip(toggleButton, expanded ? $"收起{label}" : $"展开{label}");
+        }
+
+        // The filter rows sit above the account list. Force a layout pass so the
+        // list moves immediately when the panel changes between one and many rows.
+        ItemsPage.UpdateLayout();
+    }
+
+    private void ResetFilterExpansion()
+    {
+        _kindFiltersExpanded = false;
+        _tagFiltersExpanded = false;
+        KindFiltersList.Height = 48;
+        TagFiltersList.Height = 48;
+        KindFiltersCollapsedIcon.IsVisible = true;
+        KindFiltersExpandedIcon.IsVisible = false;
+        TagFiltersCollapsedIcon.IsVisible = true;
+        TagFiltersExpandedIcon.IsVisible = false;
+        ToolTip.SetTip(KindFiltersToggleButton, "展开类型筛选");
+        ToolTip.SetTip(TagFiltersToggleButton, "展开标签筛选");
+        ItemsPage.UpdateLayout();
+    }
+
     private async void OnToggleFavorite(object? sender, RoutedEventArgs e)
     {
         if (View?.ToggleFavorite() is { } error)
@@ -261,19 +356,13 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnAccountAuthPassword(object? sender, RoutedEventArgs e)
+    private void OnAccountAuthChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (sender is Button { Tag: AccountEditorView account })
+        // 只有用户切换造成与当前值不一致时才调用 SetKeyAuth；绑定回写同一索引时不重复触发。
+        if (sender is SegmentedControl { Tag: AccountEditorView account, SelectedIndex: >= 0 and var index }
+            && (index == 1) != account.UseKeyAuth)
         {
-            account.SetKeyAuth(false);
-        }
-    }
-
-    private void OnAccountAuthKey(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: AccountEditorView account })
-        {
-            account.SetKeyAuth(true);
+            account.SetKeyAuth(index == 1);
         }
     }
 
@@ -400,17 +489,25 @@ public partial class MainWindow : Window
 
     private async void OnCopyField(object? sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: SecretFieldView field })
+        if (sender is Button button && button.Tag is SecretFieldView field)
         {
-            await CopyAsync(field.Value, field.Label, field.Sensitive);
+            if (await CopyAsync(field.Value, field.Label, field.Sensitive))
+            {
+                _ = CopyFeedback.ShowAsync(button);
+            }
         }
     }
 
     private async void OnCopyFingerprint(object? sender, RoutedEventArgs e)
     {
-        if (View is { SshFingerprint: var fingerprint } && fingerprint.StartsWith("SHA256:", StringComparison.Ordinal))
+        if (sender is Button button
+            && View is { SshFingerprint: var fingerprint }
+            && fingerprint.StartsWith("SHA256:", StringComparison.Ordinal))
         {
-            await CopyAsync(fingerprint, "指纹", sensitive: false);
+            if (await CopyAsync(fingerprint, "指纹", sensitive: false))
+            {
+                _ = CopyFeedback.ShowAsync(button);
+            }
         }
     }
 
@@ -425,17 +522,21 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (account.IsBlank || await Dialogs.ConfirmAsync(this, "删除账号", $"删除账号「{account.DisplayName}」？保存后生效。"))
+        if (await Dialogs.ConfirmDangerAsync(this, "删除账号", $"删除账号「{account.DisplayName}」？保存后生效。"))
         {
             View.RemoveAccount(account);
+            ModernDetail.Refresh();
         }
     }
 
     private async void OnCopyNode(object? sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: NodeEditorView node })
+        if (sender is Button button && button.Tag is NodeEditorView node)
         {
-            await CopyAsync(node.Address, "节点地址", sensitive: false);
+            if (await CopyAsync(node.Address, "节点地址", sensitive: false))
+            {
+                _ = CopyFeedback.ShowAsync(button);
+            }
         }
     }
 
@@ -454,34 +555,44 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (await Dialogs.ConfirmAsync(this, "删除字段", $"删除字段「{field.Name}」？保存后生效。"))
+        if (await Dialogs.ConfirmDangerAsync(this, "删除字段", $"删除字段「{field.Name}」？保存后生效。"))
         {
             View.RemoveCustomField(field);
         }
     }
 
-    private async Task CopyAsync(string value, string label, bool sensitive)
+    private async Task<bool> CopyAsync(string value, string label, bool sensitive)
     {
         if (View is null)
         {
-            return;
+            return false;
         }
 
         if (string.IsNullOrEmpty(value) || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
         {
             View.Status = $"{label}为空，没有复制。";
-            return;
+            return false;
         }
 
         if (!sensitive)
         {
-            await clipboard.SetTextAsync(value);
+            if (!await ClipboardService.CopyAsync(this, value, sensitive: false))
+            {
+                return false;
+            }
             View.Status = $"已复制{label}。";
-            return;
+            return true;
         }
 
-        View.Status = $"已复制{label}。若 30 秒后剪贴板仍是该内容，会自动清除。";
-        await SecretClipboard.CopyAsync(clipboard, value);
+        if (!await ClipboardService.CopyAsync(clipboard, value, sensitive: true))
+        {
+            return false;
+        }
+        if (View is not null)
+        {
+            View.Status = $"已复制{label}。若 30 秒后剪贴板仍是该内容，会自动清除。";
+        }
+        return true;
     }
 
     private async Task AddLabelAsync(string name, bool isSpace)
@@ -547,6 +658,7 @@ public partial class MainWindow : Window
         }
 
         _cloudSync?.NotifyLocalChanged();
+        SynchronizeDetailView();
     }
 
     private async void OnDelete(object? sender, RoutedEventArgs e)
@@ -561,7 +673,7 @@ public partial class MainWindow : Window
         var message = references.Count == 0
             ? "删除后无法恢复。确定删除这条记录吗？"
             : $"以下 {references.Count} 个条目正在使用这把 SSH 密钥：{string.Join("、", references)}。\n删除后会同时解除它们的关联（改回密码认证），且无法恢复。确定删除吗？";
-        if (!await Dialogs.ConfirmAsync(this, "删除条目", message)
+        if (!await Dialogs.ConfirmDangerAsync(this, "删除条目", message)
             || View != view || revision != _detailRevision)
         {
             return;
@@ -707,6 +819,10 @@ public partial class MainWindow : Window
             }
         }
 
+        // 页面隐藏后不保留已揭示的密码；验证码时钟只服务可见内容。
+        if (page != ItemsPage) ModernDetail.ResetTransientState();
+        UpdateLegacyTotpSubscription();
+
         if (play)
         {
             if (previous is not null)
@@ -737,6 +853,10 @@ public partial class MainWindow : Window
         {
             view.PropertyChanged += OnViewChanged;
         }
+        if (view is null)
+        {
+            ModernDetail.SetEditor(null);
+        }
     }
 
     private void OnViewChanged(object? sender, PropertyChangedEventArgs e)
@@ -752,7 +872,7 @@ public partial class MainWindow : Window
         }
         else if (e.PropertyName == nameof(MainViewModel.Status))
         {
-            _ = Motion.FadeAsync(DetailStatus);
+            if (!ModernDetail.IsVisible) _ = Motion.FadeAsync(DetailStatus);
         }
     }
 
@@ -767,6 +887,37 @@ public partial class MainWindow : Window
         return revision;
     }
 
+    private void SynchronizeDetailView()
+    {
+        var view = View;
+        var modern = view is { HasDetail: true }
+            && view.Kind is VaultItemKind.Login or VaultItemKind.Server or VaultItemKind.Database;
+        var reset = _presentedDetailId != view?.DetailId;
+        ModernDetail.IsVisible = modern;
+        DetailContent.IsVisible = !modern;
+        // 隐藏的旧模板解除绑定，避免同一个字段同时维护两份输入框。
+        DetailContent.DataContext = modern ? null : view;
+        ModernDetail.SetEditor(modern ? view : null);
+        if (modern) ModernDetail.Refresh(resetState: reset);
+        _presentedDetailId = view?.DetailId;
+        UpdateLegacyTotpSubscription();
+    }
+
+    private void UpdateLegacyTotpSubscription()
+    {
+        var needed = View is { HasDetail: true } && !ModernDetail.IsVisible
+            && _activePage == ItemsPage && VaultRoot.IsVisible;
+        if (!needed)
+        {
+            _legacyTotpSubscription?.Dispose();
+            _legacyTotpSubscription = null;
+        }
+        else
+        {
+            _legacyTotpSubscription ??= TotpTicker.Subscribe(_ => View?.RefreshTotp());
+        }
+    }
+
     private void RevealDetail()
     {
         if (View?.HasDetail != true)
@@ -774,9 +925,17 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Keep the list header compact while the detail drawer is open. The
+        // user can still expand filters again after closing the drawer.
+        if (_kindFiltersExpanded || _tagFiltersExpanded)
+        {
+            ResetFilterExpansion();
+        }
+
+        SynchronizeDetailView();
         var alreadyVisible = DetailHost.IsVisible;
         _ = AnimateDetailAsync(open: true);
-        if (alreadyVisible)
+        if (alreadyVisible && !ModernDetail.IsVisible)
         {
             // Switching entries should never displace the header, fields or action buttons.
             _ = Motion.FadeAsync(DetailScroller);
@@ -920,6 +1079,12 @@ public partial class MainWindow : Window
     private void ResetDetail()
     {
         CancelDetailAnimation();
+        ModernDetail.SetEditor(null);
+        ModernDetail.IsVisible = false;
+        DetailContent.DataContext = null;
+        _presentedDetailId = null;
+        _legacyTotpSubscription?.Dispose();
+        _legacyTotpSubscription = null;
         DetailHost.IsVisible = false;
         _detailTranslation.X = DetailHost.Width;
         DetailHost.IsHitTestVisible = false;
@@ -1005,6 +1170,6 @@ public partial class MainWindow : Window
             return true;
         }
 
-        return await Dialogs.ConfirmAsync(this, "放弃修改", "当前条目还有未保存的修改。要放弃这些修改吗？");
+        return await Dialogs.ConfirmDangerAsync(this, "放弃修改", "当前条目还有未保存的修改。要放弃这些修改吗？", "放弃修改");
     }
 }
