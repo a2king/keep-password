@@ -93,16 +93,19 @@
             </StackPanel>
           </Button>
           <Button x:Name="NavSettings" Classes="nav" Click="OnUsers" ToolTip.Tip="账户与偏好设置">
-            <Grid>
-              <StackPanel Spacing="4" HorizontalAlignment="Center">
+            <StackPanel Spacing="4" HorizontalAlignment="Center">
+              <!-- 红点挂在图标自己的右上角，而不是整个按钮的右上角：不管侧栏多宽，它都紧贴图标。
+                   外圈用侧栏底色描一圈，让它在图标线条上也看得清。 -->
+              <Panel Width="20" Height="20" HorizontalAlignment="Center">
                 <PathIcon Data="{StaticResource Icon.Settings}" Width="20" Height="20" />
-                <TextBlock Text="设置" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
-              </StackPanel>
-              <Ellipse x:Name="SettingsUpdateBadge" Width="8" Height="8"
-                       Fill="{DynamicResource Kp.Danger}"
-                       HorizontalAlignment="Right" VerticalAlignment="Top"
-                       Margin="0,4,10,0" IsVisible="False" />
-            </Grid>
+                <Ellipse x:Name="SettingsUpdateBadge" Width="10" Height="10"
+                         Fill="{DynamicResource Kp.Danger}"
+                         Stroke="{DynamicResource Kp.Sidebar}" StrokeThickness="2"
+                         HorizontalAlignment="Right" VerticalAlignment="Top"
+                         Margin="0,-3,-5,0" IsHitTestVisible="False" IsVisible="False" />
+              </Panel>
+              <TextBlock Text="设置" FontWeight="SemiBold" FontSize="11.5" HorizontalAlignment="Center" />
+            </StackPanel>
           </Button>
         </StackPanel>
 

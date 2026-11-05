@@ -147,12 +147,14 @@
 推荐使用安装程序：
 
 1. 运行 `KeepPassword-Setup-win-x64.exe`。
-2. 选择安装目录，可勾选：开始菜单快捷方式、桌面快捷方式、安装完成后立即运行。
-3. 安装过程有进度条：先解压压缩包，再复制到目标目录；写完后可查看日志，再点「下一步」进入完成页。
-4. 完成后点「完成」关闭安装窗口。若勾选了立即运行，主程序会自动启动。
+2. 选择安装目录，可勾选：开始菜单快捷方式、桌面快捷方式、安装完成后立即运行、开机时自动启动。**开机自动启动默认不勾选**，之后也可以在设置里改。
+3. 安装过程有进度条：先解压压缩包，再复制到目标目录。写完直接进入完成页，不需要再点「下一步」；日志收在「详细信息」里，需要排查时展开。
+4. 完成页会说明这次安装改动了什么：重装同一版本时，注册表是 0 项写入（只有内容真的变化才会写）。页面上还有「安装 Edge 扩展」按钮。点「完成」关闭窗口，若勾选了立即运行，主程序会自动启动。
 5. 默认安装到 `%LOCALAPPDATA%\Programs\KeepPassword`。覆盖安装会清理旧版本残留程序文件，不会动缓存里的保险库。旧版仍在运行时会弹窗询问是否退出占用进程后再继续。
 6. 安装包是压缩后的自包含运行时（主程序与 Native Host 共用一份），**不需要安装 .NET**。
-7. 卸载运行安装目录里的 `Uninstall.exe`。可勾选「同时删除缓存目录」，**默认不勾选**。
+7. 卸载运行安装目录里的 `Uninstall.exe`。它会先退出还在运行的程序，清除开机启动、浏览器连接、快捷方式和卸载信息。页面会显示你的保险库保存在哪里；「同时删除保险库数据」**默认不勾选**，勾选后还要再确认一次才能点卸载。静默卸载用 `Uninstall.exe --quiet`（不删数据）。
+
+**为什么重装时安全软件会提示“注册表修改”？** 安装程序和主程序会写开机启动项、浏览器连接项和卸载信息，这些正是安全软件重点盯防的位置。现在的做法是：先读后写，值没有变化就一次都不写；快捷方式改用系统接口直接创建，不再启动 PowerShell 子进程；开机启动默认关闭。另外，每次打包出的程序文件哈希都不同，没有代码签名时安全软件无法记住“信任这个发布者”，所以正式分发时请给安装包做代码签名（见 [发布与签名](docs/release.md)）。
 
 也可以解压便携包 `KeepPassword-win-x64.zip` 直接使用。
 
@@ -263,7 +265,7 @@ TOTP，RFC 6238。默认 SHA-1、6 位、30 秒；otpauth:// 链接里写了 6�
 - 浏览器：Chrome / Edge 使用扩展和 Native Messaging。保险库首次在本机解锁后会生成仅含账号元数据的本机保护索引；之后即使桌面端处于锁定状态，聚焦密码框仍会显示候选账号，只有选择账号并输入短密钥时才临时解密并填充。扩展按钮和 `Ctrl+Shift+L` 仍可手动重新打开候选框。**HTTP Basic 等浏览器原生认证弹窗无法由扩展填充**（不在网页 DOM 内）。
 - Linux：程序补全仍为接口占位（AT-SPI 以后再接）。浏览器扩展和本机消息协议是同一份，客户端在三个系统上都会听本机端口。
 
-扩展在 `extension/`，Manifest V3。安装桌面端不会自动连接浏览器。首次需要在浏览器扩展管理页加载 `extension` 文件夹，复制真实扩展 ID，再运行 `extension/register-windows.ps1 -ExtensionId "实际扩展ID"`。Windows 发布包的宿主是安装根目录中的 `KeepPassword.NativeHost.exe`。完整步骤及排错说明见 [浏览器连接说明](extension/README.md)。
+扩展在 `extension/`，Manifest V3。安装程序和桌面端会自动把本机连接登记好，商店版扩展装上就能用，不需要运行脚本。只有从本地文件夹加载未上架的扩展时，才需要按 [浏览器连接说明](extension/README.md) 手动登记。Windows 发布包的宿主是安装根目录中的 `KeepPassword.NativeHost.exe`。
 
 > 自动填充流程截图待补。
 
@@ -299,18 +301,21 @@ dotnet run --project src\KeepPassword.App -c Release
 
 也可以直接运行编译产物 `src\KeepPassword.App\bin\Release\net8.0\KeepPassword.exe`。如果已经装了正式版并在运行（包括托盘），先退出再启动本地版本。
 
-打 Windows 安装包：
+打 Windows 安装包（必须用 `pwsh` 7，Windows 自带的 PowerShell 5.1 会被拒绝）：
 
 ```powershell
-pwsh -NoProfile -File artifacts\package.ps1 -Version v0.9.0
+pwsh -NoProfile -File artifacts\package.ps1
 ```
 
-产物在 `artifacts\v0.9.0\`：安装程序、便携包、`KeepPassword-Chrome-Extension-v0.9.0.zip`、`KeepPassword-Edge-Extension-v0.9.0.zip`，以及安装包校验文件 `KeepPassword-Setup-win-x64.exe.sha256`。
+不带参数时版本号取自 `Directory.Build.props`。发版时用 `scripts\set-version.ps1 -Version 0.9.1` 一次改完所有位置，再打包。提供证书和更新签名私钥即可同时做代码签名与更新签名，详见 [发布与签名](docs/release.md)。
+
+产物在 `artifacts\<版本>\`：安装程序、便携包、两个扩展包、`KeepPassword-Setup-win-x64.exe.sha256`，以及启用更新签名后的 `KeepPassword-Setup-win-x64.exe.sig`。`scripts\prune-artifacts.ps1` 可预览并清理旧版本产物。
 
 发布到 GitHub Releases 时请一并上传：
 
 - `KeepPassword-Setup-win-x64.exe`
 - `KeepPassword-Setup-win-x64.exe.sha256`（客户端自动更新会校验）
+- `KeepPassword-Setup-win-x64.exe.sig`（启用更新签名后必须上传，缺少时客户端会拒绝安装）
 - 可选：便携包与扩展包
 
 安装版会在启动时静默检查最新 Release，设置页可手动检查、下载到安装目录下的 `cache\`，校验通过后再启动安装程序。便携解压版不走自动安装，可从设置打开 GitHub 发布页。

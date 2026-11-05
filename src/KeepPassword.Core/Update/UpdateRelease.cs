@@ -4,7 +4,8 @@ public sealed record UpdateRelease(
     string TagName,
     string Version,
     string SetupDownloadUrl,
-    string Sha256DownloadUrl);
+    string Sha256DownloadUrl,
+    string? SignatureDownloadUrl = null);
 
 public sealed record UpdateCheckResult(
     string CurrentVersion,

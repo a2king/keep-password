@@ -10,9 +10,12 @@ public sealed class GitHubUpdateClient : IDisposable
 {
     private readonly HttpClient _http;
     private readonly bool _ownsClient;
+    private readonly IReadOnlyList<string> _trustedKeys;
 
-    public GitHubUpdateClient(HttpClient? httpClient = null)
+    /// <param name="trustedPublicKeys">受信的签名公钥；默认用程序内置的 <see cref="UpdateTrust.PublicKeys"/>，测试可传入自己的。</param>
+    public GitHubUpdateClient(HttpClient? httpClient = null, IReadOnlyList<string>? trustedPublicKeys = null)
     {
+        _trustedKeys = trustedPublicKeys ?? UpdateTrust.PublicKeys;
         _ownsClient = httpClient is null;
         _http = httpClient ?? new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         EnsureHeaders(_http);
@@ -63,7 +66,8 @@ public sealed class GitHubUpdateClient : IDisposable
                     null,
                     false,
                     "最新发布缺少安装包或校验文件，请确认 Release 中包含 "
-                    + UpdatePaths.SetupAssetName + " 与 " + UpdatePaths.Sha256AssetName + "。");
+                    + UpdatePaths.SetupAssetName + "、" + UpdatePaths.Sha256AssetName
+                    + (_trustedKeys.Count > 0 ? " 与 " + UpdatePaths.SignatureAssetName : "") + "。");
             }
 
             if (!AppVersion.TryParse(currentVersion, out var current)
@@ -130,6 +134,17 @@ public sealed class GitHubUpdateClient : IDisposable
                 throw new InvalidDataException("安装包校验失败，已删除下载文件。请重新下载。");
             }
 
+            try
+            {
+                await VerifySignatureAsync(release, actual, cache, cancellationToken).ConfigureAwait(false);
+            }
+            catch (InvalidDataException)
+            {
+                TryDelete(setupTmp);
+                TryDelete(shaPath);
+                throw;
+            }
+
             ReplaceFile(setupTmp, setupPath);
             progress?.Report(1);
             return new UpdateDownloadResult(setupPath, expected);
@@ -139,6 +154,39 @@ public sealed class GitHubUpdateClient : IDisposable
             TryDelete(setupTmp);
             TryDelete(shaTmp);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// 配置了受信公钥就必须验签通过；没配置公钥时保持旧行为（只校验哈希）。
+    /// 失败时抛出异常，调用方的 catch 会删除已下载的临时文件。
+    /// </summary>
+    private async Task VerifySignatureAsync(UpdateRelease release, string actualSha256, string cache, CancellationToken cancellationToken)
+    {
+        if (_trustedKeys.Count == 0)
+        {
+            return;
+        }
+
+        if (release.SignatureDownloadUrl is null)
+        {
+            throw new InvalidDataException("这个版本没有附带发布者签名，已拒绝安装。");
+        }
+
+        var sigTmp = Path.Combine(cache, UpdatePaths.SignatureAssetName + ".tmp");
+        try
+        {
+            await DownloadFileAsync(release.SignatureDownloadUrl, sigTmp, progress: null, weightStart: 0, weightEnd: 0, cancellationToken)
+                .ConfigureAwait(false);
+            var signature = await File.ReadAllTextAsync(sigTmp, cancellationToken).ConfigureAwait(false);
+            if (!UpdateSignature.Verify(release.Version, actualSha256, signature, _trustedKeys))
+            {
+                throw new InvalidDataException("发布者签名校验失败，已拒绝安装。安装包可能被替换过。");
+            }
+        }
+        finally
+        {
+            TryDelete(sigTmp);
         }
     }
 
@@ -200,6 +248,7 @@ public sealed class GitHubUpdateClient : IDisposable
 
         string? setupUrl = null;
         string? shaUrl = null;
+        string? signatureUrl = null;
         foreach (var asset in assets.EnumerateArray())
         {
             var name = asset.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
@@ -217,6 +266,10 @@ public sealed class GitHubUpdateClient : IDisposable
             {
                 shaUrl = url;
             }
+            else if (string.Equals(name, UpdatePaths.SignatureAssetName, StringComparison.OrdinalIgnoreCase))
+            {
+                signatureUrl = url;
+            }
         }
 
         if (setupUrl is null || shaUrl is null)
@@ -224,7 +277,7 @@ public sealed class GitHubUpdateClient : IDisposable
             return null;
         }
 
-        return new UpdateRelease(tag.Trim(), version.ToString(), setupUrl, shaUrl);
+        return new UpdateRelease(tag.Trim(), version.ToString(), setupUrl, shaUrl, signatureUrl);
     }
 
     private async Task DownloadFileAsync(

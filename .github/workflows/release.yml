@@ -1,0 +1,82 @@
+name: release
+
+# 推送形如 v0.9.1 的标签时，在干净的 Windows 环境里自动打包、签名并创建 GitHub Release。
+# 需要在仓库 Settings → Secrets 里配置（都可选，没配置就跳过对应的签名并在日志里警告）：
+#   CODESIGN_CERT_BASE64    Authenticode 代码签名证书（.pfx）的 base64
+#   CODESIGN_CERT_PASSWORD  该证书的密码
+#   UPDATE_SIGN_KEY_BASE64  更新签名私钥（keygen 生成的 .keppriv.pem）的 base64
+#   UPDATE_SIGN_PASSWORD    该私钥的密码
+# 注意：这条流水线我没法在本地真正跑通（需要 GitHub Actions 环境和你的密钥），首次发版请先用预发布标签试一次。
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: 标签必须与 Directory.Build.props 的版本一致
+        shell: pwsh
+        run: |
+          $props = [regex]::Match((Get-Content -Raw Directory.Build.props), '<Version>([^<]+)</Version>').Groups[1].Value
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          if ($props -ne $tag) { throw "标签 v$tag 与 Directory.Build.props 里的版本 $props 不一致。先用 scripts/set-version.ps1 改版本再打标签。" }
+
+      - name: 测试
+        run: dotnet test KeepPassword.sln -c Release --nologo
+
+      - name: 还原签名材料
+        shell: pwsh
+        env:
+          CODESIGN_CERT_BASE64: ${{ secrets.CODESIGN_CERT_BASE64 }}
+          UPDATE_SIGN_KEY_BASE64: ${{ secrets.UPDATE_SIGN_KEY_BASE64 }}
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "signing"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          if ($env:CODESIGN_CERT_BASE64) {
+            [IO.File]::WriteAllBytes("$dir\codesign.pfx", [Convert]::FromBase64String($env:CODESIGN_CERT_BASE64))
+            "CODESIGN_CERT_PATH=$dir\codesign.pfx" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          }
+          if ($env:UPDATE_SIGN_KEY_BASE64) {
+            [IO.File]::WriteAllBytes("$dir\update.keppriv.pem", [Convert]::FromBase64String($env:UPDATE_SIGN_KEY_BASE64))
+            "KP_UPDATE_KEY=$dir\update.keppriv.pem" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          }
+
+      - name: 打包
+        shell: pwsh
+        env:
+          CODESIGN_CERT_PASSWORD: ${{ secrets.CODESIGN_CERT_PASSWORD }}
+          KP_SIGN_PASSWORD: ${{ secrets.UPDATE_SIGN_PASSWORD }}
+        run: ./artifacts/package.ps1 -Version "${{ github.ref_name }}"
+
+      - name: 清理签名材料
+        if: always()
+        shell: pwsh
+        run: Remove-Item -Recurse -Force (Join-Path $env:RUNNER_TEMP "signing") -ErrorAction SilentlyContinue
+
+      - name: 创建 Release 并上传
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dir = "artifacts/${{ github.ref_name }}"
+          $files = @(
+            "$dir/KeepPassword-Setup-win-x64.exe",
+            "$dir/KeepPassword-Setup-win-x64.exe.sha256",
+            "$dir/KeepPassword-win-x64.zip",
+            "$dir/KeepPassword-Chrome-Extension-${{ github.ref_name }}.zip",
+            "$dir/KeepPassword-Edge-Extension-${{ github.ref_name }}.zip"
+          )
+          if (Test-Path "$dir/KeepPassword-Setup-win-x64.exe.sig") { $files += "$dir/KeepPassword-Setup-win-x64.exe.sig" }
+          gh release create "${{ github.ref_name }}" @files --title "${{ github.ref_name }}" --generate-notes

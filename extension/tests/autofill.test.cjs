@@ -16,9 +16,18 @@ function background(store = {}) {
   const badges = [];
   const titles = [];
   const nativeMessages = [];
-  const port = { onMessage: event(), onDisconnect: event(), postMessage(message) { nativeMessages.push(message); }, disconnect() {} };
+  const ports = [];
+  const timers = new Map();
+  let timerId = 0;
+  const makePort = () => {
+    const created = { onMessage: event(), onDisconnect: event(), postMessage(message) { nativeMessages.push(message); }, disconnect() { this.disconnected = true; } };
+    ports.push(created);
+    return created;
+  };
+  const port = makePort();
+  let connects = 0;
   const chrome = {
-    runtime: { onMessage: event(), connectNative: () => port },
+    runtime: { onMessage: event(), connectNative: () => (connects++ === 0 ? port : makePort()) },
     storage: { session: {
       set(values, callback) { Object.assign(store, values); callback?.(); },
       get(key, callback) { callback(store); },
@@ -34,8 +43,13 @@ function background(store = {}) {
       sendMessage(tabId, message, target, callback) { sent.push({ tabId, message, target }); callback({ type: "filled" }); }
     }
   };
-  vm.runInNewContext(backgroundSource, { chrome });
-  return { chrome, store, sent, badges, titles, nativeMessages, port,
+  vm.runInNewContext(backgroundSource, {
+    chrome,
+    setTimeout(callback, ms) { timers.set(++timerId, { callback, ms }); return timerId; },
+    clearTimeout(id) { timers.delete(id); }
+  });
+  return { chrome, store, sent, badges, titles, nativeMessages, port, ports, timers,
+    connects: () => connects,
     receive: chrome.runtime.onMessage.listeners[0], click: chrome.action.onClicked.listeners[0] };
 }
 
@@ -54,13 +68,58 @@ test("one request reaches only the last focused frame, including after worker su
   assert.equal(restarted.sent[1].target.frameId, 0);
 });
 
-test("a trusted password focus starts the inline candidate request automatically", () => {
+test("a password focus only records the frame; the content script queries candidates itself", () => {
   const harness = background();
-  harness.receive({ type: "password-focused", auto: true }, { tab: { id: 11 }, frameId: 2, documentId: "login" }, () => {});
-  assert.equal(harness.sent.length, 1);
-  assert.equal(harness.sent[0].message.type, "fill-request");
-  assert.equal(harness.sent[0].message.automatic, true);
-  assert.equal(harness.sent[0].target.frameId, 2);
+  let reply;
+  harness.receive({ type: "password-focused" }, { tab: { id: 11 }, frameId: 2, documentId: "login" }, (value) => { reply = value; });
+  assert.equal(reply.type, "ready");
+  assert.equal(harness.sent.length, 0);
+  assert.equal(harness.nativeMessages.length, 0);
+  assert.deepEqual({ ...harness.store["password-frame-11"] }, { frameId: 2, documentId: "login" });
+});
+
+test("requests share one native port and replies are matched by requestId", () => {
+  const harness = background();
+  const replies = [];
+  const sender = { tab: { id: 5 }, url: "https://real.example/login" };
+  harness.receive({ type: "discover-candidates" }, sender, (value) => replies.push(["first", value]));
+  harness.receive({ type: "discover-candidates" }, sender, (value) => replies.push(["second", value]));
+  assert.equal(harness.connects(), 1);
+  const [first, second] = harness.nativeMessages;
+  assert.notEqual(first.requestId, second.requestId);
+  harness.port.onMessage.listeners[0]({ type: "noMatch", requestId: second.requestId });
+  harness.port.onMessage.listeners[0]({ type: "candidates", candidates: [], requestId: first.requestId });
+  assert.deepEqual(replies.map(([name, value]) => [name, value.type, value.requestId]),
+    [["second", "noMatch", undefined], ["first", "candidates", undefined]]);
+  harness.receive({ type: "discover-candidates" }, sender, () => {});
+  assert.equal(harness.connects(), 1);
+});
+
+test("an older host that answers once without requestId still serves every request", () => {
+  const harness = background();
+  const replies = [];
+  const sender = { tab: { id: 5 }, url: "https://real.example/login" };
+  harness.receive({ type: "discover-candidates" }, sender, (value) => replies.push(value.type));
+  harness.receive({ type: "fill-candidate", shortKey: "key" }, sender, (value) => replies.push(value.type));
+  harness.port.onMessage.listeners[0]({ type: "noMatch" });
+  harness.port.onDisconnect.listeners[0]();
+  assert.deepEqual(replies, ["noMatch"]);
+  assert.equal(harness.connects(), 2);
+  assert.equal(harness.nativeMessages.at(-1).type, "fill-candidate");
+  harness.ports[1].onMessage.listeners[0]({ type: "fill", username: "a", password: "b" });
+  assert.deepEqual(replies, ["noMatch", "fill"]);
+});
+
+test("an idle native port is closed so the worker can sleep", () => {
+  const harness = background();
+  harness.receive({ type: "discover-candidates" }, { tab: { id: 5 }, url: "https://real.example/login" }, () => {});
+  const { requestId } = harness.nativeMessages[0];
+  harness.port.onMessage.listeners[0]({ type: "noMatch", requestId });
+  const idle = Array.from(harness.timers.values()).find((timer) => timer.ms === 5 * 60 * 1000);
+  idle.callback();
+  assert.equal(harness.port.disconnected, true);
+  harness.receive({ type: "discover-candidates" }, { tab: { id: 5 }, url: "https://real.example/login" }, () => {});
+  assert.equal(harness.connects(), 2);
 });
 
 test("matching uses the browser-reported frame URL and preserves host errors", () => {
@@ -325,4 +384,76 @@ test("a read-only password box does not request credentials", () => {
   harness.receive({ type: "fill-request" }, {}, (response) => { result = response; });
   assert.equal(harness.requests.length, 0);
   assert.equal(result.type, "error");
+});
+
+function cachedContent() {
+  const listeners = {};
+  const requests = [];
+  const notices = [];
+  let now = 1_000_000;
+  class Input {
+    constructor(type) { this.type = type; this.isConnected = true; this.disabled = false; this.readOnly = false; this._value = ""; this.form = null; }
+    get value() { return this._value; }
+    set value(next) { this._value = next; }
+    getAttribute(name) { return name === "type" ? this.type : null; }
+    focus() {}
+    dispatchEvent() {}
+  }
+  const password = new Input("password");
+  const document = {
+    title: "Login", activeElement: null,
+    addEventListener(name, callback) { listeners[name] = callback; },
+    querySelector: (selector) => (selector.includes('input[type="password"]') ? password : null),
+    querySelectorAll: () => [password],
+    createElement() { return { setAttribute() {}, style: {}, remove() {} }; },
+    documentElement: { appendChild(value) { notices.push(value.textContent); } }
+  };
+  const chrome = { runtime: {
+    onMessage: event(),
+    sendMessage(message, callback) {
+      if (message.type === "discover-candidates") requests.push({ message, callback });
+      else callback({ type: "ready" });
+    }
+  } };
+  const FakeDate = class extends Date { static now() { return now; } };
+  vm.runInNewContext(contentSource, {
+    HTMLInputElement: Input, document, location: { href: "https://real.example/login" }, chrome, URL, Date: FakeDate,
+    Event: class { constructor(type) { this.type = type; } },
+    setTimeout: () => 1, clearTimeout() {}
+  });
+  return { password, requests, notices, receive: chrome.runtime.onMessage.listeners[0],
+    focus: () => listeners.focusin({ target: password, isTrusted: true }),
+    advance: (ms) => { now += ms; } };
+}
+
+test("a login page prefetches candidates once and focus uses the cached answer", () => {
+  const harness = cachedContent();
+  assert.equal(harness.requests.length, 1);
+  assert.equal(harness.requests[0].message.type, "discover-candidates");
+  harness.requests[0].callback({ type: "noMatch" });
+
+  harness.focus();
+  assert.equal(harness.requests.length, 1);
+
+  let result;
+  assert.equal(harness.receive({ type: "fill-request" }, {}, (value) => { result = value; }), false);
+  assert.equal(result.type, "noMatch");
+  assert.match(harness.notices.at(-1), /没有匹配/);
+
+  harness.advance(3000);
+  harness.focus();
+  assert.equal(harness.requests.length, 2);
+});
+
+test("focus while the prefetch is still pending joins it instead of sending another request", () => {
+  const harness = cachedContent();
+  harness.focus();
+  let result;
+  harness.receive({ type: "fill-request" }, {}, (value) => { result = value; });
+  assert.equal(harness.requests.length, 1);
+  harness.requests[0].callback({ type: "locked" });
+  assert.equal(result.type, "locked");
+  assert.match(harness.notices.at(-1), /先解锁/);
+  harness.receive({ type: "fill-request" }, {}, () => {});
+  assert.equal(harness.requests.length, 2);
 });

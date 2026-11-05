@@ -24,8 +24,8 @@
     <!-- 固定内容区宽度，避免进度条/日志随进度值改变测量宽度 -->
     <Border Background="White" CornerRadius="18" Margin="24" Padding="28" BoxShadow="0 18 48 0 #1A152033"
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-      <DockPanel>
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,18">
+      <Grid RowDefinitions="Auto,*">
+        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,0,0,18">
           <Image Source="/Assets/logo.png" Width="40" Height="40" />
           <StackPanel VerticalAlignment="Center">
             <TextBlock Text="Keep Password" FontSize="22" FontWeight="SemiBold" />
@@ -34,7 +34,7 @@
         </StackPanel>
 
         <!-- 欢迎页 -->
-        <StackPanel x:Name="WelcomePage" Spacing="0">
+        <StackPanel x:Name="WelcomePage" Grid.Row="1" Spacing="0">
           <TextBlock x:Name="WelcomeTitle" Text="欢迎安装 Keep Password"
                      FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
           <TextBlock x:Name="WelcomeText" Text="将覆盖已有安装目录中的程序文件，并清理旧版本残留。保险库和缓存不会被删除。不需要安装 .NET。"
@@ -47,6 +47,8 @@
           <CheckBox x:Name="StartMenuBox" Content="创建开始菜单快捷方式" IsChecked="True" Margin="0,16,0,0" />
           <CheckBox x:Name="DesktopBox" Content="创建桌面快捷方式" IsChecked="True" Margin="0,8,0,0" />
           <CheckBox x:Name="LaunchBox" Content="安装完成后立即运行" IsChecked="True" Margin="0,8,0,0" />
+          <!-- 默认不勾选：不再悄悄把程序加入开机启动，由用户自己决定（之后也可以在设置里改）。 -->
+          <CheckBox x:Name="AutostartBox" Content="开机时自动启动（最小化到托盘）" IsChecked="False" Margin="0,8,0,0" />
           <TextBlock x:Name="WelcomeError" TextWrapping="Wrap" Foreground="#D14343" Margin="0,12,0,0" IsVisible="False" />
           <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,20,0,0">
             <Button Classes="ghost" Content="取消" Click="OnCancel" />
@@ -54,14 +56,9 @@
           </StackPanel>
         </StackPanel>
 
-        <!-- 进度页：进度条与日志区始终占满内容区全宽 -->
-        <DockPanel x:Name="ProgressPage" IsVisible="False" LastChildFill="True">
-          <StackPanel x:Name="ProgressFooter" DockPanel.Dock="Bottom" Orientation="Horizontal"
-                      HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
-            <Button x:Name="ProgressNextButton" Classes="accent" Content="下一步"
-                    IsVisible="False" IsEnabled="False" Click="OnProgressNext" />
-          </StackPanel>
-          <StackPanel DockPanel.Dock="Top" Spacing="0">
+        <!-- 进度页：进度条与日志始终占满整行宽度；日志直接显示。100% 之后点“下一步”才进入完成页。 -->
+        <Grid x:Name="ProgressPage" Grid.Row="1" IsVisible="False" RowDefinitions="Auto,*,Auto">
+          <StackPanel Grid.Row="0" Spacing="0">
             <TextBlock x:Name="ProgressHeading" Text="正在安装…"
                        FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
             <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,10">
@@ -70,14 +67,11 @@
                          Foreground="#0B4F9C" Margin="12,0,0,0" MinWidth="48" HorizontalAlignment="Right"
                          TextAlignment="Right" />
             </Grid>
-            <!-- 外层 Grid 固定可用宽度，ProgressBar 只负责填充，避免随 Value 改变 DesiredSize -->
-            <Grid MinHeight="10">
-              <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Height="10" CornerRadius="5"
-                           HorizontalAlignment="Stretch" MinWidth="0" />
-            </Grid>
+            <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Height="10" CornerRadius="5"
+                         HorizontalAlignment="Stretch" />
           </StackPanel>
-          <Border Background="#F5F7FA" BorderBrush="#E3E8EF" BorderThickness="1" CornerRadius="8"
-                  Margin="0,14,0,0" MinHeight="200">
+          <Border Grid.Row="1" Background="#F5F7FA" BorderBrush="#E3E8EF" BorderThickness="1" CornerRadius="8"
+                  Margin="0,14,0,0" MinHeight="160">
             <ScrollViewer x:Name="LogScroller" HorizontalScrollBarVisibility="Disabled"
                           VerticalScrollBarVisibility="Auto">
               <SelectableTextBlock x:Name="LogText"
@@ -89,21 +83,42 @@
                                    Margin="10,8" />
             </ScrollViewer>
           </Border>
-        </DockPanel>
+          <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+            <Button x:Name="ProgressNextButton" Classes="accent" Content="下一步"
+                    IsVisible="False" IsEnabled="False" Click="OnProgressNext" />
+          </StackPanel>
+        </Grid>
 
-        <!-- 完成页 -->
-        <StackPanel x:Name="FinishPage" IsVisible="False">
-          <TextBlock x:Name="FinishTitle" Text="安装完成"
-                     FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
-          <TextBlock x:Name="FinishText"
-                     Text="Keep Password 已安装到本机。可以开始使用了。"
-                     TextWrapping="Wrap" Foreground="#6B778C" Margin="0,0,0,12" />
-          <TextBlock x:Name="FinishError" TextWrapping="Wrap" Foreground="#D14343" Margin="0,0,0,12" IsVisible="False" />
-          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,20,0,0">
+        <!-- 完成页：点“下一步”之后才出现，询问是否安装浏览器扩展，然后完成。 -->
+        <Grid x:Name="FinishPage" Grid.Row="1" IsVisible="False" RowDefinitions="Auto,*,Auto">
+          <StackPanel Grid.Row="0">
+            <TextBlock x:Name="FinishTitle" Text="安装完成"
+                       FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
+            <TextBlock x:Name="FinishText"
+                       Text="Keep Password 已安装到本机。可以开始使用了。"
+                       TextWrapping="Wrap" Foreground="#6B778C" Margin="0,0,0,12" />
+            <TextBlock x:Name="FinishError" TextWrapping="Wrap" Foreground="#D14343" Margin="0,0,0,12" IsVisible="False" />
+            <TextBlock x:Name="FinishSummary" TextWrapping="Wrap" Foreground="#6B778C" FontSize="12" Margin="0,0,0,12" IsVisible="False" />
+          </StackPanel>
+          <!-- 浏览器里自动填充还需要装一个浏览器扩展；本机连接已经由安装程序登记好了。 -->
+          <Border x:Name="ExtensionPanel" Grid.Row="1" VerticalAlignment="Top" IsVisible="False"
+                  Background="#F5F8FF" BorderBrush="#D6E4FF" BorderThickness="1" CornerRadius="10" Padding="14,12">
+            <StackPanel Spacing="10">
+              <TextBlock Text="想在浏览器里自动填充密码吗？" FontWeight="SemiBold" />
+              <TextBlock Text="安装对应浏览器的 Keep Password 扩展即可，不需要运行任何脚本。" TextWrapping="Wrap"
+                         Foreground="#6B778C" FontSize="12.5" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="accent" Content="安装 Edge 扩展" Click="OnInstallEdgeExtension" />
+                <Button Classes="accent" Content="安装 Chrome 扩展" Click="OnInstallChromeExtension" />
+              </StackPanel>
+              <TextBlock x:Name="ChromeSteps" TextWrapping="Wrap" Foreground="#4A5568" FontSize="12" IsVisible="False" />
+            </StackPanel>
+          </Border>
+          <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,20,0,0">
             <Button x:Name="FinishButton" Classes="accent" Content="完成" Click="OnFinish" />
           </StackPanel>
-        </StackPanel>
-      </DockPanel>
+        </Grid>
+      </Grid>
     </Border>
   </Panel>
 </Window>

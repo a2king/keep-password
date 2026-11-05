@@ -9,3 +9,7 @@ TestResults/
 artifacts/
 !artifacts/package.ps1
 src/KeepPassword.Setup/payload.zip
+
+# 更新签名私钥：只能留在发布者自己的机器上，绝不能提交
+*.keppriv.pem
+release-keys/

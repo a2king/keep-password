@@ -1,3 +1,4 @@
+using System.Text.Json;
 using KeepPassword.Core.Autofill;
 using KeepPassword.Core.Messaging;
 using KeepPassword.Core.Paths;
@@ -454,6 +455,44 @@ public class AutofillAndPathTests
         {
             File.Delete(path);
         }
+    }
+
+    [Fact]
+    public void NativeHost_RelayEchoesRequestIdOnErrors()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "kp-missing-" + Guid.NewGuid().ToString("n") + ".json");
+        var reply = JsonSerializer.Deserialize<JsonElement>(
+            NativeHostBridge.Relay("{\"type\":\"discover-candidates\",\"url\":\"https://example.com\",\"requestId\":42}", path));
+        Assert.Equal("error", reply.GetProperty("type").GetString());
+        Assert.Equal(42, reply.GetProperty("requestId").GetInt32());
+
+        var noId = NativeHostBridge.Relay("{\"type\":\"discover-candidates\",\"url\":\"https://example.com\"}", path);
+        Assert.DoesNotContain("requestId", noId);
+    }
+
+    [Fact]
+    public void NativeHost_RequestIdIsReplacedNotDuplicated()
+    {
+        Assert.Equal("\"abc\"", NativeHostBridge.RequestIdOf("{\"requestId\":\"abc\"}"));
+        Assert.Null(NativeHostBridge.RequestIdOf("{\"requestId\":{\"x\":1}}"));
+        Assert.Null(NativeHostBridge.RequestIdOf("not json"));
+        var merged = NativeHostBridge.WithRequestId("{\"type\":\"noMatch\",\"requestId\":1}", "7");
+        Assert.Equal("{\"type\":\"noMatch\",\"requestId\":7}", merged);
+        Assert.Equal("not json", NativeHostBridge.WithRequestId("not json", "7"));
+    }
+
+    [Fact]
+    public async Task NativeHost_ListenerServesSeveralRelaysWithMatchingIds()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "kp-relay-" + Guid.NewGuid().ToString("n") + ".json");
+        using var listener = AutofillListener.Start((json, _) => Task.FromResult(
+            AutofillProtocol.Serialize(json.Contains("first", StringComparison.Ordinal) ? AutofillResponse.NoMatch() : AutofillResponse.Locked())));
+        listener.Publish(path);
+        var first = Task.Run(() => NativeHostBridge.Relay("{\"type\":\"discover-candidates\",\"url\":\"https://first.example\",\"requestId\":1}", path));
+        var second = Task.Run(() => NativeHostBridge.Relay("{\"type\":\"discover-candidates\",\"url\":\"https://second.example\",\"requestId\":2}", path));
+        var replies = await Task.WhenAll(first, second);
+        Assert.Equal("{\"type\":\"noMatch\",\"requestId\":1}", replies[0]);
+        Assert.Equal("{\"type\":\"locked\",\"requestId\":2}", replies[1]);
     }
 
     private static AutofillRequest Request(string url) => new()

@@ -77,13 +77,14 @@ public static class InstallOperations
         return target;
     }
 
-    public static void InstallFromDirectory(
+    public static InstallSummary InstallFromDirectory(
         string sourceRoot,
         string targetRoot,
         InstallOptions? options = null,
         IProgress<InstallProgress>? progress = null)
     {
         options ??= new InstallOptions();
+        var where = options.Locations ?? InstallLocations.Default();
         if (!Directory.Exists(sourceRoot))
         {
             throw new DirectoryNotFoundException("找不到安装包内容：" + sourceRoot);
@@ -142,38 +143,86 @@ public static class InstallOperations
             progress?.Report(new InstallProgress(Scale(CleanupEnd, CopyEnd, done, total), "正在复制程序文件…", "复制  " + relative.Replace('\\', '/')));
         }
 
+        var summary = new InstallSummary(files.Count, 0, 0, 0, 0, false);
         if (OperatingSystem.IsWindows() && options.RegisterWithSystem)
         {
-            progress?.Report(new InstallProgress(CopyEnd, "正在写入卸载信息…", "写入卸载信息（当前用户注册表）"));
-            WriteWindowsUninstallInfo(targetRoot);
-            var hostExe = Path.Combine(targetRoot, "KeepPassword.NativeHost.exe");
-            if (File.Exists(hostExe))
-            {
-                progress?.Report(new InstallProgress(94, "正在连接浏览器扩展…", "登记 Edge 扩展的本机连接"));
-                NativeHostRegistration.Register(hostExe);
-            }
-            if (options.CreateStartMenuShortcut)
-            {
-                progress?.Report(new InstallProgress(95, "正在创建快捷方式…", "创建开始菜单快捷方式"));
-                CreateWindowsShortcut(StartMenuShortcutPath(), targetRoot);
-            }
-            else
-            {
-                TryDeleteFile(StartMenuShortcutPath());
-            }
-
-            if (options.CreateDesktopShortcut)
-            {
-                progress?.Report(new InstallProgress(98, "正在创建快捷方式…", "创建桌面快捷方式"));
-                CreateWindowsShortcut(DesktopShortcutPath(), targetRoot);
-            }
-            else
-            {
-                TryDeleteFile(DesktopShortcutPath());
-            }
+            summary = RegisterWithWindows(targetRoot, options, where, summary, progress);
         }
 
         progress?.Report(new InstallProgress(100, "安装完成", $"安装完成，共 {files.Count} 个文件"));
+        return summary;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static InstallSummary RegisterWithWindows(
+        string targetRoot,
+        InstallOptions options,
+        InstallLocations where,
+        InstallSummary summary,
+        IProgress<InstallProgress>? progress)
+    {
+        var registry = new RegistryWriter();
+        progress?.Report(new InstallProgress(CopyEnd, "正在写入卸载信息…", "核对卸载信息（没变化就不重复写入）"));
+        WriteWindowsUninstallInfo(targetRoot, where, registry);
+        var hostExe = Path.Combine(targetRoot, "KeepPassword.NativeHost.exe");
+        if (File.Exists(hostExe))
+        {
+            progress?.Report(new InstallProgress(94, "正在连接浏览器扩展…", "核对 Edge 扩展的本机连接"));
+            var discovered = options.DiscoveredOrigins ?? NativeHostRegistration.DiscoverOrigins();
+            NativeHostRegistration.Register(hostExe, where, discovered, registry);
+        }
+
+        var appExe = Path.Combine(targetRoot, InstallConstants.AppExecutableName());
+        var written = 0;
+        var same = 0;
+        progress?.Report(new InstallProgress(96, "正在创建快捷方式…", "核对快捷方式"));
+        SyncShortcut(where.StartMenuShortcut, options.CreateStartMenuShortcut, appExe, targetRoot, ref written, ref same);
+        SyncShortcut(where.DesktopShortcut, options.CreateDesktopShortcut, appExe, targetRoot, ref written, ref same);
+
+        var autostartChanged = false;
+        if (options.LaunchAtStartup is { } enabled)
+        {
+            progress?.Report(new InstallProgress(99, "正在保存开机启动设置…", enabled ? "开机自动启动：开" : "开机自动启动：关"));
+            CacheDirectory.SetLaunchAtStartup(where.SettingsFile, enabled);
+            var minimized = CacheDirectory.GetStartMinimized(where.SettingsFile);
+            autostartChanged = AutostartRegistration.Apply(appExe, enabled, minimized, where.Autostart, AutostartPlatform.Windows);
+        }
+
+        return summary with
+        {
+            RegistryWrites = registry.Writes,
+            RegistryUnchanged = registry.Unchanged,
+            ShortcutsWritten = written,
+            ShortcutsUnchanged = same,
+            AutostartChanged = autostartChanged
+        };
+    }
+
+    /// <summary>需要则创建（已一致就不重写），不需要则删除。</summary>
+    [SupportedOSPlatform("windows")]
+    private static void SyncShortcut(string path, bool wanted, string target, string workingDirectory, ref int written, ref int same)
+    {
+        if (!wanted)
+        {
+            TryDeleteFile(path);
+            return;
+        }
+
+        if (ShellLink.Matches(path, target, workingDirectory))
+        {
+            same++;
+            return;
+        }
+
+        try
+        {
+            ShellLink.Write(path, target, workingDirectory);
+            written++;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+        {
+            // 快捷方式不是安装成败的关键，创建不出来也不应该让整个安装失败。
+        }
     }
 
     public static ExistingInstall? FindExistingInstall()
@@ -187,8 +236,8 @@ public static class InstallOperations
         return ResolveExistingInstall(
             key?.GetValue("InstallLocation") as string,
             key?.GetValue("DisplayVersion") as string,
-            File.Exists(StartMenuShortcutPath()),
-            File.Exists(DesktopShortcutPath()));
+            File.Exists(InstallLocations.Default().StartMenuShortcut),
+            File.Exists(InstallLocations.Default().DesktopShortcut));
     }
 
     /// <summary>
@@ -267,6 +316,19 @@ public static class InstallOperations
         }
 
         return found;
+    }
+
+    /// <summary>保险库与设置所在目录（用户可能改过位置），卸载页要把它明确告诉用户。</summary>
+    public static string DataDirectory() =>
+        CacheDirectory.Resolve(CacheDirectory.SettingsFile(), AppDataPaths.VaultDirectory());
+
+    /// <summary>退出安装目录里仍在运行的主程序和浏览器连接程序，返回处理了多少个。</summary>
+    public static int StopRunningProduct(string installRoot)
+    {
+        var running = FindRunningProductProcesses(installRoot);
+        var count = running.Count;
+        CloseRunningProductProcesses(running);
+        return count;
     }
 
     public static void CloseRunningProductProcesses(IEnumerable<Process> processes)
@@ -367,18 +429,21 @@ public static class InstallOperations
             hasDesktopShortcut);
     }
 
-    public static void Uninstall(string installRoot, bool deleteCache, bool unregisterFromSystem = true)
+    public static void Uninstall(string installRoot, bool deleteCache, bool unregisterFromSystem = true) =>
+        Uninstall(installRoot, deleteCache, unregisterFromSystem, InstallLocations.Default());
+
+    internal static void Uninstall(string installRoot, bool deleteCache, bool unregisterFromSystem, InstallLocations where)
     {
         if (OperatingSystem.IsWindows() && unregisterFromSystem)
         {
-            TryDeleteFile(StartMenuShortcutPath());
-            TryDeleteFile(DesktopShortcutPath());
-            RemoveWindowsUninstallInfo();
+            TryDeleteFile(where.StartMenuShortcut);
+            TryDeleteFile(where.DesktopShortcut);
+            RemoveWindowsUninstallInfo(where);
         }
 
         if (deleteCache)
         {
-            var settings = CacheDirectory.SettingsFile();
+            var settings = where.SettingsFile;
             var cache = CacheDirectory.Resolve(settings, AppDataPaths.VaultDirectory());
             if (Directory.Exists(cache))
             {
@@ -427,22 +492,7 @@ public static class InstallOperations
             return;
         }
 
-        var bat = Path.Combine(Path.GetTempPath(), "keep-password-remove-" + Guid.NewGuid().ToString("n") + ".cmd");
-        var script = new StringBuilder();
-        script.AppendLine("@echo off");
-        script.AppendLine("set TARGET=" + directory.TrimEnd('\\'));
-        script.AppendLine(":retry");
-        script.AppendLine("ping 127.0.0.1 -n 2 >nul");
-        script.AppendLine("rmdir /s /q \"%TARGET%\"");
-        script.AppendLine("if exist \"%TARGET%\" goto retry");
-        script.AppendLine("del \"%~f0\"");
-        File.WriteAllText(bat, script.ToString(), Encoding.ASCII);
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = bat,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        });
+        StartDeferredDelete("rmdir /s /q \"%KP_TARGET%\" >nul 2>&1", directory.TrimEnd('\\', '/'));
     }
 
     /// <summary>当前进程退出后再删除文件（用于删除正在运行的安装包自身）。</summary>
@@ -469,22 +519,38 @@ public static class InstallOperations
             return;
         }
 
-        var bat = Path.Combine(Path.GetTempPath(), "keep-password-del-" + Guid.NewGuid().ToString("n") + ".cmd");
+        StartDeferredDelete("del /f /q \"%KP_TARGET%\" >nul 2>&1", full);
+    }
+
+    /// <summary>
+    /// 脚本本身只含 ASCII，要删的路径通过环境变量 KP_TARGET 传给 cmd（环境块是 Unicode）。
+    /// 旧做法把路径直接写进用 ASCII 编码的 .cmd，路径里有中文（例如中文用户名）就会变成问号，
+    /// rmdir 找不到目录，目录删不掉，脚本还会在重试循环里一直挂着。现在最多重试约 2 分钟。
+    /// </summary>
+    private static void StartDeferredDelete(string deleteCommand, string target)
+    {
         var script = new StringBuilder();
         script.AppendLine("@echo off");
-        script.AppendLine("set TARGET=" + full);
+        script.AppendLine("set /a TRIES=0");
         script.AppendLine(":retry");
         script.AppendLine("ping 127.0.0.1 -n 2 >nul");
-        script.AppendLine("del /f /q \"%TARGET%\" >nul 2>&1");
-        script.AppendLine("if exist \"%TARGET%\" goto retry");
-        script.AppendLine("del \"%~f0\"");
+        script.AppendLine(deleteCommand);
+        script.AppendLine("if not exist \"%KP_TARGET%\" goto done");
+        script.AppendLine("set /a TRIES+=1");
+        script.AppendLine("if %TRIES% lss 120 goto retry");
+        script.AppendLine(":done");
+        script.AppendLine("del \"%~f0\" >nul 2>&1");
+        var bat = Path.Combine(Path.GetTempPath(), "keep-password-clean-" + Guid.NewGuid().ToString("n") + ".cmd");
         File.WriteAllText(bat, script.ToString(), Encoding.ASCII);
-        Process.Start(new ProcessStartInfo
+        var start = new ProcessStartInfo
         {
-            FileName = bat,
+            FileName = "cmd.exe",
+            Arguments = "/d /c \"\"" + bat + "\"\"",
             UseShellExecute = false,
             CreateNoWindow = true
-        });
+        };
+        start.Environment["KP_TARGET"] = target;
+        Process.Start(start);
     }
 
     public static IEnumerable<string> EnumerateRelativeFiles(string root)
@@ -496,89 +562,54 @@ public static class InstallOperations
         }
     }
 
-    private static string StartMenuShortcutPath()
-    {
-        var programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
-        Directory.CreateDirectory(programs);
-        return Path.Combine(programs, InstallConstants.ProductName + ".lnk");
-    }
-
-    private static string DesktopShortcutPath() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
-            InstallConstants.ProductName + ".lnk");
-
     [SupportedOSPlatform("windows")]
-    private static void WriteWindowsUninstallInfo(string installRoot)
+    private static void WriteWindowsUninstallInfo(string installRoot, InstallLocations where, RegistryWriter registry)
     {
         var uninstall = Path.Combine(installRoot, InstallConstants.UninstallExecutableName());
         var displayIcon = Path.Combine(installRoot, InstallConstants.AppExecutableName());
-        using var key = Registry.CurrentUser.CreateSubKey(InstallConstants.UninstallRegistryKey);
-        key.SetValue("DisplayName", InstallConstants.ProductName);
-        key.SetValue("DisplayVersion", InstallConstants.Version);
-        key.SetValue("Publisher", InstallConstants.Publisher);
-        key.SetValue("InstallLocation", installRoot);
-        key.SetValue("DisplayIcon", displayIcon);
-        key.SetValue("UninstallString", "\"" + uninstall + "\"");
-        key.SetValue("QuietUninstallString", "\"" + uninstall + "\" --quiet");
-        key.SetValue("NoModify", 1, RegistryValueKind.DWord);
-        key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
+        var key = where.UninstallKey;
+        registry.SetString(key, "DisplayName", InstallConstants.ProductName);
+        registry.SetString(key, "DisplayVersion", InstallConstants.Version);
+        registry.SetString(key, "Publisher", InstallConstants.Publisher);
+        registry.SetString(key, "InstallLocation", installRoot);
+        registry.SetString(key, "DisplayIcon", displayIcon);
+        registry.SetString(key, "UninstallString", "\"" + uninstall + "\"");
+        registry.SetString(key, "QuietUninstallString", "\"" + uninstall + "\" --quiet");
+        registry.SetDword(key, "NoModify", 1);
+        registry.SetDword(key, "NoRepair", 1);
         var size = Directory.EnumerateFiles(installRoot, "*", SearchOption.AllDirectories)
             .Select(path => new FileInfo(path).Length)
             .Sum() / 1024;
-        key.SetValue("EstimatedSize", checked((int)Math.Min(size, int.MaxValue)), RegistryValueKind.DWord);
+        registry.SetDword(key, "EstimatedSize", checked((int)Math.Min(size, int.MaxValue)));
     }
 
     [SupportedOSPlatform("windows")]
-    private static void RemoveWindowsUninstallInfo()
+    private static void RemoveWindowsUninstallInfo(InstallLocations where)
     {
-        Registry.CurrentUser.DeleteSubKeyTree(InstallConstants.UninstallRegistryKey, throwOnMissingSubKey: false);
-        foreach (var key in InstallConstants.NativeHostRegistryKeys)
+        var registry = new RegistryWriter();
+        registry.DeleteTree(where.UninstallKey);
+        foreach (var key in where.NativeHostKeys)
         {
             try
             {
-                Registry.CurrentUser.DeleteSubKeyTree(key, throwOnMissingSubKey: false);
+                registry.DeleteTree(key);
             }
-            catch (Exception)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
             }
         }
 
-        TryDeleteFile(Path.Combine(AppDataPaths.VaultDirectory(), InstallConstants.NativeHostName + ".json"));
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static void CreateWindowsShortcut(string shortcutPath, string installRoot)
-    {
-        var target = Path.Combine(installRoot, InstallConstants.AppExecutableName());
-        WriteShortcutViaPowerShell(shortcutPath, target, installRoot);
-    }
-
-    private static void WriteShortcutViaPowerShell(string shortcutPath, string targetPath, string workingDirectory)
-    {
-        var script = new StringBuilder();
-        script.Append("$ws = New-Object -ComObject WScript.Shell; ");
-        script.Append("$s = $ws.CreateShortcut('").Append(EscapePs(shortcutPath)).Append("'); ");
-        script.Append("$s.TargetPath = '").Append(EscapePs(targetPath)).Append("'; ");
-        script.Append("$s.WorkingDirectory = '").Append(EscapePs(workingDirectory)).Append("'; ");
-        script.Append("$s.IconLocation = '").Append(EscapePs(targetPath)).Append(",0'; ");
-        script.Append("$s.Save();");
+        // 开机启动项以前卸载时没人清理，卸载后每次开机都会去找一个已经不存在的程序。
         try
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "powershell",
-                Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"" + script + "\"",
-                UseShellExecute = false,
-                CreateNoWindow = true
-            })?.WaitForExit(15000);
+            AutostartRegistration.Apply("", false, false, where.Autostart, AutostartPlatform.Windows);
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
         }
-    }
 
-    private static string EscapePs(string value) => value.Replace("'", "''");
+        TryDeleteFile(where.NativeHostManifest);
+    }
 
     private static bool IsEmpty(string directory) =>
         !Directory.EnumerateFileSystemEntries(directory).Any();

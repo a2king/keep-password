@@ -64,8 +64,9 @@
                 <TextBox x:Name="PART_Editor" Text="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                          PasswordChar="{TemplateBinding EditorPasswordChar}" Watermark="{TemplateBinding Placeholder}" IsVisible="False"
                          FontSize="{TemplateBinding FontSize}" FontWeight="{TemplateBinding FontWeight}"
-                         AcceptsReturn="{TemplateBinding Multiline}" MinHeight="32" Padding="0,5" Margin="0" BorderThickness="0"
-                         Background="Transparent" Foreground="{DynamicResource Detail.Text}" VerticalContentAlignment="Center" />
+                         AcceptsReturn="{TemplateBinding Multiline}" MinHeight="32" Padding="8,5,4,5" Margin="-9,0,-4,0" BorderThickness="1"
+                         CornerRadius="7" BorderBrush="{DynamicResource Detail.InputBorder}"
+                         Background="{DynamicResource Detail.GroupBackground}" Foreground="{DynamicResource Detail.Text}" VerticalContentAlignment="Center" />
               </Grid>
               <!-- 操作图标常驻显示（不再悬停才出现）。编辑入口是点击值本身，不再单独放编辑按钮；
                    PART_EditButton 保留为隐藏部件，FieldRow 代码仍可找到它。 -->
@@ -89,8 +90,7 @@
       <Style Selector="^ /template/ Border#PART_Hover, ^ /template/ Border#PART_Focus">
         <Setter Property="Transitions"><Transitions><DoubleTransition Property="Opacity" Duration="{StaticResource Detail.TransitionDuration}" Easing="CubicEaseOut" /></Transitions></Setter>
       </Style>
-      <!-- 浅灰行底只在编辑时出现，表示"正在编辑这一行"；鼠标经过、点复制等都不再把整行置灰。 -->
-      <Style Selector="^:editing /template/ Border#PART_Hover"><Setter Property="Opacity" Value="1" /></Style>
+      <!-- 编辑时整行不变灰：只有输入框自己带边框进入编辑样式（见 PART_Editor）。 -->
       <!-- 鼠标点击/编辑不画蓝框，只保留浅色行背景；描边仅用于键盘焦点与校验错误。 -->
       <Style Selector="^:focus-visible /template/ Border#PART_Focus"><Setter Property="Opacity" Value="1" /></Style>
       <Style Selector="^:invalid /template/ Border#PART_Focus"><Setter Property="BorderBrush" Value="{DynamicResource Detail.Danger}" /><Setter Property="Opacity" Value="1" /></Style>
@@ -108,7 +108,7 @@
       <Style Selector="^:readonly /template/ ContentPresenter#PART_CustomValue"><Setter Property="IsHitTestVisible" Value="True" /></Style>
       <Style Selector="^:multiline /template/ Grid#PART_ValueArea"><Setter Property="Height" Value="72" /></Style>
       <Style Selector="^:multiline /template/ TextBlock#PART_ValueText"><Setter Property="TextWrapping" Value="Wrap" /><Setter Property="MaxHeight" Value="64" /></Style>
-      <Style Selector="^:multiline /template/ TextBox#PART_Editor"><Setter Property="TextWrapping" Value="Wrap" /><Setter Property="VerticalContentAlignment" Value="Top" /><Setter Property="MaxHeight" Value="72" /></Style>
+      <Style Selector="^:multiline /template/ TextBox#PART_Editor"><Setter Property="TextWrapping" Value="Wrap" /><Setter Property="VerticalContentAlignment" Value="Top" /><Setter Property="MaxHeight" Value="72" /><Setter Property="Padding" Value="8,4,4,4" /></Style>
     </ControlTheme>
 
     <ControlTheme x:Key="{x:Type details:SecretField}" TargetType="details:SecretField" BasedOn="{StaticResource {x:Type details:FieldRow}}" />
@@ -169,7 +169,8 @@
   </Styles.Resources>
   <!-- 跨字段和内嵌编辑器两层模板的选择器须放在顶层，不能放入 ControlTheme。 -->
   <Style Selector=":is(details|FieldRow) /template/ TextBox#PART_Editor:pointerover /template/ Border#PART_BorderElement, :is(details|FieldRow) /template/ TextBox#PART_Editor:focus /template/ Border#PART_BorderElement">
-    <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Background" Value="{DynamicResource Detail.GroupBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Detail.InputBorder}" /><Setter Property="BorderThickness" Value="1" />
   </Style>
   <Style Selector=":is(details|FieldRow) /template/ Button#PART_ValueButton:pointerover /template/ ContentPresenter, :is(details|FieldRow) /template/ Button#PART_ValueButton:pressed /template/ ContentPresenter"><Setter Property="Background" Value="Transparent" /></Style>
   <!-- 减少动效只取消过渡，复制、掩码、焦点和错误反馈仍立即生效。 -->

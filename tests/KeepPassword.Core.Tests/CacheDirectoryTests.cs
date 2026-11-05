@@ -197,16 +197,19 @@ public class CacheDirectoryTests
     }
 
     [Fact]
-    public void LaunchAtStartup_DefaultsTrue_AndPersists()
+    public void LaunchAtStartup_DefaultsFalse_AndPersists()
     {
         var root = NewRoot();
         var settings = Path.Combine(root, "settings.json");
 
-        Assert.True(CacheDirectory.GetLaunchAtStartup(settings));
+        // 全新安装默认不开机启动；从没选择过时 TryGet 返回 null，调用方据此沿用旧版已登记的状态。
+        Assert.False(CacheDirectory.GetLaunchAtStartup(settings));
+        Assert.Null(CacheDirectory.TryGetLaunchAtStartup(settings));
         Assert.True(CacheDirectory.GetStartMinimized(settings));
 
         CacheDirectory.SetLaunchAtStartup(settings, false);
         CacheDirectory.SetStartMinimized(settings, false);
+        Assert.False(CacheDirectory.TryGetLaunchAtStartup(settings));
         Assert.False(CacheDirectory.GetLaunchAtStartup(settings));
         Assert.False(CacheDirectory.GetStartMinimized(settings));
 

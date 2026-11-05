@@ -1,5 +1,4 @@
 let focused = null;
-let lastRequest = 0;
 let notice = null;
 let noticeTimer = null;
 let chooser = null;
@@ -100,9 +99,11 @@ function rememberPassword(input, automatic = true) {
   focusVersion += 1;
   if (!automatic || Date.now() < suppressFocusUntil) return;
   closeChooser();
-  chrome.runtime.sendMessage({ type: "password-focused", auto: true }, () => {
+  // 只让后台记住聚焦的 frame（供工具栏按钮和快捷键用）；候选直接在这里查询，不再绕回后台。
+  chrome.runtime.sendMessage({ type: "password-focused" }, () => {
     void chrome.runtime.lastError;
   });
+  requestCandidates(input, true, () => {});
 }
 
 function usernameFor(password) {
@@ -354,56 +355,133 @@ function requestCandidateFill(candidate, shortKey) {
   });
 }
 
-function requestCandidates(password, automatic, sendResponse) {
-  const now = Date.now();
-  if (now - lastRequest < 700) {
-    sendResponse({ type: "ready" });
-    return false;
+// 候选缓存：页面加载时预取，聚焦时直接渲染，再后台刷新一次。只含名称、用户名、域名，不含密码。
+// 浏览器匹配只看页面主机名，所以按主机名缓存；SPA 内跳转不需要重新查询。
+const CANDIDATE_TTL_MS = 30 * 1000;
+const CANDIDATE_REFRESH_MS = 2 * 1000;
+let candidateCache = null;
+let candidateInflight = null;
+
+function pageHost() {
+  try {
+    return new URL(location.href).hostname;
+  } catch (_error) {
+    return String((location && location.href) || "");
   }
-  lastRequest = now;
-  const requestVersion = focusVersion;
-  const requestedUrl = location.href;
-  chrome.runtime.sendMessage({ type: "discover-candidates", url: requestedUrl, title: document.title }, (response) => {
+}
+
+function cacheable(result) {
+  // 不缓存 locked：用户可能刚在桌面端解锁，旧提示会误导。
+  return !!result && (result.type === "candidates" && Array.isArray(result.candidates) || result.type === "noMatch");
+}
+
+function resultKey(result) {
+  if (!result) return "";
+  const ids = Array.isArray(result.candidates) ? result.candidates.map((item) => `${item.id}/${item.accountId}/${item.name}/${item.username}`) : [];
+  return `${result.type}|${ids.join(",")}`;
+}
+
+function freshCache(host, maxAge) {
+  return candidateCache && candidateCache.host === host && Date.now() - candidateCache.at < maxAge ? candidateCache : null;
+}
+
+// 合并同一主机名上并发的查询，所有等待方拿到同一个结果。
+function fetchCandidates(callback) {
+  const host = pageHost();
+  if (candidateInflight && candidateInflight.host === host) {
+    if (callback) candidateInflight.callbacks.push(callback);
+    return;
+  }
+  const inflight = { host, callbacks: callback ? [callback] : [] };
+  candidateInflight = inflight;
+  chrome.runtime.sendMessage({ type: "discover-candidates", url: location.href, title: document.title }, (response) => {
     const error = chrome.runtime.lastError;
     const result = error ? { type: "error", message: error.message } : response;
-    // Keep compatibility with a host from before the candidate protocol. It is
-    // still safe because that response was already produced after confirmation.
-    if (result?.type === "fill") {
+    if (candidateInflight === inflight) candidateInflight = null;
+    if (cacheable(result)) candidateCache = { host, at: Date.now(), result };
+    if (inflight.callbacks.length === 0 && result) {
+      // 纯预取时不应收到凭据；万一旧版宿主回了 fill，立即清掉。
+      result.username = "";
+      result.password = "";
+      return;
+    }
+    if (result && result.type === "fill") {
+      // 凭据只交给最后一个等待方（最近一次聚焦或按钮），其余的不重复填入。
+      inflight.callbacks.slice(0, -1).forEach((done) => done({ type: "ready" }));
+      inflight.callbacks[inflight.callbacks.length - 1](result);
+      return;
+    }
+    for (const done of inflight.callbacks) done(result);
+  });
+}
+
+function prefetchCandidates() {
+  if (!document.querySelector || typeof location === "undefined" || !/^https?:/i.test(location.href || "")) return;
+  const hasLogin = document.querySelector('input[type="password"], input[autocomplete~="username"]');
+  if (hasLogin && !freshCache(pageHost(), CANDIDATE_TTL_MS)) fetchCandidates(null);
+}
+
+// 把查询结果展示到聚焦的输入框上，返回给工具栏徽标用的状态。
+function presentCandidates(result, password, automatic, requestVersion, requestedUrl) {
+  if (result?.type === "ready") return { type: "ready" };
+  // Keep compatibility with a host from before the candidate protocol. It is
+  // still safe because that response was already produced after confirmation.
+  if (result?.type === "fill") {
+    try {
       if (requestVersion !== focusVersion || location.href !== requestedUrl || !isLoginField(password) || focused !== password) {
         const changed = { type: "error", message: "登录页面或输入框已变化，请重新点击。" };
-        result.username = "";
-        result.password = "";
         showStatus(changed, automatic);
-        sendResponse(changed);
-        return;
+        return changed;
       }
       suppressFocusUntil = Date.now() + 1600;
-      try {
-        fillLogin(password, result);
-        showStatus({ type: "filled" }, automatic);
-        sendResponse({ type: "filled" });
-      } catch (_error) {
-        const failed = { type: "error", message: "网页不允许填入当前输入框，请刷新网页后重试。" };
-        showStatus(failed, automatic);
-        sendResponse(failed);
-      } finally {
-        result.username = "";
-        result.password = "";
-      }
-      return;
+      fillLogin(password, result);
+      showStatus({ type: "filled" }, automatic);
+      return { type: "filled" };
+    } catch (_error) {
+      const failed = { type: "error", message: "网页不允许填入当前输入框，请刷新网页后重试。" };
+      showStatus(failed, automatic);
+      return failed;
+    } finally {
+      result.username = "";
+      result.password = "";
     }
-    if (result?.type === "candidates" && Array.isArray(result.candidates)) {
-      if (requestVersion !== focusVersion || !isLoginField(password) || focused !== password) {
-        sendResponse({ type: "ready" });
-        return;
-      }
-      showCandidates(result.candidates, password);
-      sendResponse({ type: "candidates" });
-      return;
+  }
+  if (result?.type === "candidates" && Array.isArray(result.candidates)) {
+    if (requestVersion !== focusVersion || !isLoginField(password) || focused !== password) {
+      return { type: "ready" };
     }
-    const fallback = result || { type: "error", message: "没有可填入的记录。" };
-    showStatus(fallback, automatic && ["noMatch", "cancelled"].includes(fallback.type));
-    sendResponse(fallback);
+    showCandidates(result.candidates, password);
+    return { type: "candidates" };
+  }
+  const fallback = result || { type: "error", message: "没有可填入的记录。" };
+  showStatus(fallback, automatic && ["noMatch", "cancelled"].includes(fallback.type));
+  return fallback;
+}
+
+function requestCandidates(password, automatic, sendResponse) {
+  const requestVersion = focusVersion;
+  const requestedUrl = location.href;
+  const host = pageHost();
+  const cached = freshCache(host, CANDIDATE_TTL_MS);
+  if (cached) {
+    // 有缓存就立即显示，不等本机宿主。
+    sendResponse(presentCandidates(cached.result, password, automatic, requestVersion, requestedUrl));
+    if (Date.now() - cached.at < CANDIDATE_REFRESH_MS) return false;
+    const shownKey = resultKey(cached.result);
+    fetchCandidates((fresh) => {
+      // 后台刷新只在结果变化、且用户还停在同一个输入框、还没选账号时才更新界面。
+      if (!cacheable(fresh) || resultKey(fresh) === shownKey) return;
+      if (requestVersion !== focusVersion || focused !== password || (chooser && chooser.selected)) return;
+      if (fresh.type === "candidates") {
+        presentCandidates(fresh, password, automatic, requestVersion, requestedUrl);
+      } else if (chooser && chooser.password === password) {
+        closeChooser();
+      }
+    });
+    return false;
+  }
+  fetchCandidates((result) => {
+    sendResponse(presentCandidates(result, password, automatic, requestVersion, requestedUrl));
   });
   return true;
 }
@@ -416,6 +494,7 @@ document.addEventListener("pointerdown", (event) => {
   if (chooser && event.target !== chooser.password && !chooser.root.contains(event.target)) closeChooser();
 }, true);
 if (document.activeElement) rememberPassword(document.activeElement, isIdentifier(document.activeElement));
+prefetchCandidates();
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || message.type !== "fill-request") return false;

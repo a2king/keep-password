@@ -1,5 +1,3 @@
-const automaticRequests = new Map();
-
 function focusKey(tabId) {
   return `password-frame-${tabId}`;
 }
@@ -27,6 +25,7 @@ function showResult(tabId, response) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message && message.type === "password-focused" && sender.tab) {
+    // 只记录最后聚焦的 frame，供工具栏按钮和快捷键使用；候选由内容脚本直接查询。
     // Session storage survives Manifest V3 worker suspension, but contains no credentials.
     const target = { frameId: sender.frameId };
     if (sender.documentId) {
@@ -34,14 +33,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     chrome.storage.session.set({ [focusKey(sender.tab.id)]: target }, () => {
       sendResponse({ type: chrome.runtime.lastError ? "error" : "ready" });
-      if (!chrome.runtime.lastError && message.auto === true) {
-        const now = Date.now();
-        const previous = automaticRequests.get(sender.tab.id) || 0;
-        if (now - previous >= 1000) {
-          automaticRequests.set(sender.tab.id, now);
-          requestFill(sender.tab.id, true);
-        }
-      }
     });
     return true;
   }
@@ -54,45 +45,122 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  let port;
-  try {
-    port = chrome.runtime.connectNative("com.keeppassword.host");
-  } catch (error) {
-    sendResponse({ type: "error", message: String(error) });
-    return false;
-  }
-
-  let settled = false;
-  const finish = (response) => {
-    if (settled) {
-      return;
-    }
-    settled = true;
-    sendResponse(response);
-    try {
-      port.disconnect();
-    } catch (_error) {
-      // 宿主可能已经退出。
-    }
-  };
-
-  port.onMessage.addListener((response) => finish(response));
-  port.onDisconnect.addListener(() => {
-    const reason = chrome.runtime.lastError && chrome.runtime.lastError.message;
-    finish({ type: "error", message: reason || "本机消息已断开。" });
-  });
-  try {
-    port.postMessage({
-      ...message,
-      type: message.type,
-      url: sender.url,
-      title: message.title
-    });
-  } catch (error) {
-    finish({ type: "error", message: String(error) });
-  }
+  sendNative({
+    ...message,
+    type: message.type,
+    url: sender.url,
+    title: message.title
+  }, sendResponse);
   return true;
 });
+
+// 常驻 native port：宿主进程只启动一次，之后每条请求只是一次管道读写。
+// 打开的 native port 也让 MV3 service worker 保持唤醒，空闲一段时间后主动断开。
+const NATIVE_HOST = "com.keeppassword.host";
+const NATIVE_IDLE_MS = 5 * 60 * 1000;
+// 宿主到桌面端的接收超时是 120 秒，这里稍长一点，避免请求永远挂起。
+const NATIVE_TIMEOUT_MS = 130 * 1000;
+let native = null;
+let nextRequestId = 1;
+let nativeIdleTimer = null;
+
+function openNative() {
+  const state = { port: chrome.runtime.connectNative(NATIVE_HOST), pending: new Map(), legacy: false };
+  state.port.onMessage.addListener((response) => onNativeMessage(state, response));
+  state.port.onDisconnect.addListener(() => onNativeDisconnect(state));
+  return state;
+}
+
+function sendNative(message, callback, retried = false) {
+  clearTimeout(nativeIdleTimer);
+  let state;
+  try {
+    state = native || (native = openNative());
+  } catch (error) {
+    native = null;
+    callback({ type: "error", message: String(error) });
+    return;
+  }
+  const requestId = nextRequestId++;
+  const entry = { message, callback, retried, timer: null };
+  entry.timer = setTimeout(() => {
+    if (state.pending.delete(requestId)) {
+      callback({ type: "error", message: "Keep Password 客户端没有响应。" });
+      scheduleNativeIdle();
+    }
+  }, NATIVE_TIMEOUT_MS);
+  state.pending.set(requestId, entry);
+  try {
+    state.port.postMessage({ ...message, requestId });
+  } catch (error) {
+    // port 已失效但 onDisconnect 还没到：换一个新 port 重试一次。
+    clearTimeout(entry.timer);
+    state.pending.delete(requestId);
+    if (native === state) {
+      native = null;
+    }
+    if (retried) {
+      callback({ type: "error", message: String(error) });
+    } else {
+      sendNative(message, callback, true);
+    }
+  }
+}
+
+function onNativeMessage(state, response) {
+  let requestId = response && response.requestId;
+  if (requestId === undefined) {
+    // 旧版宿主不回 requestId，且回复一条后就退出：按发送顺序配对，剩下的在断开时重发。
+    state.legacy = true;
+    requestId = state.pending.keys().next().value;
+  }
+  const entry = state.pending.get(requestId);
+  if (!entry) {
+    return;
+  }
+  state.pending.delete(requestId);
+  clearTimeout(entry.timer);
+  if (response && typeof response === "object") {
+    delete response.requestId;
+  }
+  entry.callback(response);
+  scheduleNativeIdle();
+}
+
+function onNativeDisconnect(state) {
+  const reason = chrome.runtime.lastError && chrome.runtime.lastError.message;
+  if (native === state) {
+    native = null;
+  }
+  const left = Array.from(state.pending.values());
+  state.pending.clear();
+  for (const entry of left) {
+    clearTimeout(entry.timer);
+    if (state.legacy && !entry.retried) {
+      sendNative(entry.message, entry.callback, true);
+    } else {
+      entry.callback({ type: "error", message: reason || "本机消息已断开。" });
+    }
+  }
+}
+
+function scheduleNativeIdle() {
+  clearTimeout(nativeIdleTimer);
+  if (!native || native.pending.size > 0) {
+    return;
+  }
+  const state = native;
+  nativeIdleTimer = setTimeout(() => {
+    if (native === state && state.pending.size === 0) {
+      native = null;
+      try {
+        state.port.disconnect();
+      } catch (_error) {
+        // 宿主可能已经退出。
+      }
+    }
+  }, NATIVE_IDLE_MS);
+}
 
 function requestFill(tabId, automatic = false) {
   if (!Number.isInteger(tabId)) {
@@ -115,7 +183,6 @@ function requestFill(tabId, automatic = false) {
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  automaticRequests.delete(tabId);
   chrome.storage.session.remove(focusKey(tabId));
 });
 chrome.tabs.onUpdated.addListener((tabId, change) => {
