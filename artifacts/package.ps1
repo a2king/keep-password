@@ -132,7 +132,15 @@ Write-Host "== 打包浏览器扩展 =="
 $ExtensionZip = Join-Path $Out "KeepPassword-Chrome-Extension-$Version.zip"
 $EdgeExtensionZip = Join-Path $Out "KeepPassword-Edge-Extension-$Version.zip"
 [IO.Compression.ZipFile]::CreateFromDirectory("$Staging\extension", $ExtensionZip, [IO.Compression.CompressionLevel]::SmallestSize, $false)
-Copy-Item -LiteralPath $ExtensionZip -Destination $EdgeExtensionZip -Force
+# Edge 商店拒绝 manifest 里的 key。本地加载仍用带 key 的 Chrome 包，以保持扩展 ID 不变。
+$EdgeStage = Join-Path $Out "edge-extension"
+if (Test-Path -LiteralPath $EdgeStage) { Remove-Item -LiteralPath $EdgeStage -Recurse -Force }
+Copy-Item -LiteralPath "$Staging\extension" -Destination $EdgeStage -Recurse
+$edgeManifest = Join-Path $EdgeStage "manifest.json"
+$edgeText = [regex]::Replace([IO.File]::ReadAllText($edgeManifest), '\r?\n[ \t]*"key"\s*:\s*"[^"]*"\s*,', '')
+[IO.File]::WriteAllText($edgeManifest, $edgeText, [Text.UTF8Encoding]::new($false))
+if (Test-Path -LiteralPath $EdgeExtensionZip) { Remove-Item -LiteralPath $EdgeExtensionZip -Force }
+[IO.Compression.ZipFile]::CreateFromDirectory($EdgeStage, $EdgeExtensionZip, [IO.Compression.CompressionLevel]::SmallestSize, $false)
 
 $assets = @(Get-Item -LiteralPath $SetupExe, (Join-Path $Out "KeepPassword-win-x64.zip"), $ExtensionZip, $EdgeExtensionZip, $SetupShaFile)
 if (Test-Path -LiteralPath $SigFile) { $assets += Get-Item -LiteralPath $SigFile }
