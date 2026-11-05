@@ -139,7 +139,20 @@ rm -f "$EXT_ZIP" "$EDGE_ZIP"
   cd "$STAGING/extension"
   zip -r -q -9 "$EXT_ZIP" .
 )
-cp -f "$EXT_ZIP" "$EDGE_ZIP"
+# Edge 商店拒绝 manifest 里的 key。本地加载仍用带 key 的 Chrome 包，以保持扩展 ID 不变。
+EDGE_STAGE="$OUT/edge-extension"
+rm -rf "$EDGE_STAGE"
+cp -a "$STAGING/extension" "$EDGE_STAGE"
+python3 - "$EDGE_STAGE/manifest.json" <<'PY'
+import pathlib, re, sys
+path = pathlib.Path(sys.argv[1])
+text = re.sub(r'\r?\n[ \t]*"key"\s*:\s*"[^"]*"\s*,', "", path.read_text(encoding="utf-8"), count=1)
+path.write_text(text, encoding="utf-8")
+PY
+(
+  cd "$EDGE_STAGE"
+  zip -r -q -9 "$EDGE_ZIP" .
+)
 
 echo "== 完成 =="
 ls -lh "$OUT/KeepPassword-Setup-win-x64.exe" "$OUT/KeepPassword-Setup-win-x64.exe.sha256" "$OUT/KeepPassword-win-x64.zip" "$EXT_ZIP" "$EDGE_ZIP" "$OUT/payload.zip"
