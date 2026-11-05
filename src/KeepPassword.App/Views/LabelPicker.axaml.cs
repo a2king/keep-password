@@ -56,6 +56,7 @@ public partial class LabelPicker : UserControl
 
     private void OnDropdownOpened(object? sender, EventArgs e)
     {
+        Box.Classes.Add("dropdown-open");
         _ = Motion.EnterAsync(DropdownCard, 4);
         AttachHostScroller();
         AttachWheelCapture();
@@ -63,6 +64,7 @@ public partial class LabelPicker : UserControl
 
     private void OnDropdownClosed(object? sender, EventArgs e)
     {
+        Box.Classes.Remove("dropdown-open");
         if (_openPicker is not null
             && _openPicker.TryGetTarget(out var open)
             && ReferenceEquals(open, this))

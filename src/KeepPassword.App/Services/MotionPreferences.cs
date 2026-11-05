@@ -11,6 +11,8 @@ public static class MotionPreferences
 
     public static string CurrentMode { get; private set; } = FullMode;
 
+    public static event Action? Changed;
+
     public static bool IsEnabled => ResolveEnabled(CurrentMode,
         CurrentMode != SystemMode || SystemAllowsAnimation());
 
@@ -21,6 +23,7 @@ public static class MotionPreferences
         var normalized = mode is SystemMode or ReducedMode ? mode : FullMode;
         CacheDirectory.SetMotionMode(CacheDirectory.SettingsFile(), normalized);
         CurrentMode = normalized;
+        Changed?.Invoke();
     }
 
     public static bool ResolveEnabled(string mode, bool systemEnabled) => mode switch

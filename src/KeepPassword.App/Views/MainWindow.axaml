@@ -2,6 +2,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:KeepPassword.App.ViewModels"
         xmlns:views="using:KeepPassword.App.Views"
+        xmlns:c="using:KeepPassword.App.Controls"
+        xmlns:details="using:KeepPassword.App.Views.Details"
         xmlns:vault="using:KeepPassword.Core.Vault"
         x:Class="KeepPassword.App.Views.MainWindow"
         Title="Keep Password"
@@ -11,6 +13,7 @@
         MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Kp.Bg}"
+        TransparencyLevelHint="AcrylicBlur"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaChromeHints="PreferSystemChrome"
         ExtendClientAreaTitleBarHeightHint="32"
@@ -130,7 +133,7 @@
           <!-- 顶部：搜索 + 操作 + 空间下拉 -->
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,14">
             <Grid ColumnDefinitions="Auto,*">
-              <TextBox x:Name="SearchBox" Grid.ColumnSpan="2" Text="{Binding Search}" Watermark="搜索名称、标签、账号、备注、网址、主机、节点" LetterSpacing="1" Padding="34,8,36,8" KeyDown="OnSearchKeyDown" />
+              <TextBox x:Name="SearchBox" Grid.ColumnSpan="2" Text="{Binding Search}" Watermark="搜索名称、标签、账号、备注、网址、主机、节点" LetterSpacing="1" Padding="34,8,36,8" Background="{DynamicResource Kp.Surface}" KeyDown="OnSearchKeyDown" />
               <PathIcon Data="{StaticResource Icon.Search}" Width="15" Height="15" Foreground="{DynamicResource Kp.TextMuted}" Margin="12,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
               <Button Grid.Column="1" Classes="icon" ToolTip.Tip="清除搜索 (Esc)" IsVisible="{Binding HasSearch}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,5,0" Click="OnClearSearch">
                 <PathIcon Data="{StaticResource Icon.Clear}" Width="14" Height="14" />
@@ -153,9 +156,10 @@
               </Button>
             </StackPanel>
             <ComboBox Grid.Column="2"
-                      Width="210"
+                      Width="190"
                       Margin="10,0,0,0"
                       VerticalAlignment="Stretch"
+                      AutomationProperties.Name="空间分类"
                       ItemsSource="{Binding SpaceFilters}"
                       SelectedItem="{Binding SelectedSpaceFilter}"
                       ToolTip.Tip="选择空间分类">
@@ -173,32 +177,48 @@
           </Grid>
 
           <!-- 类型卡片 -->
-          <ItemsControl Grid.Row="1" ItemsSource="{Binding KindFilters}" Margin="0,0,0,6">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <WrapPanel />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:FilterItemView">
-                <Button Classes="filter-card" Classes.selected="{Binding IsSelected}" Tag="{Binding Key}" Click="OnKindFilter" Width="132" Margin="0,0,8,8">
-                  <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                      <PathIcon Data="{StaticResource Icon.Star}" Width="14" Height="14" Foreground="{DynamicResource Kp.Star}" IsVisible="{Binding IsFavorite}" VerticalAlignment="Center" />
-                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
-                    <Border Grid.Column="1" Classes="count-badge" Margin="8,0,0,0">
-                      <TextBlock Text="{Binding Count}" />
-                    </Border>
-                  </Grid>
-                </Button>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+          <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+            <ItemsControl x:Name="KindFiltersList" ItemsSource="{Binding KindFilters}" Height="48" ClipToBounds="True">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:FilterItemView">
+                  <Button Classes="filter-card" Classes.selected="{Binding IsSelected}" Tag="{Binding Key}" Click="OnKindFilter" Width="132" Margin="0,0,8,8">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Orientation="Horizontal" Spacing="5">
+                        <PathIcon Data="{StaticResource Icon.Star}" Width="14" Height="14" Foreground="{DynamicResource Kp.Star}" IsVisible="{Binding IsFavorite}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <Border Grid.Column="1" Classes="count-badge" Margin="8,0,0,0">
+                        <TextBlock Text="{Binding Count}" />
+                      </Border>
+                    </Grid>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button x:Name="KindFiltersToggleButton" Grid.Column="1" Classes="icon" Width="28" Height="28" ToolTip.Tip="展开类型筛选" Click="OnToggleKindFilters" VerticalAlignment="Top">
+              <Panel>
+                <PathIcon x:Name="KindFiltersCollapsedIcon" Data="{StaticResource Icon.ChevronDownThin}" Width="16" Height="16" />
+                <PathIcon x:Name="KindFiltersExpandedIcon" Data="{StaticResource Icon.ChevronUpThin}" Width="16" Height="16" IsVisible="False" />
+              </Panel>
+            </Button>
+          </Grid>
 
           <!-- 标签卡片 -->
-          <TextBlock Grid.Row="2" Text="标签" Classes="label" Margin="2,0,0,8" />
-          <ItemsControl x:Name="TagFiltersList" Grid.Row="3" ItemsSource="{Binding TagFilters}" Margin="0,0,0,10">
+          <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="2,0,0,8">
+            <TextBlock Text="标签" Classes="label" Margin="0" />
+            <Button x:Name="TagFiltersToggleButton" Grid.Column="1" Classes="icon" Width="28" Height="28" ToolTip.Tip="展开标签筛选" Click="OnToggleTagFilters" VerticalAlignment="Top">
+              <Panel>
+                <PathIcon x:Name="TagFiltersCollapsedIcon" Data="{StaticResource Icon.ChevronDownThin}" Width="16" Height="16" />
+                <PathIcon x:Name="TagFiltersExpandedIcon" Data="{StaticResource Icon.ChevronUpThin}" Width="16" Height="16" IsVisible="False" />
+              </Panel>
+            </Button>
+          </Grid>
+          <ItemsControl x:Name="TagFiltersList" Grid.Row="3" ItemsSource="{Binding TagFilters}" Height="48" ClipToBounds="True" Margin="0,0,0,10">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
                 <WrapPanel />
@@ -231,7 +251,9 @@
                        Classes="muted"
                        TextWrapping="Wrap"
                        Margin="4,12" />
-            <ScrollViewer x:Name="AccountScroller" Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+            <!-- 视口内留出 12px 绘制余量，容纳 -2px 上浮、阴影和外圈焦点；保留滚动裁剪与虚拟化。 -->
+            <ScrollViewer x:Name="AccountScroller" Grid.Row="1" HorizontalScrollBarVisibility="Disabled"
+                          Padding="12" Margin="-12,0,-12,0">
               <ItemsControl x:Name="AccountItems" ItemsSource="{Binding EntryRows}">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate>
@@ -240,15 +262,16 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:EntryRowView">
-                    <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl ItemsSource="{Binding Items}" ClipToBounds="False">
                       <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                          <UniformGrid Columns="{Binding Columns}" />
+                          <UniformGrid Columns="{Binding Columns}" ClipToBounds="False" />
                         </ItemsPanelTemplate>
                       </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:EntryItemView">
-                          <Button Classes="account-card" Classes.selected="{Binding IsSelected}" Tag="{Binding Id}" Click="OnEntry" Margin="0,0,10,10">
+                          <Button Theme="{StaticResource CardButtonTheme}" Classes="account-card"
+                                  Classes.selected="{Binding IsSelected}" Tag="{Binding Id}" Click="OnEntry" Margin="0,0,12,12">
                             <Grid ColumnDefinitions="44,*">
                               <Border Classes="kind-tile" Classes.logo="{Binding HasLogo}" Width="36" Height="36" CornerRadius="10" VerticalAlignment="Center" HorizontalAlignment="Left">
                                 <Panel>
@@ -308,6 +331,9 @@
                 Background="{DynamicResource Kp.Bg}"
                 BorderBrush="{DynamicResource Kp.Border}"
                 BorderThickness="1,0,0,0">
+          <Panel>
+          <details:DetailPanelView x:Name="ModernDetail" IsVisible="False" Margin="0,32,0,0" />
+          <!-- 其他类型继续使用原编辑器，避免本轮三种详情重构丢失现有字段。 -->
           <Grid x:Name="DetailContent" RowDefinitions="Auto,*,Auto" Margin="28,44,28,18">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,12">
               <Border Classes="count-badge" VerticalAlignment="Center">
@@ -359,7 +385,7 @@
                   <Border Classes="field" IsVisible="{Binding ShowProtocol}">
                     <StackPanel>
                       <TextBlock Text="协议" Classes="field-label" />
-                      <ComboBox ItemsSource="{Binding Protocols}" SelectedItem="{Binding SelectedProtocol}" HorizontalAlignment="Stretch" Margin="0,6,0,0">
+                      <ComboBox ItemsSource="{Binding Protocols}" SelectedItem="{Binding SelectedProtocol}" HorizontalAlignment="Stretch" Margin="0,6,0,0" AutomationProperties.Name="协议">
                         <ComboBox.ItemTemplate>
                           <DataTemplate x:DataType="vault:ServerProtocol">
                             <TextBlock Text="{Binding Name}" />
@@ -372,7 +398,7 @@
                   <Border Classes="field" IsVisible="{Binding ShowDriver}">
                     <StackPanel>
                       <TextBlock Text="数据库类型" Classes="field-label" />
-                      <ComboBox ItemsSource="{Binding Drivers}" SelectedItem="{Binding SelectedDriver}" HorizontalAlignment="Stretch" Margin="0,6,0,0">
+                      <ComboBox ItemsSource="{Binding Drivers}" SelectedItem="{Binding SelectedDriver}" HorizontalAlignment="Stretch" Margin="0,6,0,0" AutomationProperties.Name="数据库类型">
                         <ComboBox.ItemTemplate>
                           <DataTemplate x:DataType="vault:DatabaseDriver">
                             <TextBlock Text="{Binding Name}" />
@@ -425,7 +451,7 @@
                                   <Button Grid.Column="1" Classes="icon" ToolTip.Tip="复制地址" Tag="{Binding}" Click="OnCopyNode">
                                     <PathIcon Data="{StaticResource Icon.Copy}" />
                                   </Button>
-                                  <Button Grid.Column="2" Classes="ghost" Padding="8,3" FontSize="12" Content="移除" Tag="{Binding}" Click="OnRemoveNode" />
+                                  <Button Grid.Column="2" Classes="danger" Padding="8,3" FontSize="12" Content="移除" Tag="{Binding}" Click="OnRemoveNode" />
                                 </Grid>
                                 <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,6,Auto,6,Auto">
                                   <TextBox Text="{Binding Name}" Watermark="名称" />
@@ -501,12 +527,15 @@
                                 <ContentControl Content="{Binding UsernameField}" ContentTemplate="{StaticResource FieldBody}" ClipToBounds="False" />
                                 <StackPanel IsVisible="{Binding ShowAuth}" Spacing="6">
                                   <TextBlock Text="认证方式" Classes="field-label" />
-                                  <StackPanel Orientation="Horizontal">
-                                    <Button Classes="chip" Classes.selected="{Binding UsePasswordAuth}" Content="密码" Tag="{Binding}" Click="OnAccountAuthPassword" />
-                                    <Button Classes="chip" Classes.selected="{Binding UseKeyAuth}" Content="SSH 密钥" Tag="{Binding}" Click="OnAccountAuthKey" />
-                                  </StackPanel>
+                                  <!-- 0 密码 / 1 SSH 密钥；UseKeyAuth 只读，单向绑定，切换仍走原 SetKeyAuth。 -->
+                                  <c:SegmentedControl SelectedIndex="{Binding UseKeyAuth, Mode=OneWay, Converter={x:Static c:GlassConverters.BoolToIndex}}"
+                                                      Tag="{Binding}" AutomationProperties.Name="认证方式" SelectionChanged="OnAccountAuthChanged">
+                                    <ListBoxItem Content="密码" />
+                                    <ListBoxItem Content="SSH 密钥" />
+                                  </c:SegmentedControl>
                                   <ComboBox ItemsSource="{Binding SshKeyOptions}"
                                             SelectedItem="{Binding SelectedSshKey}"
+                                            AutomationProperties.Name="SSH 密钥"
                                             PlaceholderText="选择要关联的 SSH 密钥条目"
                                             HorizontalAlignment="Stretch"
                                             IsVisible="{Binding ShowKeyPicker}">
@@ -559,6 +588,7 @@
               <TextBlock x:Name="DetailStatus" Text="{Binding Status}" VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" Margin="0,0,12,0" />
             </DockPanel>
           </Grid>
+          </Panel>
         </Border>
         </Grid>
       </Grid>

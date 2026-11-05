@@ -3,7 +3,7 @@
              x:Class="KeepPassword.App.Views.LabelPicker">
   <UserControl.Styles>
     <Style Selector="Border.picker-box">
-      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="8" />
@@ -17,14 +17,20 @@
     <Style Selector="Border.picker-box:focus-within">
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />
     </Style>
+    <Style Selector="Border.picker-box.dropdown-open">
+      <Setter Property="Background" Value="{DynamicResource Kp.Liquid.Fill}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Liquid.Edge}" />
+      <Setter Property="BoxShadow" Value="0 3 14 0 #180A84FF" />
+    </Style>
 
     <Style Selector="TextBox.picker-input">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="MinHeight" Value="26" />
-      <Setter Property="Padding" Value="4,2" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="4,5" />
       <Setter Property="FontSize" Value="13" />
       <Setter Property="LetterSpacing" Value="0" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBox.picker-input:pointerover /template/ Border#PART_BorderElement">
       <Setter Property="Background" Value="Transparent" />
@@ -79,13 +85,19 @@
       <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="Button.picker-option:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.Liquid.Hover}" />
     </Style>
     <Style Selector="Button.picker-option.highlight /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.Liquid.Hover}" />
     </Style>
     <Style Selector="Button.picker-option.selected">
       <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.picker-option.selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Liquid.Fill}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Liquid.Edge}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Liquid.Text}" />
     </Style>
   </UserControl.Styles>
 
@@ -104,12 +116,12 @@
            IsLightDismissEnabled="True"
            OverlayDismissEventPassThrough="False"
            OverlayInputPassThroughElement="{Binding #Box}">
-      <Border x:Name="DropdownCard" Background="{DynamicResource Kp.Surface}"
-              BorderBrush="{DynamicResource Kp.Border}"
+      <Border x:Name="DropdownCard" Background="{DynamicResource Kp.Liquid.Track}"
+              BorderBrush="{DynamicResource Kp.Liquid.Edge}"
               BorderThickness="1"
-              CornerRadius="8"
-              Padding="4"
-              BoxShadow="0 6 16 0 #26000000"
+              CornerRadius="12"
+              Padding="5"
+              BoxShadow="0 8 24 0 #22000000"
               Focusable="True">
         <!-- MaxHeight：选项少时贴合内容，多时再出现滚动，避免大片留白 -->
         <ScrollViewer x:Name="OptionsScroller"

@@ -1,0 +1,207 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+        xmlns:c="using:KeepPassword.App.Controls"
+        x:CompileBindings="False">
+  <!--
+    液态玻璃主题入口：亮/暗资源 + 通用玻璃块/凹槽样式 + 三类控件主题。
+    Avalonia 11 没有 backdrop-filter，这里用"半透明渐变 + 内高光 + 边缘亮线 + 柔和投影"拟真玻璃，
+    全部是静态画刷与 BoxShadow，不使用 BlurEffect，也没有常驻动画。
+    调参入口见 docs/glass-controls.md。
+  -->
+  <Styles.Resources>
+    <ResourceDictionary>
+      <!-- ===== 动效（时长 / 缓动 / 回弹幅度） ===== -->
+      <sys:TimeSpan x:Key="Glass.SlideDuration">0:0:0.48</sys:TimeSpan>
+      <sys:TimeSpan x:Key="Glass.PressDuration">0:0:0.2</sys:TimeSpan>
+      <sys:TimeSpan x:Key="Glass.ColorDuration">0:0:0.2</sys:TimeSpan>
+      <sys:TimeSpan x:Key="Glass.TrackColorDuration">0:0:0.3</sys:TimeSpan>
+      <sys:TimeSpan x:Key="Glass.HoverDuration">0:0:0.12</sys:TimeSpan>
+      <sys:TimeSpan x:Key="Glass.PopupFadeDuration">0:0:0.18</sys:TimeSpan>
+      <sys:TimeSpan x:Key="Glass.PopupMoveDuration">0:0:0.3</sys:TimeSpan>
+      <sys:TimeSpan x:Key="Glass.ChevronDuration">0:0:0.24</sys:TimeSpan>
+      <sys:TimeSpan x:Key="Glass.ReducedFadeDuration">0:0:0.1</sys:TimeSpan>
+      <!-- Overshoot：回弹幅度。1.2 ≈ 越过终点 5%；0 = 无回弹。 -->
+      <c:GlassSpringEasing x:Key="Glass.SpringEasing" Overshoot="1.2" />
+
+      <!-- ===== 线性图标（16px，描边绘制） ===== -->
+      <StreamGeometry x:Key="Glass.Icon.Chevron">M4 6 L8 10 L12 6</StreamGeometry>
+      <StreamGeometry x:Key="Glass.Icon.Check">M3.5 8.5 L6.5 11.5 L12.5 4.5</StreamGeometry>
+
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <!-- 凹槽：灰蓝 16% → 9% -->
+          <LinearGradientBrush x:Key="GlassTroughBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#29788AA5" />
+            <GradientStop Offset="1" Color="#17788AA5" />
+          </LinearGradientBrush>
+          <SolidColorBrush x:Key="GlassTroughStroke" Color="#245A698C" />
+          <BoxShadows x:Key="GlassTroughShadow">inset 0 1 3 0 #1F233C78</BoxShadows>
+          <!-- 下拉框：实心白底 + 1px 细边框（不透明，不透出背后内容）；展开面板同样实心。 -->
+          <SolidColorBrush x:Key="GlassFieldBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="GlassFieldStroke" Color="#C9D0DC" />
+          <SolidColorBrush x:Key="GlassPopupSolidBrush" Color="#FFFFFF" />
+          <!-- 玻璃块：白 96% → 62%，顶部更亮更不透明 -->
+          <LinearGradientBrush x:Key="GlassThumbBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#F5FFFFFF" />
+            <GradientStop Offset="1" Color="#9EFFFFFF" />
+          </LinearGradientBrush>
+          <SolidColorBrush x:Key="GlassThumbStroke" Color="#F2FFFFFF" />
+          <!-- 外投影两层（蓝灰）+ 顶部 1.5px 内高光 + 底部极淡内反光 -->
+          <BoxShadows x:Key="GlassThumbShadow">0 6 16 0 #33233C78, 0 1 3 0 #29233C78, inset 0 1.5 0 0 #FFFFFFFF, inset 0 -1.5 1 0 #59FFFFFF</BoxShadows>
+          <!-- 滚动凹槽内空间有限，用更紧的投影避免被裁出硬边 -->
+          <BoxShadows x:Key="GlassThumbShadowCompact">0 2 6 0 #29233C78, 0 1 2 0 #1F233C78, inset 0 1.5 0 0 #FFFFFFFF</BoxShadows>
+          <LinearGradientBrush x:Key="GlassSpecularBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#B3FFFFFF" />
+            <GradientStop Offset="1" Color="#00FFFFFF" />
+          </LinearGradientBrush>
+          <!-- 下拉面板：白 96% → 93%，不依赖背景模糊保证对比度 -->
+          <LinearGradientBrush x:Key="GlassPopupBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#F5FFFFFF" />
+            <GradientStop Offset="1" Color="#EDFAFBFD" />
+          </LinearGradientBrush>
+          <SolidColorBrush x:Key="GlassPopupStroke" Color="#D9FFFFFF" />
+          <BoxShadows x:Key="GlassPopupShadow">0 18 44 0 #40324C8C, 0 2 6 0 #1F324C8C, inset 0 1.5 0 0 #FFFFFFFF</BoxShadows>
+          <!-- 开关开启：上浅下深 -->
+          <LinearGradientBrush x:Key="ToggleOnBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#6AA8FF" />
+            <GradientStop Offset="1" Color="#2F7CF6" />
+          </LinearGradientBrush>
+          <SolidColorBrush x:Key="ToggleOnStroke" Color="#2EFFFFFF" />
+          <BoxShadows x:Key="ToggleOnShadow">inset 0 1 3 0 #592052B8</BoxShadows>
+          <!-- 强调色：#2F7CF6 用于填充/描边；小字号选中文字用更深的 GlassAccentText 以满足 WCAG AA -->
+          <SolidColorBrush x:Key="GlassAccent" Color="#2F7CF6" />
+          <SolidColorBrush x:Key="GlassAccentText" Color="#245FCA" />
+          <SolidColorBrush x:Key="GlassAccentSoft" Color="#1A2F7CF6" />
+          <SolidColorBrush x:Key="GlassHoverStroke" Color="#732F7CF6" />
+          <SolidColorBrush x:Key="GlassOpenStroke" Color="#B32F7CF6" />
+          <SolidColorBrush x:Key="GlassFocusRing" Color="#2F7CF6" />
+          <SolidColorBrush x:Key="GlassTextPrimary" Color="#1B1F2A" />
+          <SolidColorBrush x:Key="GlassTextSecondary" Color="#5F6778" />
+          <SolidColorBrush x:Key="GlassTextHover" Color="#3B4252" />
+          <SolidColorBrush x:Key="GlassDivider" Color="#145A698C" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <LinearGradientBrush x:Key="GlassTroughBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#0DFFFFFF" />
+            <GradientStop Offset="1" Color="#17FFFFFF" />
+          </LinearGradientBrush>
+          <SolidColorBrush x:Key="GlassTroughStroke" Color="#14FFFFFF" />
+          <BoxShadows x:Key="GlassTroughShadow">inset 0 1 3 0 #59000000</BoxShadows>
+          <!-- 暗色下"白底"对应为实心的深色输入底，同样不透明，配一圈浅色细边框。 -->
+          <SolidColorBrush x:Key="GlassFieldBrush" Color="#2B2F38" />
+          <SolidColorBrush x:Key="GlassFieldStroke" Color="#4A5160" />
+          <SolidColorBrush x:Key="GlassPopupSolidBrush" Color="#2B2F38" />
+          <!-- 规格 34%→14%；实测选中蓝字在 34% 白底上对比度只有 3.3:1，降到 15%→8%（叠在凹槽上仍明显亮于凹槽） -->
+          <LinearGradientBrush x:Key="GlassThumbBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#26FFFFFF" />
+            <GradientStop Offset="1" Color="#14FFFFFF" />
+          </LinearGradientBrush>
+          <SolidColorBrush x:Key="GlassThumbStroke" Color="#59FFFFFF" />
+          <BoxShadows x:Key="GlassThumbShadow">0 6 16 0 #73000000, 0 1 3 0 #66000000, inset 0 1.5 0 0 #4DFFFFFF, inset 0 -1.5 1 0 #14FFFFFF</BoxShadows>
+          <BoxShadows x:Key="GlassThumbShadowCompact">0 2 6 0 #66000000, 0 1 2 0 #59000000, inset 0 1.5 0 0 #4DFFFFFF</BoxShadows>
+          <LinearGradientBrush x:Key="GlassSpecularBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#18FFFFFF" />
+            <GradientStop Offset="1" Color="#00FFFFFF" />
+          </LinearGradientBrush>
+          <LinearGradientBrush x:Key="GlassPopupBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#EB2E3443" />
+            <GradientStop Offset="1" Color="#E6282E3C" />
+          </LinearGradientBrush>
+          <SolidColorBrush x:Key="GlassPopupStroke" Color="#29FFFFFF" />
+          <BoxShadows x:Key="GlassPopupShadow">0 18 44 0 #99000000, inset 0 1.5 0 0 #1FFFFFFF</BoxShadows>
+          <LinearGradientBrush x:Key="ToggleOnBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#7AB0FF" />
+            <GradientStop Offset="1" Color="#4D8DFF" />
+          </LinearGradientBrush>
+          <SolidColorBrush x:Key="ToggleOnStroke" Color="#2EFFFFFF" />
+          <BoxShadows x:Key="ToggleOnShadow">inset 0 1 3 0 #66102A66</BoxShadows>
+          <SolidColorBrush x:Key="GlassAccent" Color="#4D8DFF" />
+          <SolidColorBrush x:Key="GlassAccentText" Color="#C8DCFF" />
+          <SolidColorBrush x:Key="GlassAccentSoft" Color="#334D8DFF" />
+          <SolidColorBrush x:Key="GlassHoverStroke" Color="#734D8DFF" />
+          <SolidColorBrush x:Key="GlassOpenStroke" Color="#B34D8DFF" />
+          <SolidColorBrush x:Key="GlassFocusRing" Color="#6AA2FF" />
+          <SolidColorBrush x:Key="GlassTextPrimary" Color="#E9ECF3" />
+          <SolidColorBrush x:Key="GlassTextSecondary" Color="#A3AABB" />
+          <SolidColorBrush x:Key="GlassTextHover" Color="#D2D7E2" />
+          <SolidColorBrush x:Key="GlassDivider" Color="#14FFFFFF" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <!--
+    通用玻璃配方，供页面自绘的玻璃元素复用（例如 <Border Classes="glass-trough">）。
+    三类控件的模板内部直接引用同一组资源而不依赖这些类：全局 Style 的优先级高于
+    ControlTheme 内的状态样式，若模板也走这些类，悬停/选中等状态就会被盖掉。
+  -->
+  <Style Selector="Border.glass-trough">
+    <Setter Property="Background" Value="{DynamicResource GlassTroughBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassTroughStroke}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BoxShadow" Value="{DynamicResource GlassTroughShadow}" />
+  </Style>
+  <Style Selector="Border.glass-thumb">
+    <Setter Property="Background" Value="{DynamicResource GlassThumbBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassThumbStroke}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BoxShadow" Value="{DynamicResource GlassThumbShadow}" />
+  </Style>
+  <Style Selector="c|GlassHighlight">
+    <Setter Property="Fill" Value="{DynamicResource GlassSpecularBrush}" />
+  </Style>
+
+  <!-- 带说明的开关行：左侧标题 + 12px 次要灰副标题，右侧开关，行间 1px 淡分割线。 -->
+  <Style Selector="Border.glass-switch-row">
+    <Setter Property="Padding" Value="0,12" />
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassDivider}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+  </Style>
+  <Style Selector="Border.glass-switch-row:nth-last-child(1)">
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="Border.glass-switch-row TextBlock.glass-switch-title">
+    <Setter Property="Foreground" Value="{DynamicResource GlassTextPrimary}" />
+    <Setter Property="FontSize" Value="14" />
+  </Style>
+  <Style Selector="Border.glass-switch-row TextBlock.glass-switch-subtitle">
+    <Setter Property="Foreground" Value="{DynamicResource GlassTextSecondary}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Margin" Value="0,2,0,0" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <StyleInclude Source="/Styles/GlassSegmentedTheme.axaml" />
+  <StyleInclude Source="/Styles/GlassToggleTheme.axaml" />
+  <StyleInclude Source="/Styles/GlassComboTheme.axaml" />
+
+  <!--
+    减少动画：统一由窗口上的 no-motion 类控制（MotionPreferences 已在主窗口和导入窗口上维护该类）。
+    规则放在三个控件文件之后，同级选择器后声明者优先。效果：
+    滑块直接跳到目标位置、无回弹、无按压形变；弹层无缩放和位移，只保留 100ms 淡入；颜色立即切换。
+    下拉面板挂在独立的弹出窗口里，但样式匹配走逻辑树（ComboBox → Window），所以同样生效。
+  -->
+  <Style Selector=".no-motion c|SegmentedControl /template/ Panel#PART_Thumb,
+                   .no-motion c|SegmentedControl /template/ Border#PART_ThumbVisual,
+                   .no-motion c|SegmentedControl ListBoxItem /template/ ContentPresenter#PART_ContentPresenter,
+                   .no-motion ToggleSwitch /template/ Panel#PART_Thumb,
+                   .no-motion ToggleSwitch /template/ Border#PART_TrackOn,
+                   .no-motion ToggleSwitch /template/ Border#PART_TrackOff,
+                   .no-motion ComboBox /template/ Border#PART_Trough,
+                   .no-motion ComboBox /template/ Path#PART_Chevron,
+                   .no-motion ComboBoxItem /template/ Border#PART_ItemSurface">
+    <Setter Property="Transitions" Value="{x:Null}" />
+  </Style>
+  <Style Selector=".no-motion c|SegmentedControl:pressed /template/ Border#PART_ThumbVisual">
+    <Setter Property="RenderTransform" Value="scale(1, 1)" />
+  </Style>
+  <Style Selector=".no-motion ComboBox /template/ Border#PART_PopupSurface">
+    <Setter Property="RenderTransform" Value="translate(0px, 0px) scale(1, 1)" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="{StaticResource Glass.ReducedFadeDuration}" />
+      </Transitions>
+    </Setter>
+  </Style>
+</Styles>

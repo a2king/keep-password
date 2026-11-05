@@ -1,0 +1,109 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+  <Styles.Resources>
+    <ResourceDictionary>
+      <!-- 统一调参入口：标签 64 + 间隔 12 + 左边距 16 = 值起点 92。 -->
+      <FontFamily x:Key="Detail.Font.Ui">Microsoft YaHei UI, Segoe UI, PingFang SC, sans-serif</FontFamily>
+      <FontFamily x:Key="Detail.Font.Mono">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
+      <sys:Double x:Key="Detail.GroupRadius">14</sys:Double>
+      <sys:Double x:Key="Detail.RowMinHeight">44</sys:Double>
+      <sys:Double x:Key="Detail.LabelWidth">64</sys:Double>
+      <sys:Double x:Key="Detail.ValueStart">92</sys:Double>
+      <sys:Double x:Key="Detail.IconSize">16</sys:Double>
+      <sys:Double x:Key="Detail.FontSize">13</sys:Double>
+      <sys:Double x:Key="Detail.TotpFontSize">22</sys:Double>
+      <sys:TimeSpan x:Key="Detail.TransitionDuration">0:0:0.15</sys:TimeSpan>
+      <sys:TimeSpan x:Key="Detail.CodeTransitionDuration">0:0:0.12</sys:TimeSpan>
+      <!-- 线性几何由 Path 的 Stroke 绘制，避免图标随字体平台变化。 -->
+      <StreamGeometry x:Key="Detail.Icon.Copy">M6 6 H13 Q14 6 14 7 V14 Q14 15 13 15 H6 Q5 15 5 14 V7 Q5 6 6 6 M3 11 H2 V2 H11 V3</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Check">M3 8 L6.5 11.5 L13 4.5</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Eye">M1 8 Q8 -1 15 8 Q8 17 1 8 M10.5 8 A2.5 2.5 0 1 1 5.5 8 A2.5 2.5 0 1 1 10.5 8</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.EyeOff">M2 2 L14 14 M1 8 Q4 3 8 3 Q12 3 15 8 Q13 11 11 12 M8 13 Q4 13 1 8</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Edit">M10 2 L14 6 L6 14 H2 V10 Z M8.5 3.5 L12.5 7.5</StreamGeometry>
+      <!-- 头部三个图标按 16px 网格的实际尺寸绘制，模板里用 Stretch="None"，不再被拉伸放大：
+           关闭 X 视觉 7px，星标约 11px，更多为三个 2px 圆点。 -->
+      <StreamGeometry x:Key="Detail.Icon.More">M4 8 h0.01 M8 8 h0.01 M12 8 h0.01</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Close">M4.5 4.5 L11.5 11.5 M11.5 4.5 L4.5 11.5</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Star">M8.00 2.80 L9.50 6.34 L13.33 6.67 L10.43 9.19 L11.29 12.93 L8.00 10.95 L4.71 12.93 L5.57 9.19 L2.67 6.67 L6.50 6.34 Z</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.External">M9 2 H14 V7 M14 2 L7 9 M6 3 H2 V14 H13 V10</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Terminal">M2 4 L6 8 L2 12 M8 12 H14</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Database">M2 4 C2 0 14 0 14 4 C14 8 2 8 2 4 V12 C2 16 14 16 14 12 V4 M2 8 C2 12 14 12 14 8</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Scan">M1 5 V1 H5 M11 1 H15 V5 M15 11 V15 H11 M5 15 H1 V11 M4 8 H12</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Generate">M2 14 L12 4 L14 6 L4 16 Z M3 1 V5 M1 3 H5 M12 10 V14 M10 12 H14</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Import">M8 1 V10 M4 6 L8 10 L12 6 M2 10 V14 H14 V10</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Add">M8 3.5 V12.5 M3.5 8 H12.5</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Trash">M2 4 H14 M6 4 V2 H10 V4 M4 4 L5 14 H11 L12 4 M7 7 V11 M9 7 V11</StreamGeometry>
+      <StreamGeometry x:Key="Detail.Icon.Chevron">M4 6 L8 10 L12 6</StreamGeometry>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="Detail.Background" Color="#F4F5F8" />
+          <SolidColorBrush x:Key="Detail.GroupBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Detail.Border" Color="#ECEEF3" />
+          <SolidColorBrush x:Key="Detail.Divider" Color="#ECEEF3" />
+          <SolidColorBrush x:Key="Detail.Text" Color="#242A3A" />
+          <SolidColorBrush x:Key="Detail.TextMuted" Color="#616A7C" />
+          <SolidColorBrush x:Key="Detail.Placeholder" Color="#616A7C" />
+          <SolidColorBrush x:Key="Detail.IconMuted" Color="#717B90" />
+          <SolidColorBrush x:Key="Detail.Accent" Color="#2F7CF6" />
+          <SolidColorBrush x:Key="Detail.AccentText" Color="#245FCA" />
+          <SolidColorBrush x:Key="Detail.AccentSoft" Color="#EDF2FF" />
+          <SolidColorBrush x:Key="Detail.Hover" Color="#F1F4FA" />
+          <SolidColorBrush x:Key="Detail.Focus" Color="#2F7CF6" />
+          <SolidColorBrush x:Key="Detail.Danger" Color="#BD3548" />
+          <SolidColorBrush x:Key="Detail.Success" Color="#197A55" />
+          <SolidColorBrush x:Key="Detail.Warning" Color="#956300" />
+          <!-- 以下增强语义色专用于小字号文字；装饰色可独立调整，不能回退到低对比度。 -->
+          <SolidColorBrush x:Key="Detail.DangerText" Color="#BD3548" />
+          <SolidColorBrush x:Key="Detail.SuccessText" Color="#197A55" />
+          <SolidColorBrush x:Key="Detail.WarningText" Color="#956300" />
+          <SolidColorBrush x:Key="Detail.Star" Color="#B57D0D" />
+          <SolidColorBrush x:Key="Detail.OnAccent" Color="#FFFFFF" />
+          <Color x:Key="Detail.ShadowColor">#180D1738</Color>
+          <BoxShadows x:Key="Detail.PopupShadow">0 8 24 0 #180D1738</BoxShadows>
+          <!-- 对外资源名与内部 Detail.* 一致；现有页面仅使用 Kp.*，不会改变其配色。 -->
+          <SolidColorBrush x:Key="DetailBg" Color="#F4F5F8" /><SolidColorBrush x:Key="GroupBg" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="GroupBorder" Color="#ECEEF3" /><SolidColorBrush x:Key="Divider" Color="#ECEEF3" />
+          <SolidColorBrush x:Key="TextPrimary" Color="#242A3A" /><SolidColorBrush x:Key="TextSecondary" Color="#616A7C" />
+          <SolidColorBrush x:Key="IconMuted" Color="#717B90" /><SolidColorBrush x:Key="RowHover" Color="#F1F4FA" />
+          <SolidColorBrush x:Key="Accent" Color="#2F7CF6" /><SolidColorBrush x:Key="AccentSoft" Color="#EDF2FF" />
+          <SolidColorBrush x:Key="Success" Color="#197A55" /><SolidColorBrush x:Key="Warning" Color="#956300" /><SolidColorBrush x:Key="Danger" Color="#BD3548" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="Detail.Background" Color="#121419" />
+          <SolidColorBrush x:Key="Detail.GroupBackground" Color="#1B1E26" />
+          <SolidColorBrush x:Key="Detail.Border" Color="#272B36" />
+          <SolidColorBrush x:Key="Detail.Divider" Color="#272B36" />
+          <SolidColorBrush x:Key="Detail.Text" Color="#F2F4FA" />
+          <SolidColorBrush x:Key="Detail.TextMuted" Color="#B2B9CA" />
+          <SolidColorBrush x:Key="Detail.Placeholder" Color="#A0A9BD" />
+          <SolidColorBrush x:Key="Detail.IconMuted" Color="#AAB4CA" />
+          <SolidColorBrush x:Key="Detail.Accent" Color="#5B9BFF" />
+          <SolidColorBrush x:Key="Detail.AccentText" Color="#8DBBFF" />
+          <SolidColorBrush x:Key="Detail.AccentSoft" Color="#333E5C" />
+          <SolidColorBrush x:Key="Detail.Hover" Color="#232733" />
+          <SolidColorBrush x:Key="Detail.Focus" Color="#5B9BFF" />
+          <SolidColorBrush x:Key="Detail.Danger" Color="#FF99A6" />
+          <SolidColorBrush x:Key="Detail.Success" Color="#72D3AA" />
+          <SolidColorBrush x:Key="Detail.Warning" Color="#F3C872" />
+          <SolidColorBrush x:Key="Detail.DangerText" Color="#FF99A6" />
+          <SolidColorBrush x:Key="Detail.SuccessText" Color="#72D3AA" />
+          <SolidColorBrush x:Key="Detail.WarningText" Color="#F3C872" />
+          <SolidColorBrush x:Key="Detail.Star" Color="#F4C36B" />
+          <SolidColorBrush x:Key="Detail.OnAccent" Color="#171D2F" />
+          <Color x:Key="Detail.ShadowColor">#55000000</Color>
+          <BoxShadows x:Key="Detail.PopupShadow">0 8 24 0 #55000000</BoxShadows>
+          <SolidColorBrush x:Key="DetailBg" Color="#121419" /><SolidColorBrush x:Key="GroupBg" Color="#1B1E26" />
+          <SolidColorBrush x:Key="GroupBorder" Color="#272B36" /><SolidColorBrush x:Key="Divider" Color="#272B36" />
+          <SolidColorBrush x:Key="TextPrimary" Color="#F2F4FA" /><SolidColorBrush x:Key="TextSecondary" Color="#B2B9CA" />
+          <SolidColorBrush x:Key="IconMuted" Color="#AAB4CA" /><SolidColorBrush x:Key="RowHover" Color="#232733" />
+          <SolidColorBrush x:Key="Accent" Color="#5B9BFF" /><SolidColorBrush x:Key="AccentSoft" Color="#333E5C" />
+          <SolidColorBrush x:Key="Success" Color="#72D3AA" /><SolidColorBrush x:Key="Warning" Color="#F3C872" /><SolidColorBrush x:Key="Danger" Color="#FF99A6" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Styles.Resources>
+  <StyleInclude Source="/Styles/DetailFieldTheme.axaml" />
+  <StyleInclude Source="/Styles/DetailCompositeTheme.axaml" />
+  <StyleInclude Source="/Styles/DetailChipsTheme.axaml" />
+</Styles>

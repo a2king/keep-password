@@ -1,32 +1,12 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="using:KeepPassword.App.Views"
+             xmlns:c="using:KeepPassword.App.Controls"
              x:Class="KeepPassword.App.Views.SettingsView"
              Background="Transparent">
   <UserControl.Styles>
-    <Style Selector="Button.theme-segment">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{DynamicResource Kp.TextMuted}" />
-      <Setter Property="Padding" Value="10,8" />
-      <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="HorizontalAlignment" Value="Stretch" />
-      <Setter Property="HorizontalContentAlignment" Value="Center" />
-      <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Cursor" Value="Hand" />
-    </Style>
-    <Style Selector="Button.theme-segment /template/ ContentPresenter">
-      <Setter Property="Background" Value="Transparent" />
-    </Style>
-    <Style Selector="Button.theme-segment.selected">
-      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
-    </Style>
-    <Style Selector="Button.theme-segment.selected /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
-      <Setter Property="BoxShadow" Value="0 2 6 0 #18000000" />
-    </Style>
     <Style Selector="Border.section">
-      <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.Glass}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="12" />
@@ -35,9 +15,77 @@
     <Style Selector="Border.section TextBlock.h2">
       <Setter Property="FontSize" Value="15" />
     </Style>
+
+    <!-- 空间/标签芯片：名称 + 使用数 + 常驻的改名 / 删除小图标，多个芯片换行排列。
+         每个芯片的底色、文字色、描边由代码按名称从 8 色配色里取（Styles/LabelPaletteTheme.axaml），这里只定形状。 -->
+    <Style Selector="Border.label-chip">
+      <Setter Property="Height" Value="30" />
+      <Setter Property="CornerRadius" Value="15" />
+      <Setter Property="Padding" Value="12,0,4,0" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.label-chip.editing">
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />
+    </Style>
+    <!-- 使用数：与名称同色、半透明，弱一档但仍属于同一色系。 -->
+    <Style Selector="Border.label-chip TextBlock.label-chip-count">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Opacity" Value="0.7" />
+      <Setter Property="Margin" Value="6,0,2,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.label-chip Button.label-chip-icon">
+      <Setter Property="Width" Value="22" /><Setter Property="Height" Value="22" />
+      <Setter Property="MinHeight" Value="0" /><Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="11" /><Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Opacity" Value="0.75" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" /><Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <!-- 图标颜色跟随芯片色相；悬停只加深底色，不换成别的颜色。删除图标悬停变红。 -->
+    <Style Selector="Border.label-chip Button.label-chip-icon:pointerover">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Border.label-chip Button.label-chip-icon:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Label.IconHover}" />
+    </Style>
+    <Style Selector="Border.label-chip Button.label-chip-icon.danger-icon:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.DangerSoft}" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Danger}" />
+    </Style>
+    <Style Selector="Border.label-chip Button.label-chip-name">
+      <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" /><Setter Property="MinHeight" Value="0" />
+      <Setter Property="FontSize" Value="13" /><Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Cursor" Value="IBeam" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- 悬停名称：保持芯片色，只加下划线提示"可以点击改名"。 -->
+    <Style Selector="Border.label-chip Button.label-chip-name:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.label-chip Button.label-chip-name:pointerover TextBlock">
+      <Setter Property="TextDecorations" Value="Underline" />
+    </Style>
+    <!-- 芯片内改名输入框与末尾的新增输入框：和芯片同高，覆盖全局 TextBox 的 40px 高度。 -->
+    <Style Selector="TextBox.label-chip-input">
+      <Setter Property="MinHeight" Value="0" /><Setter Property="Height" Value="30" />
+      <Setter Property="Padding" Value="12,0" /><Setter Property="CornerRadius" Value="15" />
+      <Setter Property="FontSize" Value="13" /><Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Width" Value="150" />
+    </Style>
+    <Style Selector="Border.label-chip TextBox.label-chip-input">
+      <Setter Property="Height" Value="26" /><Setter Property="Padding" Value="4,0" />
+      <Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="Transparent" />
+      <Setter Property="Width" Value="120" />
+    </Style>
+    <Style Selector="Border.label-chip TextBox.label-chip-input:focus /template/ Border#PART_BorderElement, Border.label-chip TextBox.label-chip-input:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
+    </Style>
   </UserControl.Styles>
 
-  <DockPanel Margin="28,24" MaxWidth="760">
+  <DockPanel Margin="28,24" MaxWidth="760" HorizontalAlignment="Center">
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,18">
       <Border Width="36" Height="36" CornerRadius="10" Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1">
         <PathIcon Data="{StaticResource Icon.Settings}" Width="18" Height="18" Foreground="{DynamicResource Kp.Accent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -90,13 +138,12 @@
           <StackPanel>
             <TextBlock Text="外观与色彩主题" Classes="h2" Margin="0,0,0,4" />
             <TextBlock Text="选择偏好的界面风格。" Classes="muted" Margin="0,0,0,12" />
-            <Border Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1" CornerRadius="10" Padding="4">
-              <Grid ColumnDefinitions="*,*,*">
-                <Button x:Name="ThemeLightBtn" Classes="theme-segment" Content="浅色" Click="OnThemeLight" />
-                <Button x:Name="ThemeDarkBtn" Grid.Column="1" Classes="theme-segment" Content="深色" Click="OnThemeDark" Margin="4,0" />
-                <Button x:Name="ThemeSystemBtn" Grid.Column="2" Classes="theme-segment" Content="跟随系统" Click="OnThemeSystem" />
-              </Grid>
-            </Border>
+            <!-- 0 浅色 / 1 深色 / 2 跟随系统 -->
+            <c:SegmentedControl x:Name="ThemeSegments" AutomationProperties.Name="界面主题" SelectionChanged="OnThemeSegmentChanged">
+              <ListBoxItem Content="浅色" />
+              <ListBoxItem Content="深色" />
+              <ListBoxItem Content="跟随系统" />
+            </c:SegmentedControl>
           </StackPanel>
         </Border>
 
@@ -105,13 +152,12 @@
             <TextBlock Text="界面动画" Classes="h2" Margin="0,0,0,4" />
             <TextBlock Text="流畅动画提供平滑的展开和切换；也可以跟随系统设置或减少动画。"
                        Classes="muted" TextWrapping="Wrap" Margin="0,0,0,12" />
-            <Border Background="{DynamicResource Kp.SurfaceMuted}" BorderBrush="{DynamicResource Kp.Border}" BorderThickness="1" CornerRadius="10" Padding="4">
-              <Grid ColumnDefinitions="*,*,*">
-                <Button x:Name="MotionFullBtn" Classes="theme-segment" Content="流畅动画" Click="OnMotionFull" />
-                <Button x:Name="MotionSystemBtn" Grid.Column="1" Classes="theme-segment" Content="跟随系统" Click="OnMotionSystem" Margin="4,0" />
-                <Button x:Name="MotionReducedBtn" Grid.Column="2" Classes="theme-segment" Content="减少动画" Click="OnMotionReduced" />
-              </Grid>
-            </Border>
+            <!-- 0 流畅动画 / 1 跟随系统 / 2 减少动画 -->
+            <c:SegmentedControl x:Name="MotionSegments" AutomationProperties.Name="界面动画" SelectionChanged="OnMotionSegmentChanged">
+              <ListBoxItem Content="流畅动画" />
+              <ListBoxItem Content="跟随系统" />
+              <ListBoxItem Content="减少动画" />
+            </c:SegmentedControl>
             <TextBlock x:Name="MotionStatus" Classes="muted" TextWrapping="Wrap" Margin="0,10,0,0" />
           </StackPanel>
         </Border>
@@ -122,10 +168,13 @@
             <TextBlock Text="开机启动" Classes="h2" Margin="0,0,0,4" />
             <TextBlock Text="登录系统后自动运行 Keep Password。最小化启动时会先进入托盘，不弹出主窗口。"
                        Classes="muted" TextWrapping="Wrap" Margin="0,0,0,12" />
-            <ToggleSwitch x:Name="LaunchAtStartupSwitch" OffContent="关闭" OnContent="开机启动"
-                          IsCheckedChanged="OnLaunchAtStartupChanged" />
-            <ToggleSwitch x:Name="StartMinimizedSwitch" OffContent="正常窗口" OnContent="最小化启动"
-                          Margin="0,10,0,0" IsCheckedChanged="OnStartMinimizedChanged" />
+            <!-- 两个开关并排：左边是否开机启动，右边启动方式（未开启开机启动时右侧禁用）。 -->
+            <WrapPanel Orientation="Horizontal" ItemSpacing="32" LineSpacing="10">
+              <ToggleSwitch x:Name="LaunchAtStartupSwitch" OffContent="关闭" OnContent="开机启动" AutomationProperties.Name="开机启动"
+                            IsCheckedChanged="OnLaunchAtStartupChanged" />
+              <ToggleSwitch x:Name="StartMinimizedSwitch" OffContent="正常窗口" OnContent="最小化启动" AutomationProperties.Name="最小化启动"
+                            IsCheckedChanged="OnStartMinimizedChanged" />
+            </WrapPanel>
             <TextBlock x:Name="StartupStatus" Classes="muted" TextWrapping="Wrap" Margin="0,10,0,0" />
           </StackPanel>
         </Border>
@@ -151,20 +200,20 @@
         <Border Classes="section">
           <StackPanel>
             <TextBlock Text="空间分类与账号标签" Classes="h2" Margin="0,0,0,4" />
-            <TextBlock Text="可以新增、删除或统一修改名称。改名会同步到所有使用它的账号；改成已有名称会合并。删除空间后账号变为未分类，删除标签后账号去掉该标签。"
+            <TextBlock Text="点名称或铅笔可直接改名（回车保存、Esc 取消），改成已有名称会合并；× 删除。在末尾输入框里回车即可新增。"
                        TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
+            <!-- 芯片式列表：每项一行改成一个小芯片，多项自动换行，整段高度大约只有原来的 1/5。
+                 新增输入框由代码放在每个列表的最后一个位置。 -->
             <TextBlock Text="空间分类" Classes="label" />
-            <StackPanel x:Name="SpaceList" Spacing="6" />
-            <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
-              <TextBox x:Name="NewSpaceBox" Watermark="新增空间分类" />
-              <Button Grid.Column="1" Classes="soft" Content="新增" Margin="8,0,0,0" Click="OnAddSpace" />
-            </Grid>
+            <WrapPanel x:Name="SpaceList" ItemSpacing="6" LineSpacing="6">
+              <TextBox x:Name="NewSpaceBox" Classes="label-chip-input" Watermark="+ 新增空间" KeyDown="OnAddSpaceKeyDown"
+                       AutomationProperties.Name="新增空间分类" />
+            </WrapPanel>
             <TextBlock Text="账号标签" Classes="label" Margin="0,16,0,6" />
-            <StackPanel x:Name="TagList" Spacing="6" />
-            <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
-              <TextBox x:Name="NewTagBox" Watermark="新增账号标签" />
-              <Button Grid.Column="1" Classes="soft" Content="新增" Margin="8,0,0,0" Click="OnAddTag" />
-            </Grid>
+            <WrapPanel x:Name="TagList" ItemSpacing="6" LineSpacing="6">
+              <TextBox x:Name="NewTagBox" Classes="label-chip-input" Watermark="+ 新增标签" KeyDown="OnAddTagKeyDown"
+                       AutomationProperties.Name="新增账号标签" />
+            </WrapPanel>
             <TextBlock x:Name="LabelStatus" Classes="muted" TextWrapping="Wrap" Margin="0,6,0,0" />
           </StackPanel>
         </Border>
@@ -191,12 +240,13 @@
             <TextBlock x:Name="ShortKeyHint" Text="提交前必须验证当前短密钥。自动填入时仍会再确认一次。"
                        TextWrapping="Wrap" Classes="muted" Margin="0,0,0,8" />
             <TextBlock x:Name="AccountText" Classes="muted" Margin="0,0,0,4" FontWeight="SemiBold" />
+            <!-- 顺序：当前短密钥（或主密码）→ 新短密钥 → 确认新短密钥；Tab 键也按这个顺序走。 -->
+            <TextBlock x:Name="VerifyLabel" Text="当前短密钥" Classes="label" />
+            <TextBox x:Name="MasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
             <TextBlock Text="新短密钥" Classes="label" />
             <TextBox x:Name="NewKeyBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
             <TextBlock Text="确认新短密钥" Classes="label" />
             <TextBox x:Name="ConfirmBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
-            <TextBlock x:Name="VerifyLabel" Text="当前短密钥" Classes="label" />
-            <TextBox x:Name="MasterBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" FontSize="15" />
             <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,10,0,0" IsVisible="False" x:Name="ErrorBox" views:Motion.RevealOnShow="True">
               <TextBlock x:Name="ErrorText" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
             </Border>
@@ -246,7 +296,7 @@
               <TextBlock x:Name="SyncMetaText" Classes="muted" TextWrapping="Wrap" />
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Classes="accent" Content="立即刷新" Click="OnSyncRefresh" />
-                <Button Classes="ghost" Content="断开云同步" Click="OnSyncDisconnect" />
+                <Button Classes="danger" Content="断开云同步" Click="OnSyncDisconnect" />
               </StackPanel>
             </StackPanel>
 

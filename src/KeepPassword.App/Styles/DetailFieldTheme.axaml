@@ -1,0 +1,180 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:details="using:KeepPassword.App.Controls.Details"
+        x:CompileBindings="False">
+  <Styles.Resources>
+    <!-- 详情专用按钮模板隔离全局 Button 样式。字段行图标常驻显示，按钮 24px、图标 14px，只求一眼可见、不抢内容。 -->
+    <ControlTheme x:Key="Detail.IconButtonTheme" TargetType="Button">
+      <Setter Property="Width" Value="24" /><Setter Property="Height" Value="24" />
+      <Setter Property="MinHeight" Value="0" /><Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource Detail.IconMuted}" />
+      <Setter Property="CornerRadius" Value="6" /><Setter Property="Cursor" Value="Hand" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" /><Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="PART_ButtonSurface" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+            <ContentPresenter Content="{TemplateBinding Content}" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <!-- 详情页鼠标悬停不做任何视觉变化（不变底色、不变颜色）；只保留按下与键盘焦点反馈。 -->
+      <Style Selector="^:focus-visible /template/ Border#PART_ButtonSurface"><Setter Property="BorderBrush" Value="{DynamicResource Detail.Focus}" /><Setter Property="BorderThickness" Value="2" /></Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type details:CopyButton}" TargetType="details:CopyButton" BasedOn="{StaticResource Detail.IconButtonTheme}">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="PART_ButtonSurface" Background="{TemplateBinding Background}" CornerRadius="6">
+            <Path x:Name="PART_CopyIcon" Width="14" Height="14" Stretch="Uniform" Data="{DynamicResource Detail.Icon.Copy}"
+                  Stroke="{TemplateBinding Foreground}" StrokeThickness="1.4" StrokeLineCap="Round" StrokeJoin="Round"
+                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:copied"><Setter Property="Foreground" Value="{DynamicResource Detail.Success}" /></Style>
+      <Style Selector="^:copied /template/ Path#PART_CopyIcon"><Setter Property="Data" Value="{DynamicResource Detail.Icon.Check}" /></Style>
+      <Style Selector="^:disabled"><Setter Property="Opacity" Value="0.4" /></Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type details:FieldRow}" TargetType="details:FieldRow">
+      <Setter Property="MinHeight" Value="{StaticResource Detail.RowMinHeight}" />
+      <Setter Property="FontFamily" Value="{DynamicResource Detail.Font.Ui}" />
+      <Setter Property="FontSize" Value="{StaticResource Detail.FontSize}" />
+      <Setter Property="Foreground" Value="{DynamicResource Detail.Text}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid x:Name="PART_RowRoot" Background="Transparent" MinHeight="44">
+            <Border x:Name="PART_Hover" Background="{DynamicResource Detail.Hover}" Opacity="0" IsHitTestVisible="False" />
+            <Border x:Name="PART_Divider" Height="1" Margin="92,0,0,0" VerticalAlignment="Top" Background="{DynamicResource Detail.Divider}"
+                    IsVisible="{TemplateBinding IsDividerVisible}" IsHitTestVisible="False" />
+            <!-- 两态共享同一网格：标签64、间隔12；内容行占满剩余高度并垂直居中，错误带仅在校验失败时出现（32+12=44，行高不变）。 -->
+            <Grid x:Name="PART_Layout" ColumnDefinitions="64,12,*,Auto" RowDefinitions="*,Auto" Margin="16,0">
+              <TextBlock Text="{TemplateBinding Label}" Foreground="{DynamicResource Detail.TextMuted}" VerticalAlignment="Center" FontSize="12" TextTrimming="CharacterEllipsis" />
+              <Grid x:Name="PART_ValueArea" Grid.Column="2" MinHeight="32" VerticalAlignment="Center">
+                <Button x:Name="PART_ValueButton" Background="Transparent" BorderThickness="0" Padding="0" MinHeight="32" HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" Focusable="True" ToolTip.Tip="{TemplateBinding ValueToolTip}">
+                  <Grid>
+                    <TextBlock x:Name="PART_ValueText" Text="{TemplateBinding DisplayValue}" Foreground="{DynamicResource Detail.Text}"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  </Grid>
+                </Button>
+                <!-- 自定义选择器独立于值按钮，避免 ComboBox/分段选择点击冒泡误入编辑。 -->
+                <ContentPresenter x:Name="PART_CustomValue" Content="{TemplateBinding ValueContent}" IsVisible="False" IsHitTestVisible="False" VerticalAlignment="Center" />
+                <TextBox x:Name="PART_Editor" Text="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                         PasswordChar="{TemplateBinding EditorPasswordChar}" Watermark="{TemplateBinding Placeholder}" IsVisible="False"
+                         FontSize="{TemplateBinding FontSize}" FontWeight="{TemplateBinding FontWeight}"
+                         AcceptsReturn="{TemplateBinding Multiline}" MinHeight="32" Padding="0,5" Margin="0" BorderThickness="0"
+                         Background="Transparent" Foreground="{DynamicResource Detail.Text}" VerticalContentAlignment="Center" />
+              </Grid>
+              <!-- 操作图标常驻显示（不再悬停才出现）。编辑入口是点击值本身，不再单独放编辑按钮；
+                   PART_EditButton 保留为隐藏部件，FieldRow 代码仍可找到它。 -->
+              <StackPanel x:Name="PART_Actions" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Spacing="2" Margin="6,0,0,0">
+                <ContentPresenter Content="{TemplateBinding Actions}" VerticalAlignment="Center" />
+                <Button x:Name="PART_EditButton" Theme="{StaticResource Detail.IconButtonTheme}" ToolTip.Tip="编辑字段" IsVisible="False" />
+                <Button x:Name="PART_RevealButton" Theme="{StaticResource Detail.IconButtonTheme}" ToolTip.Tip="显示或隐藏" IsVisible="False">
+                  <Path x:Name="PART_RevealIcon" Width="14" Height="14" Stretch="Uniform" Data="{DynamicResource Detail.Icon.Eye}" Stroke="{DynamicResource Detail.IconMuted}" StrokeThickness="1.4" StrokeLineCap="Round" StrokeJoin="Round" />
+                </Button>
+                <details:CopyButton x:Name="PART_CopyButton" CopyValue="{TemplateBinding EffectiveCopyValue}" Label="{TemplateBinding Label}"
+                                    IsSensitive="{TemplateBinding IsSecret}" IsVisible="{TemplateBinding CanCopy}" />
+              </StackPanel>
+              <TextBlock Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Text="{TemplateBinding ValidationMessage}" Foreground="{DynamicResource Detail.DangerText}"
+                         FontSize="10" LineHeight="12" Height="12" TextTrimming="CharacterEllipsis" IsVisible="{TemplateBinding HasValidation}" />
+            </Grid>
+            <!-- 独立覆盖描边，不改变 BorderThickness、Padding 或字段测量尺寸。 -->
+            <Border x:Name="PART_Focus" BorderBrush="{DynamicResource Detail.Focus}" BorderThickness="2" CornerRadius="7" Opacity="0" IsHitTestVisible="False" />
+          </Grid>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^ /template/ Border#PART_Hover, ^ /template/ Border#PART_Focus">
+        <Setter Property="Transitions"><Transitions><DoubleTransition Property="Opacity" Duration="{StaticResource Detail.TransitionDuration}" Easing="CubicEaseOut" /></Transitions></Setter>
+      </Style>
+      <!-- 浅灰行底只在编辑时出现，表示"正在编辑这一行"；鼠标经过、点复制等都不再把整行置灰。 -->
+      <Style Selector="^:editing /template/ Border#PART_Hover"><Setter Property="Opacity" Value="1" /></Style>
+      <!-- 鼠标点击/编辑不画蓝框，只保留浅色行背景；描边仅用于键盘焦点与校验错误。 -->
+      <Style Selector="^:focus-visible /template/ Border#PART_Focus"><Setter Property="Opacity" Value="1" /></Style>
+      <Style Selector="^:invalid /template/ Border#PART_Focus"><Setter Property="BorderBrush" Value="{DynamicResource Detail.Danger}" /><Setter Property="Opacity" Value="1" /></Style>
+      <Style Selector="^:editing /template/ TextBox#PART_Editor"><Setter Property="IsVisible" Value="True" /></Style>
+      <Style Selector="^:editing /template/ Button#PART_ValueButton"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="^:secret /template/ Button#PART_RevealButton"><Setter Property="IsVisible" Value="True" /></Style>
+      <Style Selector="^:revealed /template/ Path#PART_RevealIcon"><Setter Property="Data" Value="{DynamicResource Detail.Icon.EyeOff}" /></Style>
+      <Style Selector="^:empty /template/ TextBlock#PART_ValueText"><Setter Property="Foreground" Value="{DynamicResource Detail.Placeholder}" /></Style>
+      <Style Selector="^:mono /template/ TextBlock#PART_ValueText"><Setter Property="FontFamily" Value="{DynamicResource Detail.Font.Mono}" /></Style>
+      <Style Selector="^:mono /template/ TextBox#PART_Editor"><Setter Property="FontFamily" Value="{DynamicResource Detail.Font.Mono}" /></Style>
+      <Style Selector="^:custom-value /template/ TextBlock#PART_ValueText"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="^:custom-value /template/ ContentPresenter#PART_CustomValue"><Setter Property="IsVisible" Value="True" /></Style>
+      <Style Selector="^:editing /template/ ContentPresenter#PART_CustomValue"><Setter Property="IsVisible" Value="False" /></Style>
+      <Style Selector="^:readonly /template/ Button#PART_ValueButton"><Setter Property="IsHitTestVisible" Value="False" /></Style>
+      <Style Selector="^:readonly /template/ ContentPresenter#PART_CustomValue"><Setter Property="IsHitTestVisible" Value="True" /></Style>
+      <Style Selector="^:multiline /template/ Grid#PART_ValueArea"><Setter Property="Height" Value="72" /></Style>
+      <Style Selector="^:multiline /template/ TextBlock#PART_ValueText"><Setter Property="TextWrapping" Value="Wrap" /><Setter Property="MaxHeight" Value="64" /></Style>
+      <Style Selector="^:multiline /template/ TextBox#PART_Editor"><Setter Property="TextWrapping" Value="Wrap" /><Setter Property="VerticalContentAlignment" Value="Top" /><Setter Property="MaxHeight" Value="72" /></Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type details:SecretField}" TargetType="details:SecretField" BasedOn="{StaticResource {x:Type details:FieldRow}}" />
+    <ControlTheme x:Key="{x:Type details:TotpField}" TargetType="details:TotpField" BasedOn="{StaticResource {x:Type details:SecretField}}">
+      <!-- 查看态展示验证码，眼睛仅在编辑真实密钥时才有可见作用。 -->
+      <Style Selector="^:not(:editing) /template/ Button#PART_RevealButton"><Setter Property="IsVisible" Value="False" /></Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type details:TotpValuePresenter}" TargetType="details:TotpValuePresenter">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid ColumnDefinitions="*,Auto" MinHeight="30">
+            <TextBlock x:Name="PART_Code" Text="{Binding Code}" FontFamily="{DynamicResource Detail.Font.Mono}" FontSize="{StaticResource Detail.TotpFontSize}"
+                       FontWeight="SemiBold" Foreground="{DynamicResource Detail.AccentText}" VerticalAlignment="Center" />
+            <Panel Grid.Column="1" Width="26" Height="26" Margin="8,0" VerticalAlignment="Center">
+              <Ellipse Stroke="{DynamicResource Detail.Divider}" StrokeThickness="3" />
+              <Arc x:Name="PART_Countdown" StartAngle="-90" SweepAngle="{Binding RemainingSweep}" Stroke="{DynamicResource Detail.Accent}" StrokeThickness="3" />
+              <TextBlock Text="{Binding RemainingSeconds}" Foreground="{DynamicResource Detail.TextMuted}" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Panel>
+          </Grid>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^ /template/ TextBlock#PART_Code">
+        <Setter Property="Transitions"><Transitions><DoubleTransition Property="Opacity" Duration="{StaticResource Detail.CodeTransitionDuration}" Easing="CubicEaseOut" /></Transitions></Setter>
+      </Style>
+      <Style Selector="^.urgent /template/ Arc#PART_Countdown"><Setter Property="Stroke" Value="{DynamicResource Detail.Warning}" /></Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type details:DetailGroup}" TargetType="details:DetailGroup">
+      <Setter Property="Margin" Value="0,0,0,16" /><Setter Property="Background" Value="{DynamicResource Detail.GroupBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Detail.Border}" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="14" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{TemplateBinding CornerRadius}" ClipToBounds="True">
+            <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" HorizontalContentAlignment="Stretch" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type details:ToastHost}" TargetType="details:ToastHost">
+      <Setter Property="HorizontalAlignment" Value="Center" /><Setter Property="VerticalAlignment" Value="Top" /><Setter Property="Margin" Value="12" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="PART_Toast" Background="{DynamicResource Detail.GroupBackground}" BorderBrush="{DynamicResource Detail.Border}" BorderThickness="1"
+                  CornerRadius="12" Padding="14,9" BoxShadow="{DynamicResource Detail.PopupShadow}" Opacity="0">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Path Width="16" Height="16" Stretch="Uniform" Data="{DynamicResource Detail.Icon.Check}" Stroke="{DynamicResource Detail.Success}" StrokeThickness="1.6" VerticalAlignment="Center" />
+              <TextBlock Text="{TemplateBinding Message}" Foreground="{DynamicResource Detail.Text}" FontFamily="{DynamicResource Detail.Font.Ui}" FontSize="12" />
+            </StackPanel>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^ /template/ Border#PART_Toast"><Setter Property="Transitions"><Transitions><DoubleTransition Property="Opacity" Duration="{StaticResource Detail.TransitionDuration}" Easing="CubicEaseOut" /></Transitions></Setter></Style>
+      <Style Selector="^:shown /template/ Border#PART_Toast"><Setter Property="Opacity" Value="1" /></Style>
+    </ControlTheme>
+  </Styles.Resources>
+  <!-- 跨字段和内嵌编辑器两层模板的选择器须放在顶层，不能放入 ControlTheme。 -->
+  <Style Selector=":is(details|FieldRow) /template/ TextBox#PART_Editor:pointerover /template/ Border#PART_BorderElement, :is(details|FieldRow) /template/ TextBox#PART_Editor:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector=":is(details|FieldRow) /template/ Button#PART_ValueButton:pointerover /template/ ContentPresenter, :is(details|FieldRow) /template/ Button#PART_ValueButton:pressed /template/ ContentPresenter"><Setter Property="Background" Value="Transparent" /></Style>
+  <!-- 减少动效只取消过渡，复制、掩码、焦点和错误反馈仍立即生效。 -->
+  <Style Selector=".no-motion :is(details|FieldRow) /template/ Border, .no-motion :is(details|FieldRow) /template/ StackPanel, :is(details|FieldRow).no-motion /template/ Border, :is(details|FieldRow).no-motion /template/ StackPanel, .no-motion details|ToastHost /template/ Border, details|ToastHost.no-motion /template/ Border, .no-motion details|TotpValuePresenter /template/ TextBlock, details|TotpValuePresenter.no-motion /template/ TextBlock">
+    <Setter Property="Transitions" Value="{x:Null}" />
+  </Style>
+  <Style Selector=".no-motion details|TotpValuePresenter /template/ TextBlock#PART_Code, details|TotpValuePresenter.no-motion /template/ TextBlock#PART_Code"><Setter Property="Opacity" Value="1" /></Style>
+</Styles>

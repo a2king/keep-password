@@ -24,7 +24,9 @@ internal static class EncryptionKeyDialog
         var save = new Button { Content = "选择文件夹并保存密钥文件", HorizontalAlignment = HorizontalAlignment.Stretch };
         save.Classes.Add("accent");
         var done = new Button { Content = "已保存，继续", IsEnabled = false };
+        done.Classes.Add("soft");
         var cancel = new Button { Content = "退出并锁定" };
+        cancel.Classes.Add("soft");
         var saved = false;
         var closed = false;
         window.Closed += (_, _) => { closed = true; key.Text = ""; };
@@ -70,9 +72,11 @@ internal static class EncryptionKeyDialog
         var box = new TextBox { PasswordChar = '•', Watermark = "粘贴完整的 KP2- 加密密钥" };
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap };
         var choose = new Button { Content = "选择密钥文件…" };
+        choose.Classes.Add("soft");
         var ok = new Button { Content = "验证并继续" };
         ok.Classes.Add("accent");
         var cancel = new Button { Content = "取消" };
+        cancel.Classes.Add("soft");
         string? result = null;
         var closed = false;
         window.Closed += (_, _) => { closed = true; box.Text = ""; };

@@ -4,8 +4,12 @@
              x:Class="KeepPassword.App.App">
   <Application.Resources>
     <ResourceDictionary>
+      <!-- 空间 / 标签芯片的 8 色配色（亮/暗两套）。 -->
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="/Styles/LabelPaletteTheme.axaml" />
+      </ResourceDictionary.MergedDictionaries>
       <!-- 字体配置：程序员钟爱的等宽字体栈与现代UI字体栈 -->
-      <FontFamily x:Key="Kp.Font.Ui">Inter, Segoe UI Variable, Microsoft YaHei UI, PingFang SC, -apple-system, sans-serif</FontFamily>
+      <FontFamily x:Key="Kp.Font.Ui">SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, Inter, Segoe UI Variable, PingFang SC, Microsoft YaHei UI, sans-serif</FontFamily>
       <FontFamily x:Key="Kp.Font.Mono">JetBrains Mono, Cascadia Code, Fira Code, Consolas, Courier New, monospace</FontFamily>
 
       <!-- 矢量图标资源 -->
@@ -31,31 +35,56 @@
       <StreamGeometry x:Key="Icon.Star">M12 17.27l4.15 2.51c.76.46 1.69-.22 1.49-1.08l-1.1-4.72 3.67-3.18c.67-.58.31-1.68-.57-1.75l-4.83-.41-1.89-4.46c-.34-.81-1.5-.81-1.84 0L9.19 8.63l-4.83.41c-.88.07-1.24 1.17-.57 1.75l3.67 3.18-1.1 4.72c-.2.86.73 1.54 1.49 1.08l4.15-2.5z</StreamGeometry>
     <StreamGeometry x:Key="Icon.StarOutline">M19.65 9.04l-4.84-.42-1.89-4.45c-.34-.81-1.5-.81-1.84 0L9.19 8.63l-4.83.41c-.88.07-1.24 1.17-.57 1.75l3.67 3.18-1.1 4.72c-.2.86.73 1.54 1.49 1.08l4.15-2.5 4.15 2.51c.76.46 1.69-.22 1.49-1.08l-1.1-4.73 3.67-3.18c.67-.58.32-1.68-.56-1.75zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z</StreamGeometry>
     <StreamGeometry x:Key="Icon.Check">M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z</StreamGeometry>
+      <StreamGeometry x:Key="Icon.ChevronDown">M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z</StreamGeometry>
+      <StreamGeometry x:Key="Icon.ChevronUp">M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z</StreamGeometry>
+      <!-- 细线箭头（1.6px）：16×16 网格，两角各有一个不可见锚点把边界固定为 16×16，
+           PathIcon 按 Uniform 缩放时比例正好 1:1，线条不会被放大变粗。 -->
+      <StreamGeometry x:Key="Icon.ChevronDownThin">M3.43 7.07 L8.00 11.63 L12.57 7.07 L11.43 5.93 L8.00 9.37 L4.57 5.93 Z M0 0 h0.01 M16 16 h-0.01</StreamGeometry>
+      <StreamGeometry x:Key="Icon.ChevronUpThin">M3.43 8.93 L8.00 4.37 L12.57 8.93 L11.43 10.07 L8.00 6.63 L4.57 10.07 Z M0 0 h0.01 M16 16 h-0.01</StreamGeometry>
 
       <!-- 主题资源字典（支持明暗无缝切换） -->
       <ResourceDictionary.ThemeDictionaries>
         <!-- 浅色现代风格 (Clean Light) -->
         <ResourceDictionary x:Key="Light">
-          <SolidColorBrush x:Key="Kp.Bg" Color="#F4F6F9" />
-          <SolidColorBrush x:Key="Kp.UnlockSide" Color="#E9EDF2" />
-          <SolidColorBrush x:Key="Kp.Sidebar" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="Kp.SidebarHover" Color="#EEF2F7" />
-          <SolidColorBrush x:Key="Kp.SidebarActive" Color="#2563EB" />
-          <SolidColorBrush x:Key="Kp.SidebarText" Color="#64748B" />
-          <SolidColorBrush x:Key="Kp.SidebarTextHover" Color="#0F172A" />
-          <SolidColorBrush x:Key="Kp.SidebarTextActive" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="Kp.Surface" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="Kp.SurfaceElevated" Color="#F8FAFC" />
-          <SolidColorBrush x:Key="Kp.SurfaceMuted" Color="#F1F5F9" />
-          <SolidColorBrush x:Key="Kp.Border" Color="#E2E8F0" />
-          <SolidColorBrush x:Key="Kp.BorderSubtle" Color="#F1F5F9" />
-          <SolidColorBrush x:Key="Kp.Accent" Color="#2563EB" />
-          <SolidColorBrush x:Key="Kp.AccentHover" Color="#1D4ED8" />
-          <SolidColorBrush x:Key="Kp.AccentSoft" Color="#EFF6FF" />
-          <SolidColorBrush x:Key="Kp.Text" Color="#0F172A" />
-          <SolidColorBrush x:Key="Kp.TextMuted" Color="#64748B" />
-          <SolidColorBrush x:Key="Kp.Danger" Color="#DC2626" />
-        <SolidColorBrush x:Key="Kp.Star" Color="#F5A524" />
+          <SolidColorBrush x:Key="Kp.Bg" Color="#FAFAFC" />
+          <SolidColorBrush x:Key="Kp.UnlockSide" Color="#F4F4F6" />
+          <SolidColorBrush x:Key="Kp.Glass" Color="#E6FFFFFF" />
+          <SolidColorBrush x:Key="Kp.GlassMuted" Color="#FDFDFF" />
+          <SolidColorBrush x:Key="Kp.GlassAccent" Color="#D9EAF3FF" />
+          <LinearGradientBrush x:Key="Kp.Liquid.Track" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#E6FFFFFF" />
+            <GradientStop Offset="1" Color="#B8ECECF1" />
+          </LinearGradientBrush>
+          <LinearGradientBrush x:Key="Kp.Liquid.Fill" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FAFFFFFF" />
+            <GradientStop Offset="0.48" Color="#E6F4FAFF" />
+            <GradientStop Offset="1" Color="#C7D9EDFF" />
+          </LinearGradientBrush>
+          <SolidColorBrush x:Key="Kp.Liquid.Edge" Color="#B3FFFFFF" />
+          <SolidColorBrush x:Key="Kp.Liquid.Hover" Color="#220A84FF" />
+          <SolidColorBrush x:Key="Kp.Liquid.Glow" Color="#400A84FF" />
+          <SolidColorBrush x:Key="Kp.Liquid.Text" Color="#0066CC" />
+          <SolidColorBrush x:Key="Kp.Liquid.Highlight" Color="#CCFFFFFF" />
+          <BoxShadows x:Key="Kp.Liquid.Shadow">0 2 8 0 #24000000</BoxShadows>
+          <SolidColorBrush x:Key="Kp.Sidebar" Color="#EFFFFFFF" />
+          <SolidColorBrush x:Key="Kp.SidebarHover" Color="#140A84FF" />
+          <SolidColorBrush x:Key="Kp.SidebarActive" Color="#240A84FF" />
+          <SolidColorBrush x:Key="Kp.SidebarText" Color="#6E6E73" />
+          <SolidColorBrush x:Key="Kp.SidebarTextHover" Color="#1D1D1F" />
+          <SolidColorBrush x:Key="Kp.SidebarTextActive" Color="#0A84FF" />
+          <!-- 输入控件使用纯白表面，与 macOS 的浅色表单保持一致。 -->
+          <SolidColorBrush x:Key="Kp.Surface" Color="#FFFFFFFF" />
+          <SolidColorBrush x:Key="Kp.SurfaceElevated" Color="#F9F9FB" />
+          <SolidColorBrush x:Key="Kp.SurfaceMuted" Color="#F0F0F3" />
+          <SolidColorBrush x:Key="Kp.Border" Color="#2E3C3C43" />
+          <SolidColorBrush x:Key="Kp.BorderSubtle" Color="#1A3C3C43" />
+          <SolidColorBrush x:Key="Kp.Accent" Color="#0A84FF" />
+          <SolidColorBrush x:Key="Kp.AccentHover" Color="#0071E3" />
+          <SolidColorBrush x:Key="Kp.AccentSoft" Color="#1A0A84FF" />
+          <SolidColorBrush x:Key="Kp.Text" Color="#1D1D1F" />
+          <SolidColorBrush x:Key="Kp.TextMuted" Color="#6E6E73" />
+          <SolidColorBrush x:Key="Kp.Danger" Color="#FF3B30" />
+        <SolidColorBrush x:Key="Kp.Star" Color="#FF9F0A" />
         <SolidColorBrush x:Key="Tag.0.Bg" Color="#FFF0F6" />
         <SolidColorBrush x:Key="Tag.0.Border" Color="#FFADD2" />
         <SolidColorBrush x:Key="Tag.0.Fg" Color="#C41D7F" />
@@ -89,61 +118,88 @@
         <SolidColorBrush x:Key="Tag.10.Bg" Color="#F9F0FF" />
         <SolidColorBrush x:Key="Tag.10.Border" Color="#D3ADF7" />
         <SolidColorBrush x:Key="Tag.10.Fg" Color="#531DAB" />
-        <SolidColorBrush x:Key="Kp.LogoTile" Color="#F3F5F8" />
-          <SolidColorBrush x:Key="Kp.DangerHover" Color="#B91C1C" />
-          <SolidColorBrush x:Key="Kp.DangerSoft" Color="#FEF2F2" />
-          <SolidColorBrush x:Key="Kp.Warning" Color="#D97706" />
-          <SolidColorBrush x:Key="Kp.Success" Color="#16A34A" />
-          <SolidColorBrush x:Key="Kp.Selection" Color="#EFF6FF" />
-          <SolidColorBrush x:Key="Kp.SelectionBorder" Color="#BFDBFE" />
+        <SolidColorBrush x:Key="Kp.LogoTile" Color="#F2F2F7" />
+          <SolidColorBrush x:Key="Kp.DangerHover" Color="#D70015" />
+          <SolidColorBrush x:Key="Kp.DangerSoft" Color="#1AFF3B30" />
+          <!-- 文字按钮：蓝底白字 / 红底白字，均带 1px 深一档描边。底色按白字 WCAG AA（≥4.5:1）选取。 -->
+          <SolidColorBrush x:Key="Kp.Button.Primary" Color="#2563EB" />
+          <SolidColorBrush x:Key="Kp.Button.PrimaryHover" Color="#1D4ED8" />
+          <SolidColorBrush x:Key="Kp.Button.PrimaryPressed" Color="#1E40AF" />
+          <SolidColorBrush x:Key="Kp.Button.PrimaryBorder" Color="#1D4ED8" />
+          <SolidColorBrush x:Key="Kp.Button.Danger" Color="#DC2626" />
+          <SolidColorBrush x:Key="Kp.Button.DangerHover" Color="#B91C1C" />
+          <SolidColorBrush x:Key="Kp.Button.DangerPressed" Color="#991B1B" />
+          <SolidColorBrush x:Key="Kp.Button.DangerBorder" Color="#B91C1C" />
+          <SolidColorBrush x:Key="Kp.Warning" Color="#FF9F0A" />
+          <SolidColorBrush x:Key="Kp.Success" Color="#34C759" />
+          <SolidColorBrush x:Key="Kp.Selection" Color="#1A0A84FF" />
+          <SolidColorBrush x:Key="Kp.SelectionBorder" Color="#660A84FF" />
 
         <!-- 覆盖 Fluent 下拉框配色，与应用主题一致 -->
-        <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#F1F5F9" />
-        <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#BFDBFE" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#F0F0F3" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#660A84FF" />
         <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#FFFFFF" />
-        <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#2563EB" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#0A84FF" />
         <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#FFFFFF" />
-        <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#64748B" />
+        <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#6E6E73" />
         <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FFFFFF" />
-        <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#E2E8F0" />
-        <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#0F172A" />
-        <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#F1F5F9" />
-        <SolidColorBrush x:Key="ComboBoxItemForegroundPointerOver" Color="#0F172A" />
-        <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="#E2E8F0" />
-        <SolidColorBrush x:Key="ComboBoxItemForegroundPressed" Color="#0F172A" />
-        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#EFF6FF" />
-        <SolidColorBrush x:Key="ComboBoxItemForegroundSelected" Color="#2563EB" />
-        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#DBEAFE" />
-        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver" Color="#1D4ED8" />
-        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="#BFDBFE" />
-        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed" Color="#1D4ED8" />
-          <SolidColorBrush x:Key="Kp.CardShadow" Color="#0D0F172A" />
-          <SolidColorBrush x:Key="Kp.BadgeBg" Color="#E0E7FF" />
-          <SolidColorBrush x:Key="Kp.BadgeFg" Color="#3730A3" />
+        <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#2E3C3C43" />
+        <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#1D1D1F" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#F0F0F3" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPointerOver" Color="#1D1D1F" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="#E5E5EA" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPressed" Color="#1D1D1F" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#1A0A84FF" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelected" Color="#0071E3" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#260A84FF" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver" Color="#0071E3" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="#400A84FF" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed" Color="#0071E3" />
+          <SolidColorBrush x:Key="Kp.CardShadow" Color="#18000000" />
+          <SolidColorBrush x:Key="Kp.BadgeBg" Color="#E8F2FF" />
+          <SolidColorBrush x:Key="Kp.BadgeFg" Color="#0066CC" />
         </ResourceDictionary>
 
         <!-- 极客深色风格 (Geek Dark) -->
         <ResourceDictionary x:Key="Dark">
-          <SolidColorBrush x:Key="Kp.Bg" Color="#0B0F17" />
-          <SolidColorBrush x:Key="Kp.UnlockSide" Color="#111622" />
-          <SolidColorBrush x:Key="Kp.Sidebar" Color="#111622" />
-          <SolidColorBrush x:Key="Kp.SidebarHover" Color="#1C2333" />
-          <SolidColorBrush x:Key="Kp.SidebarActive" Color="#2563EB" />
-          <SolidColorBrush x:Key="Kp.SidebarText" Color="#8B949E" />
-          <SolidColorBrush x:Key="Kp.SidebarTextHover" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="Kp.SidebarTextActive" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="Kp.Surface" Color="#151C28" />
-          <SolidColorBrush x:Key="Kp.SurfaceElevated" Color="#1C2433" />
-          <SolidColorBrush x:Key="Kp.SurfaceMuted" Color="#111722" />
-          <SolidColorBrush x:Key="Kp.Border" Color="#252F42" />
-          <SolidColorBrush x:Key="Kp.BorderSubtle" Color="#1C2433" />
-          <SolidColorBrush x:Key="Kp.Accent" Color="#3B82F6" />
-          <SolidColorBrush x:Key="Kp.AccentHover" Color="#60A5FA" />
-          <SolidColorBrush x:Key="Kp.AccentSoft" Color="#172554" />
-          <SolidColorBrush x:Key="Kp.Text" Color="#F1F5F9" />
-          <SolidColorBrush x:Key="Kp.TextMuted" Color="#94A3B8" />
-          <SolidColorBrush x:Key="Kp.Danger" Color="#EF4444" />
-        <SolidColorBrush x:Key="Kp.Star" Color="#FBBF24" />
+          <SolidColorBrush x:Key="Kp.Bg" Color="#E61C1C1E" />
+          <SolidColorBrush x:Key="Kp.UnlockSide" Color="#E6242426" />
+          <SolidColorBrush x:Key="Kp.Glass" Color="#D72C2C2E" />
+          <SolidColorBrush x:Key="Kp.GlassMuted" Color="#D71C1C1E" />
+          <SolidColorBrush x:Key="Kp.GlassAccent" Color="#D7183B64" />
+          <LinearGradientBrush x:Key="Kp.Liquid.Track" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#D94A4A50" />
+            <GradientStop Offset="1" Color="#B826262B" />
+          </LinearGradientBrush>
+          <LinearGradientBrush x:Key="Kp.Liquid.Fill" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#D966778B" />
+            <GradientStop Offset="0.48" Color="#BF385979" />
+            <GradientStop Offset="1" Color="#B3263F59" />
+          </LinearGradientBrush>
+          <SolidColorBrush x:Key="Kp.Liquid.Edge" Color="#5CF5F5FF" />
+          <SolidColorBrush x:Key="Kp.Liquid.Hover" Color="#3364B5FF" />
+          <SolidColorBrush x:Key="Kp.Liquid.Glow" Color="#6664B5FF" />
+          <SolidColorBrush x:Key="Kp.Liquid.Text" Color="#A8D5FF" />
+          <SolidColorBrush x:Key="Kp.Liquid.Highlight" Color="#66FFFFFF" />
+          <BoxShadows x:Key="Kp.Liquid.Shadow">0 2 10 0 #66000000</BoxShadows>
+          <SolidColorBrush x:Key="Kp.Sidebar" Color="#CC2C2C2E" />
+          <SolidColorBrush x:Key="Kp.SidebarHover" Color="#18FFFFFF" />
+          <SolidColorBrush x:Key="Kp.SidebarActive" Color="#3D0A84FF" />
+          <SolidColorBrush x:Key="Kp.SidebarText" Color="#98989D" />
+          <SolidColorBrush x:Key="Kp.SidebarTextHover" Color="#F5F5F7" />
+          <SolidColorBrush x:Key="Kp.SidebarTextActive" Color="#64B5FF" />
+          <SolidColorBrush x:Key="Kp.Surface" Color="#CC2C2C2E" />
+          <SolidColorBrush x:Key="Kp.SurfaceElevated" Color="#333336" />
+          <SolidColorBrush x:Key="Kp.SurfaceMuted" Color="#242426" />
+          <SolidColorBrush x:Key="Kp.Border" Color="#2EEBEBF5" />
+          <SolidColorBrush x:Key="Kp.BorderSubtle" Color="#1CEBEBF5" />
+          <SolidColorBrush x:Key="Kp.Accent" Color="#0A84FF" />
+          <SolidColorBrush x:Key="Kp.AccentHover" Color="#64B5FF" />
+          <SolidColorBrush x:Key="Kp.AccentSoft" Color="#2E0A84FF" />
+          <SolidColorBrush x:Key="Kp.Text" Color="#F5F5F7" />
+          <SolidColorBrush x:Key="Kp.TextMuted" Color="#98989D" />
+          <SolidColorBrush x:Key="Kp.Danger" Color="#FF453A" />
+        <SolidColorBrush x:Key="Kp.Star" Color="#FFD60A" />
         <SolidColorBrush x:Key="Tag.0.Bg" Color="#1FE0529C" />
         <SolidColorBrush x:Key="Tag.0.Border" Color="#59E0529C" />
         <SolidColorBrush x:Key="Tag.0.Fg" Color="#E0529C" />
@@ -177,37 +233,46 @@
         <SolidColorBrush x:Key="Tag.10.Bg" Color="#1F854ECA" />
         <SolidColorBrush x:Key="Tag.10.Border" Color="#59854ECA" />
         <SolidColorBrush x:Key="Tag.10.Fg" Color="#854ECA" />
-        <SolidColorBrush x:Key="Kp.LogoTile" Color="#E4E9F0" />
-          <SolidColorBrush x:Key="Kp.DangerHover" Color="#F87171" />
-          <SolidColorBrush x:Key="Kp.DangerSoft" Color="#3F1517" />
-          <SolidColorBrush x:Key="Kp.Warning" Color="#F59E0B" />
-          <SolidColorBrush x:Key="Kp.Success" Color="#10B981" />
-          <SolidColorBrush x:Key="Kp.Selection" Color="#1A2742" />
-          <SolidColorBrush x:Key="Kp.SelectionBorder" Color="#2563EB" />
+        <SolidColorBrush x:Key="Kp.LogoTile" Color="#3A3A3C" />
+          <SolidColorBrush x:Key="Kp.DangerHover" Color="#FF6961" />
+          <SolidColorBrush x:Key="Kp.DangerSoft" Color="#33FF453A" />
+          <!-- 暗色下描边比底色亮一档，按钮边缘在深色背景上更清楚。 -->
+          <SolidColorBrush x:Key="Kp.Button.Primary" Color="#2563EB" />
+          <SolidColorBrush x:Key="Kp.Button.PrimaryHover" Color="#1D4ED8" />
+          <SolidColorBrush x:Key="Kp.Button.PrimaryPressed" Color="#1E40AF" />
+          <SolidColorBrush x:Key="Kp.Button.PrimaryBorder" Color="#3B82F6" />
+          <SolidColorBrush x:Key="Kp.Button.Danger" Color="#DC2626" />
+          <SolidColorBrush x:Key="Kp.Button.DangerHover" Color="#B91C1C" />
+          <SolidColorBrush x:Key="Kp.Button.DangerPressed" Color="#991B1B" />
+          <SolidColorBrush x:Key="Kp.Button.DangerBorder" Color="#EF4444" />
+          <SolidColorBrush x:Key="Kp.Warning" Color="#FFD60A" />
+          <SolidColorBrush x:Key="Kp.Success" Color="#30D158" />
+          <SolidColorBrush x:Key="Kp.Selection" Color="#2E0A84FF" />
+          <SolidColorBrush x:Key="Kp.SelectionBorder" Color="#990A84FF" />
 
         <!-- 覆盖 Fluent 下拉框配色，与应用主题一致 -->
-        <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#161E2C" />
-        <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#2563EB" />
-        <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#151C28" />
-        <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#3B82F6" />
-        <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#151C28" />
-        <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#94A3B8" />
-        <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#151C28" />
-        <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#252F42" />
-        <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#F1F5F9" />
-        <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#1E2736" />
-        <SolidColorBrush x:Key="ComboBoxItemForegroundPointerOver" Color="#F1F5F9" />
-        <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="#252F42" />
-        <SolidColorBrush x:Key="ComboBoxItemForegroundPressed" Color="#F1F5F9" />
-        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#172554" />
-        <SolidColorBrush x:Key="ComboBoxItemForegroundSelected" Color="#93C5FD" />
-        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#1E3A8A" />
-        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver" Color="#BFDBFE" />
-        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="#1E40AF" />
-        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed" Color="#DBEAFE" />
-          <SolidColorBrush x:Key="Kp.CardShadow" Color="#40000000" />
-          <SolidColorBrush x:Key="Kp.BadgeBg" Color="#1E2B4A" />
-          <SolidColorBrush x:Key="Kp.BadgeFg" Color="#93C5FD" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#242426" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#990A84FF" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#2C2C2E" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#0A84FF" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#2C2C2E" />
+        <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#98989D" />
+        <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#2C2C2E" />
+        <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#2EEBEBF5" />
+        <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#F5F5F7" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#3A3A3C" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPointerOver" Color="#F5F5F7" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="#48484A" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPressed" Color="#F5F5F7" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#2E0A84FF" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelected" Color="#64B5FF" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#4D0A84FF" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver" Color="#64B5FF" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="#660A84FF" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed" Color="#64B5FF" />
+          <SolidColorBrush x:Key="Kp.CardShadow" Color="#80000000" />
+          <SolidColorBrush x:Key="Kp.BadgeBg" Color="#303B52" />
+          <SolidColorBrush x:Key="Kp.BadgeFg" Color="#64B5FF" />
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
     </ResourceDictionary>
@@ -251,7 +316,7 @@
     </Style>
 
     <!-- 只过渡控件底色和边框，不对密码文字或密码显隐做动画。 -->
-    <Style Selector="TextBox /template/ Border#PART_BorderElement, ComboBox /template/ Border#Background, ListBoxItem /template/ Border#PART_LayoutRoot, ComboBoxItem /template/ Border#PART_LayoutRoot, MenuFlyoutPresenter MenuItem /template/ Border#PART_LayoutRoot">
+    <Style Selector="TextBox /template/ Border#PART_BorderElement, ListBoxItem /template/ Border#PART_LayoutRoot, MenuFlyoutPresenter MenuItem /template/ Border#PART_LayoutRoot">
       <Setter Property="Transitions">
         <Transitions>
           <BrushTransition Property="Background" Duration="0:0:0.16" Easing="CubicEaseOut" />
@@ -282,54 +347,55 @@
       <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
     </Style>
 
-    <!-- 主操作按钮 (Accent Button) -->
-    <Style Selector="Button.accent">
-      <Setter Property="Background" Value="{DynamicResource Kp.Accent}" />
+    <!--
+      文字按钮统一外观：accent / outline / ghost / soft 都是蓝底白字 + 1px 描边；danger 为红底白字 + 描边。
+      各类保留原来的内边距与圆角，换皮后按钮尺寸和页面布局不变。
+      Fluent 的按钮模板在 :pointerover / :pressed / :disabled 时改的是模板内 ContentPresenter，所以三种状态都要在这里覆盖。
+    -->
+    <Style Selector="Button.accent, Button.outline, Button.ghost, Button.soft">
+      <Setter Property="Background" Value="{DynamicResource Kp.Button.Primary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.PrimaryBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
       <Setter Property="Foreground" Value="White" />
-      <Setter Property="Padding" Value="16,9" />
-      <Setter Property="CornerRadius" Value="8" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
-      <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Cursor" Value="Hand" />
     </Style>
-    <Style Selector="Button.accent:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.AccentHover}" />
+    <!-- Fluent 主题自带 Button.accent 样式，会直接给模板内 ContentPresenter 上系统强调色；这里在同一层覆盖，保证颜色一致。 -->
+    <Style Selector="Button.accent /template/ ContentPresenter#PART_ContentPresenter, Button.outline /template/ ContentPresenter#PART_ContentPresenter, Button.ghost /template/ ContentPresenter#PART_ContentPresenter, Button.soft /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Button.Primary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.PrimaryBorder}" />
       <Setter Property="Foreground" Value="White" />
     </Style>
-    <Style Selector="Button.accent:disabled /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.Accent}" />
+    <Style Selector="Button.accent:pointerover /template/ ContentPresenter, Button.outline:pointerover /template/ ContentPresenter, Button.ghost:pointerover /template/ ContentPresenter, Button.soft:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Button.PrimaryHover}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.PrimaryBorder}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.accent:pressed /template/ ContentPresenter, Button.outline:pressed /template/ ContentPresenter, Button.ghost:pressed /template/ ContentPresenter, Button.soft:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Button.PrimaryPressed}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.PrimaryBorder}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.accent:disabled /template/ ContentPresenter, Button.outline:disabled /template/ ContentPresenter, Button.ghost:disabled /template/ ContentPresenter, Button.soft:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Button.Primary}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.PrimaryBorder}" />
+      <Setter Property="Foreground" Value="White" />
       <Setter Property="Opacity" Value="0.5" />
     </Style>
 
-    <!-- 描边按钮 (Outline Button) -->
-    <Style Selector="Button.outline">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{DynamicResource Kp.Accent}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />
-      <Setter Property="BorderThickness" Value="1.5" />
+    <!-- 各类原有尺寸（只保留内边距与圆角，颜色统一由上面的规则提供） -->
+    <Style Selector="Button.accent">
       <Setter Property="Padding" Value="16,8" />
       <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="HorizontalContentAlignment" Value="Center" />
-      <Setter Property="Cursor" Value="Hand" />
     </Style>
-    <Style Selector="Button.outline:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.AccentSoft}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Kp.AccentHover}" />
-    </Style>
-
-    <!-- 幽灵按钮 (Ghost Button) -->
-    <Style Selector="Button.ghost">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
-      <Setter Property="Padding" Value="12,8" />
+    <Style Selector="Button.outline">
+      <Setter Property="Padding" Value="16,8" />
       <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Cursor" Value="Hand" />
     </Style>
-    <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+    <Style Selector="Button.ghost">
+      <Setter Property="Padding" Value="12,7" />
+      <Setter Property="CornerRadius" Value="8" />
     </Style>
 
     <!-- 字段行内的图标按钮（复制 / 显示 / 生成 / 删除） -->
@@ -360,6 +426,10 @@
     <Style Selector="Button.icon:pressed /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Kp.Selection}" />
     </Style>
+    <Style Selector="Button.icon.copy-success /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.AccentSoft}" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Success}" />
+    </Style>
     <Style Selector="Button.icon.icon-danger:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Kp.DangerSoft}" />
       <Setter Property="Foreground" Value="{DynamicResource Kp.Danger}" />
@@ -367,31 +437,42 @@
 
     <!-- 柔和浅底按钮 (Soft Button) -->
     <Style Selector="Button.soft">
-      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
-      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
-      <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Padding" Value="12,7" />
+      <Setter Property="Padding" Value="12,6" />
       <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="FontWeight" Value="Medium" />
-      <Setter Property="Cursor" Value="Hand" />
-    </Style>
-    <Style Selector="Button.soft:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceElevated}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
     </Style>
 
-    <!-- 危险操作按钮 (Danger Button) -->
+    <!-- 删除 / 警示类按钮：红底白字 + 描边 -->
     <Style Selector="Button.danger">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="{DynamicResource Kp.Danger}" />
-      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="Background" Value="{DynamicResource Kp.Button.Danger}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.DangerBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="Padding" Value="12,7" />
       <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Cursor" Value="Hand" />
     </Style>
+    <Style Selector="Button.danger /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Button.Danger}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.DangerBorder}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
     <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.DangerSoft}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.Button.DangerHover}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.DangerBorder}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.danger:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Button.DangerPressed}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.DangerBorder}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.danger:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Button.Danger}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.DangerBorder}" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="Opacity" Value="0.5" />
     </Style>
 
     <!-- 侧栏导航胶囊按钮 (Sidebar Nav Button) -->
@@ -402,17 +483,21 @@
       <Setter Property="CornerRadius" Value="10" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
-      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="Margin" Value="8,3" />
       <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="Button.nav:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.SidebarHover}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.Liquid.Track}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Liquid.Edge}" />
       <Setter Property="Foreground" Value="{DynamicResource Kp.SidebarTextHover}" />
     </Style>
     <Style Selector="Button.nav.active /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.SidebarActive}" />
-      <Setter Property="Foreground" Value="{DynamicResource Kp.SidebarTextActive}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.Liquid.Fill}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Liquid.Edge}" />
+      <Setter Property="BoxShadow" Value="{DynamicResource Kp.Liquid.Shadow}" />
+      <Setter Property="Foreground" Value="{DynamicResource Kp.Liquid.Text}" />
     </Style>
 
     <!-- 条目列表卡片按钮 (Vault Entry Item Button) -->
@@ -445,7 +530,7 @@
     </Style>
 
     <!-- 分类与账号卡片 -->
-    <Style Selector="Button.filter-card, Button.account-card">
+    <Style Selector="Button.filter-card">
       <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
       <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
@@ -457,14 +542,15 @@
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Setter Property="Cursor" Value="Hand" />
     </Style>
-    <Style Selector="Button.filter-card:pointerover /template/ ContentPresenter, Button.account-card:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+    <Style Selector="Button.filter-card:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Liquid.Track}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.SelectionBorder}" />
       <Setter Property="BoxShadow" Value="0 3 8 0 #14000000" />
     </Style>
-    <Style Selector="Button.filter-card.selected /template/ ContentPresenter, Button.account-card.selected /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource Kp.Selection}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />
+    <Style Selector="Button.filter-card.selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Kp.Liquid.Fill}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Kp.SelectionBorder}" />
+      <Setter Property="BoxShadow" Value="{DynamicResource Kp.Liquid.Shadow}" />
     </Style>
     <Style Selector="Border.count-badge">
       <Setter Property="Background" Value="{DynamicResource Kp.BadgeBg}" />
@@ -502,61 +588,29 @@
 
     <!-- 输入框基础样式 (TextBox) -->
     <Style Selector="TextBox">
-      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="MinHeight" Value="40" />
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
-      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
       <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
-      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="Padding" Value="12,9" />
       <Setter Property="FontSize" Value="13.5" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBox[AcceptsReturn=True]">
       <Setter Property="VerticalContentAlignment" Value="Top" />
+      <Setter Property="MinHeight" Value="68" />
+      <Setter Property="Padding" Value="12,10" />
     </Style>
-    <!-- 卡片内的无边框输入框：负外边距抵消内边距，未聚焦时文字与标题对齐 -->
+    <!-- 卡片内的无边框输入框：保持独立内边距，避免光标贴边或压住中文字符。 -->
     <Style Selector="TextBox.inline">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Padding" Value="8,2" />
-      <Setter Property="Margin" Value="-8,2,-8,0" />
-      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="0,5,0,3" />
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="MinHeight" Value="32" />
       <Setter Property="FontSize" Value="13" />
       <Setter Property="LetterSpacing" Value="0" />
-    </Style>
-    <Style Selector="ComboBox">
-      <Setter Property="MinHeight" Value="38" />
-      <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
-      <Setter Property="Background" Value="{DynamicResource Kp.SurfaceMuted}" />
-      <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
-      <Setter Property="Padding" Value="12,6,8,6" />
-      <Setter Property="FontSize" Value="13.5" />
-      <Setter Property="VerticalContentAlignment" Value="Center" />
-      <Setter Property="MaxDropDownHeight" Value="178" />
-    </Style>
-    <Style Selector="Border.field ComboBox">
-      <Setter Property="FontSize" Value="13" />
-      <Setter Property="MinHeight" Value="32" />
-      <Setter Property="Padding" Value="10,4,8,4" />
-    </Style>
-    <Style Selector="ComboBox:dropdownopen /template/ Border#Background">
-      <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />
-    </Style>
-    <Style Selector="ComboBox /template/ Border#PopupBorder">
-      <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="Padding" Value="4" />
-      <Setter Property="Margin" Value="0,4,0,0" />
-      <Setter Property="BoxShadow" Value="0 6 16 0 #26000000" />
-    </Style>
-    <Style Selector="ComboBoxItem">
-      <Setter Property="CornerRadius" Value="6" />
-      <Setter Property="Padding" Value="10,7" />
-      <Setter Property="Margin" Value="0,1" />
-      <Setter Property="FontSize" Value="13" />
-    </Style>
-    <Style Selector="ComboBoxItem:selected">
-      <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="MenuFlyoutPresenter">
       <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
@@ -593,17 +647,28 @@
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.Accent}" />
       <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
     </Style>
+    <!-- Fluent 在模板上另设 hover/focus 底色；显式覆盖，避免白色输入框再次泛灰。 -->
+    <Style Selector="TextBox:not(.inline):not(.bare):not(.picker-input):pointerover /template/ Border#PART_BorderElement, TextBox:not(.inline):not(.bare):not(.picker-input):focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
+    </Style>
+    <Style Selector="TextBox.inline:pointerover /template/ Border#PART_BorderElement, TextBox.inline:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="TextBox.has-reveal">
+      <Setter Property="Padding" Value="12,9,42,9" />
+    </Style>
+    <Style Selector="TextBox.bare.has-reveal">
+      <Setter Property="Padding" Value="12,0,42,0" />
+    </Style>
     <Style Selector="TextBox.mono">
       <Setter Property="FontFamily" Value="{StaticResource Kp.Font.Mono}" />
       <Setter Property="LetterSpacing" Value="0" />
     </Style>
     <Style Selector="TextBox.inline[AcceptsReturn=True]">
-      <Setter Property="Padding" Value="8,5,8,2" />
-      <Setter Property="Margin" Value="-8,-1,-8,0" />
-    </Style>
-    <!-- 中文字形贴着字框，多行文本的行尾光标会往左收约 1 像素压在字上；展示与编辑用同一字距，避免切换时文字跳动。 -->
-    <Style Selector="TextBox.inline[AcceptsReturn=True]:not(.mono)">
-      <Setter Property="LetterSpacing" Value="1" />
+      <Setter Property="Padding" Value="0,8,0,5" />
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="MinHeight" Value="68" />
     </Style>
 
     <!-- 文本排版样式 (Typography) -->
@@ -646,15 +711,15 @@
 
     <!-- 容器与卡片样式 (Containers) -->
     <Style Selector="Border.card">
-      <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.Glass}" />
       <Setter Property="CornerRadius" Value="16" />
-      <Setter Property="BoxShadow" Value="0 16 36 0 #26000000" />
+      <Setter Property="BoxShadow" Value="0 18 42 0 #20000000" />
       <Setter Property="Padding" Value="28" />
       <Setter Property="BorderBrush" Value="{DynamicResource Kp.Border}" />
       <Setter Property="BorderThickness" Value="1" />
     </Style>
     <Style Selector="Border.panel">
-      <Setter Property="Background" Value="{DynamicResource Kp.Surface}" />
+      <Setter Property="Background" Value="{DynamicResource Kp.GlassMuted}" />
       <Setter Property="CornerRadius" Value="0" />
     </Style>
     <Style Selector="Border.field">
@@ -697,5 +762,10 @@
     <Style Selector="CheckBox">
       <Setter Property="Foreground" Value="{DynamicResource Kp.Text}" />
     </Style>
+    <!-- 独立卡片主题；放在通用按钮样式之后，避免旧选择态覆盖卡片内容。 -->
+    <StyleInclude Source="/Styles/CardItemStyles.axaml" />
+    <StyleInclude Source="/Styles/DetailTheme.axaml" />
+    <!-- 液态玻璃：分段切换 / 开关 / 下拉。放在最后，按类型默认主题覆盖 Fluent 的同名主题。 -->
+    <StyleInclude Source="/Styles/GlassTheme.axaml" />
   </Application.Styles>
 </Application>

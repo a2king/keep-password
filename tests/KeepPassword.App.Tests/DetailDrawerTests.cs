@@ -8,6 +8,7 @@ using Avalonia.VisualTree;
 using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
 using KeepPassword.App.Views;
+using KeepPassword.App.Views.Details;
 using KeepPassword.Core.Crypto;
 using KeepPassword.Core.Vault;
 
@@ -46,28 +47,61 @@ public class DetailDrawerTests
     }
 
     [AvaloniaFact]
-    public async Task ManyEntriesAndTags_ReflowOnlyOncePerOpenAndClose()
+    public async Task ManyEntriesAndTags_ReflowColumnsOnceWhileFiltersStayCollapsed()
     {
         using var fixture = await DrawerFixture.CreateAsync(entryCount: 197, tagCount: 17);
         Assert.Equal(197, fixture.Window.View!.Entries.Count);
         Assert.Equal(18, fixture.Window.View.TagFilters.Count); // Includes the all-tags filter.
+        Assert.InRange(fixture.List.GetVisualDescendants().OfType<Button>().Count(card => card.Classes.Contains("account-card")), 1, 196);
 
         var opening = await fixture.ObserveReflowAsync(
             () => fixture.ClickEntry(fixture.First.Id), () => fixture.IsOpen);
 
         Assert.Equal(1, opening.RowRebuilds);
-        Assert.Equal(1, CountChanges(opening.TagHeights));
+        Assert.Equal(0, CountChanges(opening.TagHeights));
         Assert.Equal(1, CountChanges(opening.ListWidths));
-        Assert.True(opening.TagHeights[^1] > opening.TagHeights[0]);
+        Assert.All(opening.TagHeights, height => Assert.Equal(48, height));
         Assert.All(opening.DrawerWidths, width => Assert.Equal(480, width, precision: 1));
 
         var closing = await fixture.ObserveReflowAsync(fixture.ClickClose, () => fixture.IsClosed);
 
         Assert.Equal(1, closing.RowRebuilds);
-        Assert.Equal(1, CountChanges(closing.TagHeights));
+        Assert.Equal(0, CountChanges(closing.TagHeights));
         Assert.Equal(1, CountChanges(closing.ListWidths));
-        Assert.True(closing.TagHeights[^1] < closing.TagHeights[0]);
+        Assert.All(closing.TagHeights, height => Assert.Equal(48, height));
         Assert.All(closing.DrawerWidths, width => Assert.Equal(480, width, precision: 1));
+    }
+
+    [AvaloniaFact]
+    public async Task FilterIcons_ExpandIndependentlyAndReturnToOneRowWhenOpeningDetail()
+    {
+        using var fixture = await DrawerFixture.CreateAsync(entryCount: 197, tagCount: 17);
+        var kinds = fixture.Window.FindControl<ItemsControl>("KindFiltersList")!;
+        var kindToggle = fixture.Window.FindControl<Button>("KindFiltersToggleButton")!;
+        var tagToggle = fixture.Window.FindControl<Button>("TagFiltersToggleButton")!;
+        Assert.Equal(48, kinds.Height);
+        Assert.Equal(48, fixture.TagFilters.Height);
+        Assert.Empty(fixture.TagFilters.GetVisualDescendants().OfType<ScrollViewer>());
+
+        tagToggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(double.IsNaN(fixture.TagFilters.Height));
+        Assert.True(fixture.TagFilters.Bounds.Height > 48);
+        Assert.Equal(48, kinds.Height);
+        Assert.True(fixture.Window.FindControl<PathIcon>("TagFiltersExpandedIcon")!.IsVisible);
+        tagToggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(48, fixture.TagFilters.Height);
+        Assert.True(fixture.Window.FindControl<PathIcon>("TagFiltersCollapsedIcon")!.IsVisible);
+
+        kindToggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        tagToggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(double.IsNaN(kinds.Height));
+        fixture.ClickEntry(fixture.First.Id);
+        await fixture.WaitUntilAsync(() => fixture.IsOpen);
+        Assert.Equal(48, kinds.Height);
+        Assert.Equal(48, fixture.TagFilters.Height);
+        fixture.ClickClose();
+        await fixture.WaitUntilAsync(() => fixture.IsClosed);
+        Assert.Equal(48, fixture.TagFilters.Height);
     }
 
     [AvaloniaFact]
@@ -202,7 +236,7 @@ public class DetailDrawerTests
         {
             fixture.ClickEntry(entry.Id);
             fixture.Window.UpdateLayout();
-            Assert.Equal(entry.Name, fixture.Title.Text);
+            Assert.Equal(entry.Name, fixture.DisplayedTitle);
             frames.Add(fixture.CaptureEditorFrame());
             await fixture.ObserveFramesAsync(TimeSpan.FromMilliseconds(250),
                 () => frames.Add(fixture.CaptureEditorFrame()));
@@ -341,8 +375,10 @@ public class DetailDrawerTests
             Window.ShowVault(_session);
             Host = Window.FindControl<Grid>("DetailHost")!;
             Panel = Window.FindControl<Border>("DetailPanel")!;
-            Content = Window.FindControl<Grid>("DetailContent")!;
-            Scroller = Window.FindControl<ScrollViewer>("DetailScroller")!;
+            Modern = First.Kind is VaultItemKind.Login or VaultItemKind.Server or VaultItemKind.Database
+                ? Window.FindControl<DetailPanelView>("ModernDetail") : null;
+            Content = (Control?)Modern ?? Window.FindControl<Grid>("DetailContent")!;
+            Scroller = Modern?.Scroller ?? Window.FindControl<ScrollViewer>("DetailScroller")!;
             Title = Window.FindControl<TextBlock>("DetailTitle")!;
             List = Window.FindControl<ScrollViewer>("AccountScroller")!;
             ListPane = Window.FindControl<Grid>("ItemsListPane")!;
@@ -353,9 +389,11 @@ public class DetailDrawerTests
         public MainWindow Window { get; }
         public Grid Host { get; }
         public Border Panel { get; }
-        public Grid Content { get; }
+        public DetailPanelView? Modern { get; }
+        public Control Content { get; }
         public ScrollViewer Scroller { get; }
         public TextBlock Title { get; }
+        public string? DisplayedTitle => Modern?.Header.Title ?? Title.Text;
         public ScrollViewer List { get; }
         public Grid ListPane { get; }
         public ItemsControl TagFilters { get; }
@@ -395,8 +433,9 @@ public class DetailDrawerTests
 
         public void ClickClose()
         {
-            var button = Panel.GetVisualDescendants().OfType<Button>()
-                .Single(control => control.Content is string text && text == "关闭");
+            var button = Modern is not null
+                ? Modern.Header.GetVisualDescendants().OfType<Button>().Single(control => control.Name is "PART_Close" or "PART_CloseButton")
+                : Panel.GetVisualDescendants().OfType<Button>().Single(control => control.Content is string text && text == "关闭");
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         }
 
@@ -430,6 +469,13 @@ public class DetailDrawerTests
 
         public EditorFrame CaptureEditorFrame()
         {
+            if (Modern is not null)
+            {
+                var section = Modern.AccountsControl;
+                return new EditorFrame(
+                    Assert.IsType<Point>(Scroller.TranslatePoint(default, Window)), Scroller.Bounds, Modern.Header.Bounds.Height,
+                    Assert.IsType<Point>(section.TranslatePoint(default, Window)), section.Bounds, null, null);
+            }
             // Locate each data template's outer card, excluding nested text box
             // borders that inherit the same editor view as their DataContext.
             var editorCards = Scroller.GetVisualDescendants().OfType<Border>()

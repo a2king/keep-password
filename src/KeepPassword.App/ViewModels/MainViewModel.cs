@@ -115,12 +115,20 @@ public sealed class MainViewModel : ViewModelBase
     private string _snapshot = "";
     private bool _hasDetail;
     private bool _isNew;
+    private bool _isApplyingDetail;
     private int _columns = 3;
     private SshKeyInspection _sshInspection = new(null, null);
 
     public MainViewModel(VaultSession session, bool platformAutofillSupported)
     {
         _session = session;
+        CustomFields.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasCustomFields));
+            NotifyDetailEdited();
+        };
+        Nodes.CollectionChanged += (_, _) => NotifyDetailEdited();
+        Accounts.CollectionChanged += (_, _) => OnAccountsChanged();
         PlatformAutofillSupported = platformAutofillSupported;
         Refresh();
     }
@@ -206,6 +214,11 @@ public sealed class MainViewModel : ViewModelBase
         private set => Set(ref _hasDetail, value);
     }
 
+    /// <summary>当前草稿的稳定标识，供详情展示层识别加载与保存后的对象替换。</summary>
+    public Guid DetailId => HasDetail ? _draft.Id : Guid.Empty;
+
+    internal bool IsApplyingDetail => _isApplyingDetail;
+
     public bool ShowEmpty => Entries.Count == 0;
 
     public string EmptyText => _all.Count == 0
@@ -231,13 +244,25 @@ public sealed class MainViewModel : ViewModelBase
     public string Name
     {
         get => _name;
-        set => Set(ref _name, value);
+        set
+        {
+            if (Set(ref _name, value ?? ""))
+            {
+                NotifyDetailEdited();
+            }
+        }
     }
 
     public string Note
     {
         get => _note;
-        set => Set(ref _note, value);
+        set
+        {
+            if (Set(ref _note, value ?? ""))
+            {
+                NotifyDetailEdited();
+            }
+        }
     }
 
     public bool Favorite => _draft.Favorite;
@@ -358,6 +383,17 @@ public sealed class MainViewModel : ViewModelBase
 
     public bool IsDirty => HasDetail && Snapshot() != _snapshot;
 
+    /// <summary>只校验当前编辑快照，不写入保险库或改变会话。</summary>
+    public string? GetDetailValidationMessage()
+    {
+        if (!HasDetail)
+        {
+            return "请先选择或新建一条记录。";
+        }
+
+        return string.IsNullOrWhiteSpace(Name) ? "请填写名称。" : VaultItemRules.Validate(BuildEntry());
+    }
+
     public void Load(Guid id)
     {
         var entry = _session.Entries.FirstOrDefault(item => item.Id == id);
@@ -416,7 +452,6 @@ public sealed class MainViewModel : ViewModelBase
 
         var account = CreateAccountView(new VaultAccount(), canGenerate: true, animateOnShow: true);
         Accounts.Add(account);
-        OnAccountsChanged();
         return account;
     }
 
@@ -429,13 +464,11 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         Accounts.Remove(account);
-
-        OnAccountsChanged();
     }
 
     private AccountEditorView CreateAccountView(VaultAccount account, bool canGenerate, bool animateOnShow = false)
     {
-        var view = new AccountEditorView(account, canGenerate, () => { }) { AnimateOnShow = animateOnShow };
+        var view = new AccountEditorView(account, canGenerate, NotifyDetailEdited) { AnimateOnShow = animateOnShow };
         view.SetKeyOptions(SshKeyOptions);
         view.Configure(ItemTemplates.AccountLabelsOf(_draft), ItemTemplates.SupportsKeyAuth(_draft), _draft.Kind == VaultItemKind.Login);
         return view;
@@ -445,6 +478,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(AccountsTitle));
         OnPropertyChanged(nameof(CanAddAccount));
+        NotifyDetailEdited();
     }
 
     public static string GeneratePassword() => PasswordGenerator.Generate(PasswordGeneratorOptions.DefaultLogin);
@@ -496,7 +530,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (Nodes.Count < VaultItemRules.MaxNodes)
         {
-            Nodes.Add(new NodeEditorView(new ClusterNode(), Nodes.Count + 1, () => { }) { AnimateOnShow = true });
+            Nodes.Add(new NodeEditorView(new ClusterNode(), Nodes.Count + 1, NotifyDetailEdited) { AnimateOnShow = true });
         }
     }
 
@@ -1074,45 +1108,58 @@ public sealed class MainViewModel : ViewModelBase
             .ToList();
         OnPropertyChanged(nameof(SpaceChoices));
         OnPropertyChanged(nameof(TagChoices));
+        NotifyDetailEdited();
     }
 
     private void Apply(VaultEntry entry)
     {
-        _draft = entry.Clone();
-        Name = entry.Name;
-        Note = entry.Note;
-        _editSpace = entry.Space;
-        _editTags = entry.Tags.ToList();
-        _pendingSpaces.Clear();
-        _pendingTags.Clear();
-        CustomFields.Clear();
-        foreach (var field in entry.CustomFields)
+        // 保存会重建账号；展示层仅在本次批量替换完成后重新解析账号 ID。
+        _isApplyingDetail = true;
+        try
         {
-            CustomFields.Add(new CustomFieldEditorView(field.Name, field.Value, field.Sensitive, OnFieldChanged));
-        }
-
-        Nodes.Clear();
-        for (var i = 0; i < entry.Nodes.Count; i++)
-        {
-            Nodes.Add(new NodeEditorView(entry.Nodes[i], i + 1, () => { }));
-        }
-
-        Accounts.Clear();
-        if (VaultItemKinds.HasAccounts(entry.Kind))
-        {
-            var accounts = entry.Accounts.Count == 0 ? [new VaultAccount()] : entry.Accounts;
-            for (var i = 0; i < accounts.Count; i++)
+            _draft = entry.Clone();
+            Name = entry.Name;
+            Note = entry.Note;
+            _editSpace = entry.Space;
+            _editTags = entry.Tags.ToList();
+            _pendingSpaces.Clear();
+            _pendingTags.Clear();
+            CustomFields.Clear();
+            foreach (var field in entry.CustomFields)
             {
-                Accounts.Add(CreateAccountView(accounts[i], IsNewItem || accounts[i].Password.Length == 0));
+                CustomFields.Add(new CustomFieldEditorView(field.Name, field.Value, field.Sensitive, OnFieldChanged));
             }
+
+            Nodes.Clear();
+            for (var i = 0; i < entry.Nodes.Count; i++)
+            {
+                Nodes.Add(new NodeEditorView(entry.Nodes[i], i + 1, NotifyDetailEdited));
+            }
+
+            Accounts.Clear();
+            if (VaultItemKinds.HasAccounts(entry.Kind))
+            {
+                var accounts = entry.Accounts.Count == 0 ? [new VaultAccount()] : entry.Accounts;
+                for (var i = 0; i < accounts.Count; i++)
+                {
+                    Accounts.Add(CreateAccountView(accounts[i], IsNewItem || accounts[i].Password.Length == 0));
+                }
+            }
+
+            OnAccountsChanged();
+            HasDetail = true;
+            RebuildPresetFields();
+            _snapshot = Snapshot();
+            BuildChoices();
+            OnPropertyChanged(nameof(ShowEmpty));
+        }
+        finally
+        {
+            _isApplyingDetail = false;
         }
 
-        OnAccountsChanged();
-        HasDetail = true;
-        RebuildPresetFields();
-        _snapshot = Snapshot();
-        BuildChoices();
-        OnPropertyChanged(nameof(ShowEmpty));
+        OnPropertyChanged(nameof(DetailId));
+        NotifyDetailEdited();
     }
 
     private void RebuildPresetFields()
@@ -1144,20 +1191,21 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowNodes));
         OnPropertyChanged(nameof(ShowAccounts));
         OnPropertyChanged(nameof(HasCustomFields));
+        NotifyDetailEdited();
     }
 
     private void OnFieldChanged(SecretFieldView field)
     {
-        if (field is not FieldEditorView preset)
+        if (field is FieldEditorView preset)
         {
-            return;
+            FieldKeys.Write(_draft, preset.Key, preset.Value);
+            if (preset.Key is FieldKeys.PrivateKey or FieldKeys.PublicKey)
+            {
+                UpdateSshInspection();
+            }
         }
 
-        FieldKeys.Write(_draft, preset.Key, preset.Value);
-        if (preset.Key is FieldKeys.PrivateKey or FieldKeys.PublicKey)
-        {
-            UpdateSshInspection();
-        }
+        NotifyDetailEdited();
     }
 
     private void UpdateSshInspection()
@@ -1186,20 +1234,39 @@ public sealed class MainViewModel : ViewModelBase
 
     private void ClearFields()
     {
-        _draft = new VaultEntry();
-        Name = "";
-        Note = "";
-        Accounts.Clear();
-        OnAccountsChanged();
-        _editSpace = "";
-        _editTags = [];
-        _pendingSpaces.Clear();
-        _pendingTags.Clear();
-        CustomFields.Clear();
-        Nodes.Clear();
-        RebuildPresetFields();
-        BuildChoices();
-        OnPropertyChanged(nameof(ShowEmpty));
+        _isApplyingDetail = true;
+        try
+        {
+            _draft = new VaultEntry();
+            Name = "";
+            Note = "";
+            Accounts.Clear();
+            OnAccountsChanged();
+            _editSpace = "";
+            _editTags = [];
+            _pendingSpaces.Clear();
+            _pendingTags.Clear();
+            CustomFields.Clear();
+            Nodes.Clear();
+            RebuildPresetFields();
+            BuildChoices();
+            OnPropertyChanged(nameof(ShowEmpty));
+        }
+        finally
+        {
+            _isApplyingDetail = false;
+        }
+
+        OnPropertyChanged(nameof(DetailId));
+        NotifyDetailEdited();
+    }
+
+    private void NotifyDetailEdited()
+    {
+        if (!_isApplyingDetail)
+        {
+            OnPropertyChanged(nameof(IsDirty));
+        }
     }
 
     private void OnImportChanged()

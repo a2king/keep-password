@@ -1,6 +1,5 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using Avalonia.Threading;
 using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
 using KeepPassword.Core.Vault;
@@ -9,19 +8,19 @@ namespace KeepPassword.App.Views;
 
 public partial class TotpView : UserControl
 {
-    private readonly DispatcherTimer _timer;
+    private IDisposable? _ticker;
 
     public TotpView()
     {
         InitializeComponent();
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _timer.Tick += (_, _) => (DataContext as TotpPageViewModel)?.Refresh();
+        DetachedFromVisualTree += (_, _) => Pause();
     }
 
     public void Start(VaultSession session)
     {
         DataContext = new TotpPageViewModel(session);
-        _timer.Start();
+        _ticker?.Dispose();
+        _ticker = TotpTicker.Subscribe(_ => (DataContext as TotpPageViewModel)?.Refresh());
     }
 
     public void Stop()
@@ -30,17 +29,25 @@ public partial class TotpView : UserControl
         DataContext = null;
     }
 
-    public void Pause() => _timer.Stop();
+    public void Pause()
+    {
+        _ticker?.Dispose();
+        _ticker = null;
+    }
 
     private async void OnCopy(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: string code } || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        if (sender is not Button button || button.Tag is not string code
+            || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
         {
             return;
         }
 
         CopyStatus.Text = "已复制。若 30 秒后剪贴板仍是该验证码，会自动清除。";
         CopyStatus.IsVisible = true;
-        await SecretClipboard.CopyAsync(clipboard, code);
+        if (await ClipboardService.CopyAsync(clipboard, code, sensitive: true))
+        {
+            _ = CopyFeedback.ShowAsync(button);
+        }
     }
 }

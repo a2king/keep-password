@@ -1,0 +1,168 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="using:KeepPassword.App.Controls"
+        x:CompileBindings="False">
+  <Styles.Resources>
+    <!--
+      玻璃开关。保留 ToggleSwitch 全部属性：IsChecked / Command / Content / OnContent / OffContent。
+      布局沿用原来：Content 作为上方标题（未设置时不占位），OnContent/OffContent 在开关右侧。
+      PART_MovingKnobs 是 Avalonia 要求的模板部件（缺失会抛异常），这里只保留一个 0 尺寸占位，
+      因此不支持拖动，点击 / Space 切换。
+    -->
+    <ControlTheme x:Key="{x:Type ToggleSwitch}" TargetType="ToggleSwitch">
+      <Setter Property="Foreground" Value="{DynamicResource GlassTextPrimary}" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="FontSize" Value="13.5" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusAdorner" Value="{x:Null}" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid Background="{TemplateBinding Background}" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto">
+            <ContentPresenter x:Name="PART_ContentPresenter" Grid.ColumnSpan="2" Margin="0,0,0,6"
+                              Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                              IsVisible="{TemplateBinding Content, Converter={x:Static c:GlassConverters.HasContent}}"
+                              RecognizesAccessKey="True" />
+            <Panel x:Name="PART_Switch" Grid.Row="1" Width="58" Height="34" HorizontalAlignment="Left">
+              <Border x:Name="PART_FocusRing" Margin="-3" CornerRadius="20" BorderThickness="2"
+                      BorderBrush="{DynamicResource GlassFocusRing}" Opacity="0" IsHitTestVisible="False" />
+              <!-- 关：凹槽质感 -->
+              <Border x:Name="PART_TrackOff" CornerRadius="17" BorderThickness="1"
+                      Background="{DynamicResource GlassTroughBrush}" BorderBrush="{DynamicResource GlassTroughStroke}"
+                      BoxShadow="{DynamicResource GlassTroughShadow}" />
+              <!-- 开：Accent 渐变层叠在上面，用透明度 300ms 渐显，等效于渐变色过渡（渐变画刷之间无法直接插值）。 -->
+              <Border x:Name="PART_TrackOn" CornerRadius="17" BorderThickness="1" Opacity="0"
+                      Background="{DynamicResource ToggleOnBrush}" BorderBrush="{DynamicResource ToggleOnStroke}"
+                      BoxShadow="{DynamicResource ToggleOnShadow}" />
+              <Canvas IsHitTestVisible="False">
+                <!-- 外层只负责左右位移；离轨道边 3px。 -->
+                <Panel x:Name="PART_Thumb" Canvas.Left="3" Canvas.Top="3" Width="40" Height="28" RenderTransform="translate(0px, 0px)">
+                  <Border x:Name="PART_ThumbVisual" CornerRadius="14" BorderThickness="1" Margin="0"
+                          Background="{DynamicResource GlassThumbBrush}" BorderBrush="{DynamicResource GlassThumbStroke}"
+                          BoxShadow="{DynamicResource GlassThumbShadow}">
+                    <c:GlassHighlight />
+                  </Border>
+                </Panel>
+              </Canvas>
+              <Panel x:Name="PART_MovingKnobs" Width="0" Height="0" IsHitTestVisible="False" />
+            </Panel>
+            <!-- 开关右侧文字：两段叠放、按状态切换透明度，宽度取两者较大值，切换时不挤动布局。 -->
+            <Panel x:Name="PART_StateContent" Grid.Row="1" Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+              <ContentPresenter x:Name="PART_OffContentPresenter" Content="{TemplateBinding OffContent}"
+                                ContentTemplate="{TemplateBinding OffContentTemplate}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                IsVisible="{TemplateBinding OffContent, Converter={x:Static c:GlassConverters.HasContent}}" />
+              <ContentPresenter x:Name="PART_OnContentPresenter" Content="{TemplateBinding OnContent}"
+                                ContentTemplate="{TemplateBinding OnContentTemplate}" Opacity="0"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                IsVisible="{TemplateBinding OnContent, Converter={x:Static c:GlassConverters.HasContent}}" />
+            </Panel>
+          </Grid>
+        </ControlTemplate>
+      </Setter>
+      <!-- 控件本身的 On/Off 默认是英文；中文界面默认不显示，页面上显式设置的文字不受影响。 -->
+      <Setter Property="OnContent" Value="" />
+      <Setter Property="OffContent" Value="" />
+
+      <Style Selector="^ /template/ Panel#PART_Thumb">
+        <Setter Property="Transitions">
+          <Transitions>
+            <TransformOperationsTransition Property="RenderTransform" Duration="{StaticResource Glass.SlideDuration}" Easing="{StaticResource Glass.SpringEasing}" />
+          </Transitions>
+        </Setter>
+      </Style>
+      <!--
+        按住拉长：外层滑块固定 40 宽，内层用负 Margin 向轨道中心方向伸到 46（关时向右、开时向左）。
+        只动背对轨道边的那一侧，加上位移与形变分属不同元素，回弹的任意中间帧都不会越出 3px 边距。
+      -->
+      <Style Selector="^ /template/ Border#PART_ThumbVisual">
+        <Setter Property="Transitions">
+          <Transitions>
+            <ThicknessTransition Property="Margin" Duration="{StaticResource Glass.PressDuration}" Easing="CubicEaseOut" />
+          </Transitions>
+        </Setter>
+      </Style>
+      <Style Selector="^ /template/ Border#PART_TrackOn">
+        <Setter Property="Transitions">
+          <Transitions>
+            <DoubleTransition Property="Opacity" Duration="{StaticResource Glass.TrackColorDuration}" Easing="CubicEaseOut" />
+          </Transitions>
+        </Setter>
+      </Style>
+      <Style Selector="^ /template/ Border#PART_TrackOff">
+        <Setter Property="Transitions">
+          <Transitions>
+            <BrushTransition Property="BorderBrush" Duration="{StaticResource Glass.HoverDuration}" />
+          </Transitions>
+        </Setter>
+      </Style>
+
+      <!-- 悬停（关）：凹槽描边 Accent 45%，不改尺寸 -->
+      <Style Selector="^:pointerover:not(:checked) /template/ Border#PART_TrackOff">
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassHoverStroke}" />
+      </Style>
+      <Style Selector="^:checked /template/ Border#PART_TrackOn">
+        <Setter Property="Opacity" Value="1" />
+      </Style>
+      <!-- 开：58 - 3 - 40 - 3 = 12px 位移 -->
+      <Style Selector="^:checked /template/ Panel#PART_Thumb">
+        <Setter Property="RenderTransform" Value="translate(12px, 0px)" />
+      </Style>
+      <Style Selector="^:pressed /template/ Border#PART_ThumbVisual">
+        <Setter Property="Margin" Value="0,0,-6,0" />
+      </Style>
+      <Style Selector="^:checked:pressed /template/ Border#PART_ThumbVisual">
+        <Setter Property="Margin" Value="-6,0,0,0" />
+      </Style>
+      <Style Selector="^:checked /template/ ContentPresenter#PART_OnContentPresenter">
+        <Setter Property="Opacity" Value="1" />
+      </Style>
+      <Style Selector="^:checked /template/ ContentPresenter#PART_OffContentPresenter">
+        <Setter Property="Opacity" Value="0" />
+      </Style>
+      <Style Selector="^:focus-visible /template/ Border#PART_FocusRing">
+        <Setter Property="Opacity" Value="1" />
+      </Style>
+      <Style Selector="^:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+        <Setter Property="Cursor" Value="Arrow" />
+      </Style>
+
+      <!-- compact：46×28 轨道、32×22 滑块；开位移 46-3-32-3=8，按住拉长到 36 -->
+      <Style Selector="^.compact /template/ Panel#PART_Switch">
+        <Setter Property="Width" Value="46" /><Setter Property="Height" Value="28" />
+      </Style>
+      <Style Selector="^.compact /template/ Border#PART_TrackOff, ^.compact /template/ Border#PART_TrackOn">
+        <Setter Property="CornerRadius" Value="14" />
+      </Style>
+      <Style Selector="^.compact /template/ Border#PART_FocusRing">
+        <Setter Property="CornerRadius" Value="17" />
+      </Style>
+      <Style Selector="^.compact /template/ Panel#PART_Thumb">
+        <Setter Property="Width" Value="32" /><Setter Property="Height" Value="22" />
+      </Style>
+      <Style Selector="^.compact /template/ Border#PART_ThumbVisual">
+        <Setter Property="CornerRadius" Value="11" />
+      </Style>
+      <Style Selector="^.compact:checked /template/ Panel#PART_Thumb">
+        <Setter Property="RenderTransform" Value="translate(8px, 0px)" />
+      </Style>
+      <Style Selector="^.compact:pressed /template/ Border#PART_ThumbVisual">
+        <Setter Property="Margin" Value="0,0,-4,0" />
+      </Style>
+      <Style Selector="^.compact:checked:pressed /template/ Border#PART_ThumbVisual">
+        <Setter Property="Margin" Value="-4,0,0,0" />
+      </Style>
+    </ControlTheme>
+  </Styles.Resources>
+
+  <!-- 减少动画：无按压形变（普通 Style 优先于主题内的状态样式）。位移/颜色过渡已在 GlassTheme.axaml 统一撤掉。 -->
+  <Style Selector=".no-motion ToggleSwitch:pressed /template/ Border#PART_ThumbVisual">
+    <Setter Property="Margin" Value="0" />
+  </Style>
+  <Style Selector=".no-motion ToggleSwitch /template/ Border#PART_ThumbVisual">
+    <Setter Property="Transitions" Value="{x:Null}" />
+  </Style>
+</Styles>

@@ -75,7 +75,7 @@
 
     <ScrollViewer x:Name="Scroller" Grid.Column="1" HorizontalScrollBarVisibility="Disabled">
       <Panel MinHeight="{Binding Bounds.Height, ElementName=Scroller}">
-        <StackPanel x:Name="UnlockForm" Width="320" Margin="128,40,40,40" HorizontalAlignment="Left" VerticalAlignment="Center">
+        <StackPanel x:Name="UnlockForm" MinWidth="320" MaxWidth="420" Margin="40" HorizontalAlignment="Center" VerticalAlignment="Center">
           <Border Width="60" Height="60" CornerRadius="12" Background="{DynamicResource Kp.AccentSoft}" HorizontalAlignment="Left" IsVisible="{Binding !IsCreate}">
             <TextBlock Text="{Binding Initial}" FontSize="26" FontWeight="SemiBold" Foreground="{DynamicResource Kp.Accent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>

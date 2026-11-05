@@ -1,8 +1,10 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using KeepPassword.App.Controls;
 using KeepPassword.App.Services;
 using KeepPassword.Core.Security;
 
@@ -42,11 +44,19 @@ public partial class PasswordGeneratorView : UserControl
         CopyStatus.Text = "";
     }
 
-    private void OnRandom(object? sender, RoutedEventArgs e) => ApplyKind(PasswordGeneratorKind.Random, resetValue: true);
-
-    private void OnMemorable(object? sender, RoutedEventArgs e) => ApplyKind(PasswordGeneratorKind.Memorable, resetValue: true);
-
-    private void OnPin(object? sender, RoutedEventArgs e) => ApplyKind(PasswordGeneratorKind.Pin, resetValue: true);
+    // 分段切换只负责把选中项翻译成原有的 ApplyKind 调用；程序同步选中项时（_adjusting）不重复触发。
+    private void OnKindChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        // XAML 加载时会先自动选中第 0 项，此时 KindSegments 字段尚未赋值，直接用 sender。
+        if (_adjusting || sender is not SegmentedControl segments) return;
+        var kind = segments.SelectedIndex switch
+        {
+            1 => PasswordGeneratorKind.Memorable,
+            2 => PasswordGeneratorKind.Pin,
+            _ => PasswordGeneratorKind.Random
+        };
+        if (kind != _kind) ApplyKind(kind, resetValue: true);
+    }
 
     private void OnRefresh(object? sender, RoutedEventArgs e)
     {
@@ -54,9 +64,22 @@ public partial class PasswordGeneratorView : UserControl
         _ = Motion.EnterAsync(ResultBox, 0);
     }
 
-    private async void OnCopy(object? sender, RoutedEventArgs e)
+    private void OnCopy(object? sender, RoutedEventArgs e) => _ = CopyPasswordAsync();
+
+    // 点击结果框与"复制密码"按钮共用同一复制流程（含 30 秒自动清除与按钮反馈）。
+    private void OnResultTapped(object? sender, TappedEventArgs e) => _ = CopyPasswordAsync();
+
+    private void OnResultKeyDown(object? sender, KeyEventArgs e)
     {
-        if (string.IsNullOrEmpty(_password) || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        if (e.Key is not (Key.Enter or Key.Space)) return;
+        e.Handled = true;
+        _ = CopyPasswordAsync();
+    }
+
+    private async Task CopyPasswordAsync()
+    {
+        if (string.IsNullOrEmpty(_password)
+            || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
         {
             return;
         }
@@ -64,6 +87,7 @@ public partial class PasswordGeneratorView : UserControl
         CopyStatus.Text = "已复制。若 30 秒后剪贴板仍是该内容，会自动清除。";
         _ = Motion.EnterAsync(CopyStatus, 3);
         await SecretClipboard.CopyAsync(clipboard, _password);
+        _ = CopyFeedback.ShowAsync(CopyButton);
     }
 
     private void OnLengthPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -94,9 +118,12 @@ public partial class PasswordGeneratorView : UserControl
         _kind = kind;
         RandomOptions.IsVisible = kind == PasswordGeneratorKind.Random;
         MemorableOptions.IsVisible = kind == PasswordGeneratorKind.Memorable;
-        SetSegment(RandomButton, kind == PasswordGeneratorKind.Random);
-        SetSegment(MemorableButton, kind == PasswordGeneratorKind.Memorable);
-        SetSegment(PinButton, kind == PasswordGeneratorKind.Pin);
+        KindSegments.SelectedIndex = kind switch
+        {
+            PasswordGeneratorKind.Memorable => 1,
+            PasswordGeneratorKind.Pin => 2,
+            _ => 0
+        };
         if (resetValue)
         {
             switch (kind)
@@ -125,17 +152,6 @@ public partial class PasswordGeneratorView : UserControl
         _adjusting = false;
         Generate();
         _ = Motion.EnterAsync(ResultBox, 0);
-    }
-
-    private static void SetSegment(Button button, bool selected)
-    {
-        if (selected)
-        {
-            button.Classes.Add("selected");
-            return;
-        }
-
-        button.Classes.Remove("selected");
     }
 
     private void FixCardWidth()
