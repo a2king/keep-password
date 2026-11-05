@@ -10,7 +10,9 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using KeepPassword.Core.Browser;
 using KeepPassword.Core.Install;
+using KeepPassword.Core.Paths;
 using KeepPassword.Core.Update;
 
 namespace KeepPassword.Setup;
@@ -30,6 +32,7 @@ public partial class MainWindow : Window
     private string _finishTitle = "安装完成";
     private string _finishText = "";
     private string? _finishError;
+    private string? _finishSummary;
     private string _finishButtonText = "完成";
 
     public MainWindow()
@@ -46,6 +49,8 @@ public partial class MainWindow : Window
         PathBox.Text = existing.Directory;
         StartMenuBox.IsChecked = existing.HasStartMenuShortcut;
         DesktopBox.IsChecked = existing.HasDesktopShortcut;
+        // 升级 / 重装时沿用用户现在的选择；旧版靠默认值自动登记的用户，这里会显示为已勾选，不会被悄悄关掉。
+        AutostartBox.IsChecked = AutostartRegistration.ResolveEnabled(CacheDirectory.TryGetLaunchAtStartup(CacheDirectory.SettingsFile()));
         var version = existing.Version is null ? "" : " v" + existing.Version;
         var reinstall = existing.Version == InstallConstants.Version;
         WelcomeTitle.Text = reinstall ? "重新安装 Keep Password" : "更新 Keep Password";
@@ -79,17 +84,69 @@ public partial class MainWindow : Window
 
     private void OnFinish(object? sender, RoutedEventArgs e) => Close();
 
-    private void OnProgressNext(object? sender, RoutedEventArgs e)
+    // 安装结束（成功 / 失败 / 取消）：进度条停在当前值，日志留在页面上，等用户点“下一步”再进入完成页。
+    private void ShowInstallStepDone(string status)
+    {
+        StopFlush();
+        ProgressHeading.Text = _installSucceeded ? "安装写入完成" : _finishTitle;
+        ProgressText.Text = status;
+        if (_installSucceeded)
+        {
+            ProgressBar.Value = 100;
+            PercentText.Text = "100%";
+        }
+
+        ProgressNextButton.Content = "下一步";
+        ProgressNextButton.IsVisible = true;
+        ProgressNextButton.IsEnabled = true;
+    }
+
+    private void OnProgressNext(object? sender, RoutedEventArgs e) => ShowFinish();
+
+    private void ShowFinish()
     {
         FinishTitle.Text = _finishTitle;
         FinishText.Text = _finishText;
         FinishError.Text = _finishError ?? "";
         FinishError.IsVisible = !string.IsNullOrEmpty(_finishError);
+        FinishSummary.Text = _finishSummary ?? "";
+        FinishSummary.IsVisible = !string.IsNullOrEmpty(_finishSummary);
+        ExtensionPanel.IsVisible = _installSucceeded;
         FinishButton.Content = _finishButtonText;
         ShowPage(finish: true);
-        StepTitle.Text = _installSucceeded
-            ? "第 3 步 / 共 3 步 · 完成"
-            : _finishTitle;
+        StepTitle.Text = _installSucceeded ? "第 3 步 / 共 3 步 · 完成" : _finishTitle;
+    }
+
+    private void OnInstallEdgeExtension(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = BrowserExtensionLinks.EdgeStoreUrl, UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            FinishError.Text = "无法打开浏览器：" + ex.Message + "\n请手动访问：" + BrowserExtensionLinks.EdgeStoreUrl;
+            FinishError.IsVisible = true;
+        }
+    }
+
+    // Chrome 扩展还没上架商店，所以这里不给商店链接：直接打开安装目录里自带的 extension 文件夹，并说明怎么加载。
+    private void OnInstallChromeExtension(object? sender, RoutedEventArgs e)
+    {
+        var folder = Path.Combine(_installRoot ?? InstallConstants.DefaultInstallDirectory(), InstallConstants.ExtensionFolderName);
+        ChromeSteps.Text = "Chrome 扩展暂未上架商店，需要手动加载一次：\n"
+                           + "1. 在 Chrome 地址栏打开 chrome://extensions，打开右上角「开发者模式」\n"
+                           + "2. 点「加载已解压的扩展程序」，选择刚打开的 extension 文件夹\n"
+                           + "连接已由安装程序登记好，不需要运行任何脚本。";
+        ChromeSteps.IsVisible = true;
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = folder, UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            ChromeSteps.Text += "\n（无法自动打开文件夹，请手动前往：" + folder + "）";
+        }
     }
 
     private async void OnBrowse(object? sender, RoutedEventArgs e)
@@ -127,7 +184,8 @@ public partial class MainWindow : Window
         {
             CreateStartMenuShortcut = StartMenuBox.IsChecked == true,
             CreateDesktopShortcut = DesktopBox.IsChecked == true,
-            LaunchAfterInstall = LaunchBox.IsChecked == true
+            LaunchAfterInstall = LaunchBox.IsChecked == true,
+            LaunchAtStartup = AutostartBox.IsChecked == true
         };
 
         if (!await EnsureNoRunningAppAsync(target))
@@ -154,6 +212,7 @@ public partial class MainWindow : Window
         _flushTimer.Start();
 
         string? extract = null;
+        InstallSummary? summary = null;
         try
         {
             extract = await Task.Run(() =>
@@ -174,7 +233,7 @@ public partial class MainWindow : Window
                 {
                     var installTarget = target;
                     var installExtract = extract;
-                    await Task.Run(() =>
+                    summary = await Task.Run(() =>
                         InstallOperations.InstallFromDirectory(installExtract, installTarget, options, progress));
                     break;
                 }
@@ -211,8 +270,9 @@ public partial class MainWindow : Window
             _finishText = "Keep Password 已安装到：" + target +
                           (_launchAfterClose is not null ? "\n点击「完成」关闭安装程序后将自动启动。" : "\n可从开始菜单或桌面快捷方式打开。");
             _finishError = null;
+            _finishSummary = DescribeSummary(summary);
             _finishButtonText = "完成";
-            ShowInstallStepDone("安装完成，可查看上方日志后进入下一步。");
+            ShowInstallStepDone("安装完成，可查看上方日志，然后点「下一步」。");
         }
         catch (OperationCanceledException ex)
         {
@@ -222,6 +282,7 @@ public partial class MainWindow : Window
             _finishTitle = "安装已取消";
             _finishText = "安装已取消。请退出 Keep Password 后重新运行安装程序。";
             _finishError = ex.Message;
+            _finishSummary = null;
             _finishButtonText = "关闭";
             ShowInstallStepDone("安装已取消。");
         }
@@ -233,6 +294,7 @@ public partial class MainWindow : Window
             _finishTitle = "安装失败";
             _finishText = "安装未能完成。请关闭占用程序后重试，或更换安装目录。";
             _finishError = ex.Message;
+            _finishSummary = null;
             _finishButtonText = "关闭";
             ShowInstallStepDone("安装失败，可查看上方日志。");
         }
@@ -253,19 +315,17 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowInstallStepDone(string status)
+    // 用一句话说明这次安装实际动了什么：重装同一版本时应当是"注册表无改动"。
+    private static string? DescribeSummary(InstallSummary? summary)
     {
-        ProgressHeading.Text = _installSucceeded ? "安装写入完成" : _finishTitle;
-        ProgressText.Text = status;
-        if (_installSucceeded)
+        if (summary is null || !OperatingSystem.IsWindows())
         {
-            ProgressBar.Value = 100;
-            PercentText.Text = "100%";
+            return null;
         }
 
-        ProgressNextButton.Content = "下一步";
-        ProgressNextButton.IsVisible = true;
-        ProgressNextButton.IsEnabled = true;
+        return summary.RegistryWrites == 0
+            ? "系统设置无需改动（注册表 0 项写入）。"
+            : $"已更新 {summary.RegistryWrites} 项系统设置，{summary.RegistryUnchanged} 项原本就是最新。";
     }
 
     /// <summary>

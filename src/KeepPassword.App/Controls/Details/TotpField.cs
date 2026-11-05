@@ -108,7 +108,8 @@ public class TotpField : SecretField
         SetCurrentValue(ValidationMessageProperty, "");
         base.EndEdit(cancel);
     }
-    protected override void OnValueActivated() => _ = CopyCurrentAsync();
+    // 与其他字段一致：点击值进入编辑（修改验证码密钥）；复制当前验证码用右侧的复制按钮。
+    protected override void OnValueActivated() => BeginEdit();
 }
 
 /// <summary>验证码的纯视觉部分，字号、圆环和临界颜色都由主题定义。</summary>

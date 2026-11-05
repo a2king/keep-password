@@ -34,6 +34,7 @@ public class FieldRow : TemplatedControl
     private TextBox? _editor;
     private Button? _valueButton;
     private Button? _editButton;
+    private bool _focusPending;
     private Button? _revealButton;
     private CopyButton? _copyButton;
     private string _beforeEdit = "";
@@ -78,6 +79,8 @@ public class FieldRow : TemplatedControl
         LostFocus += (_, _) => Dispatcher.UIThread.Post(() =>
         {
             // 焦点在眼睛/复制/操作插槽之间移动时不结束编辑。
+            // 点击值进入编辑时，被点的值按钮会立刻隐藏而短暂失去焦点；焦点交给输入框之前不能把这次当作"离开"。
+            if (_focusPending) return;
             if (!IsKeyboardFocusWithin && IsEditing) EndEdit();
         }, DispatcherPriority.Input);
         DetachedFromVisualTree += (_, _) => _beforeEdit = "";
@@ -148,9 +151,11 @@ public class FieldRow : TemplatedControl
     public void BeginEdit()
     {
         if (!CanEdit || !SupportsInlineEditing) return;
+        _focusPending = true;
         if (!IsEditing) SetCurrentValue(IsEditingProperty, true);
         Dispatcher.UIThread.Post(() =>
         {
+            _focusPending = false;
             if (IsEditing && IsEffectivelyVisible) { _editor?.Focus(); _editor?.SelectAll(); }
         }, DispatcherPriority.Input);
     }

@@ -171,7 +171,8 @@ public class GitHubUpdateTests
             };
         });
         using var http = new HttpClient(handler);
-        using var client = new GitHubUpdateClient(http);
+        // 显式传空公钥列表：这两个测试只验证哈希，不能随仓库里 UpdateTrust 是否已填入公钥而变化。
+        using var client = new GitHubUpdateClient(http, []);
 
         var release = new UpdateRelease(
             "v0.7.0",
@@ -209,7 +210,8 @@ public class GitHubUpdateTests
             };
         });
         using var http = new HttpClient(handler);
-        using var client = new GitHubUpdateClient(http);
+        // 显式传空公钥列表：这两个测试只验证哈希，不能随仓库里 UpdateTrust 是否已填入公钥而变化。
+        using var client = new GitHubUpdateClient(http, []);
 
         var release = new UpdateRelease(
             "v0.7.0",
@@ -220,6 +222,103 @@ public class GitHubUpdateTests
         await Assert.ThrowsAsync<InvalidDataException>(() => client.DownloadAsync(release, root));
         Assert.False(File.Exists(UpdatePaths.SetupPath(root)));
         Assert.False(File.Exists(UpdatePaths.SetupPath(root) + ".tmp"));
+    }
+
+    // 带签名的下载：请求 .sig 时返回给定内容（null 表示该 Release 没有签名资产）。
+    private static async Task<(UpdateDownloadResult? Result, Exception? Error, string Root)> DownloadWithSignatureAsync(
+        string? signatureBody,
+        IReadOnlyList<string> trustedKeys)
+    {
+        var payload = Encoding.UTF8.GetBytes("keep-password-setup-body");
+        var hash = Convert.ToHexString(SHA256.HashData(payload));
+        var root = Path.Combine(Path.GetTempPath(), "keep-password-tests", Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(root);
+        using var handler = new StubHandler(request =>
+        {
+            var url = request.RequestUri!.AbsoluteUri;
+            if (url.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(hash) };
+            }
+
+            if (url.EndsWith(".sig", StringComparison.OrdinalIgnoreCase))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(signatureBody ?? "") };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(payload) };
+        });
+        using var http = new HttpClient(handler);
+        using var client = new GitHubUpdateClient(http, trustedKeys);
+        var release = new UpdateRelease(
+            "v0.9.1", "0.9.1",
+            "https://example.com/KeepPassword-Setup-win-x64.exe",
+            "https://example.com/KeepPassword-Setup-win-x64.exe.sha256",
+            signatureBody is null ? null : "https://example.com/KeepPassword-Setup-win-x64.exe.sig");
+        try
+        {
+            return (await client.DownloadAsync(release, root), null, root);
+        }
+        catch (InvalidDataException ex)
+        {
+            return (null, ex, root);
+        }
+    }
+
+    [Fact]
+    public async Task Download_WithValidPublisherSignature_Installs()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("keep-password-setup-body")));
+        var signature = UpdateSignature.Sign(key, "0.9.1", hash);
+        var (result, error, _) = await DownloadWithSignatureAsync(signature, [Convert.ToBase64String(key.ExportSubjectPublicKeyInfo())]);
+        Assert.Null(error);
+        Assert.True(File.Exists(result!.SetupPath));
+    }
+
+    [Fact]
+    public async Task Download_WithoutSignature_IsRefusedAndFileRemovedWhenKeysAreConfigured()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var (result, error, root) = await DownloadWithSignatureAsync(null, [Convert.ToBase64String(key.ExportSubjectPublicKeyInfo())]);
+        Assert.Null(result);
+        Assert.Contains("签名", error!.Message);
+        Assert.False(File.Exists(UpdatePaths.SetupPath(root)));
+        Assert.False(File.Exists(UpdatePaths.SetupPath(root) + ".tmp"));
+    }
+
+    [Fact]
+    public async Task Download_WithForgedSignature_IsRefusedEvenThoughTheHashMatches()
+    {
+        using var trusted = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var attacker = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("keep-password-setup-body")));
+        // 攻击者控制了 Release，能同时换掉安装包和 .sha256，但拿不到发布者私钥，只能用自己的密钥签。
+        var forged = UpdateSignature.Sign(attacker, "0.9.1", hash);
+        var (result, error, root) = await DownloadWithSignatureAsync(forged, [Convert.ToBase64String(trusted.ExportSubjectPublicKeyInfo())]);
+        Assert.Null(result);
+        Assert.Contains("签名", error!.Message);
+        Assert.False(File.Exists(UpdatePaths.SetupPath(root)));
+    }
+
+    [Fact]
+    public async Task Download_WithNoConfiguredKeys_KeepsTheOldHashOnlyBehaviour()
+    {
+        var (result, error, _) = await DownloadWithSignatureAsync(null, []);
+        Assert.Null(error);
+        Assert.True(File.Exists(result!.SetupPath));
+    }
+
+    [Fact]
+    public void ParseReleaseJson_ReadsTheOptionalSignatureAsset()
+    {
+        var json = """
+            {"tag_name":"v0.9.1","assets":[
+              {"name":"KeepPassword-Setup-win-x64.exe","browser_download_url":"https://e/s.exe"},
+              {"name":"KeepPassword-Setup-win-x64.exe.sha256","browser_download_url":"https://e/s.sha256"},
+              {"name":"KeepPassword-Setup-win-x64.exe.sig","browser_download_url":"https://e/s.sig"}]}
+            """;
+        Assert.Equal("https://e/s.sig", GitHubUpdateClient.ParseReleaseJson(json)!.SignatureDownloadUrl);
     }
 
     [Fact]

@@ -23,13 +23,28 @@
           <Image Source="/Assets/logo.png" Width="44" Height="44" />
           <StackPanel VerticalAlignment="Center">
             <TextBlock Text="卸载 Keep Password" FontSize="22" FontWeight="SemiBold" />
-            <TextBlock Text="将删除安装目录中的程序文件" Foreground="#6B778C" FontSize="12" />
+            <TextBlock Text="将删除安装目录中的程序文件，并清除开机启动、浏览器连接等登记" Foreground="#6B778C" FontSize="12" />
           </StackPanel>
         </StackPanel>
         <TextBlock x:Name="PathText" TextWrapping="Wrap" Foreground="#6B778C" Margin="0,0,0,14" />
-        <CheckBox x:Name="DeleteCacheBox" Content="同时删除缓存目录（保险库数据）" IsChecked="False" />
-        <TextBlock Text="默认不勾选。不勾选时只卸载程序，账号数据仍保留在缓存目录。"
+        <Border x:Name="RunningNotice" IsVisible="False" Background="#FFF7E6" BorderBrush="#F2D49B" BorderThickness="1"
+                CornerRadius="8" Padding="12,8" Margin="0,0,0,12">
+          <TextBlock x:Name="RunningText" TextWrapping="Wrap" Foreground="#8A5A00" FontSize="12.5" />
+        </Border>
+        <TextBlock Text="你的保险库与设置保存在：" Foreground="#6B778C" FontSize="12" />
+        <SelectableTextBlock x:Name="DataPathText" TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas, monospace"
+                             FontSize="12" Foreground="#152033" Margin="0,2,0,10" />
+        <CheckBox x:Name="DeleteCacheBox" Content="同时删除保险库数据（不可恢复）" IsChecked="False" IsCheckedChanged="OnDeleteChoiceChanged" />
+        <TextBlock Text="默认不勾选：只卸载程序，保险库仍保留在上面的目录里，以后重装即可继续使用。"
                    TextWrapping="Wrap" Foreground="#6B778C" FontSize="12" Margin="0,8,0,0" />
+        <!-- 勾选删除数据后才出现的二次确认：这是唯一无法撤销的操作。 -->
+        <Border x:Name="DeleteConfirmPanel" IsVisible="False" Background="#FDECEC" BorderBrush="#F2B8B8" BorderThickness="1"
+                CornerRadius="8" Padding="12,10" Margin="0,12,0,0">
+          <StackPanel Spacing="6">
+            <TextBlock Text="将永久删除上面目录中的全部账号数据，无法恢复。" TextWrapping="Wrap" Foreground="#B42318" FontSize="12.5" FontWeight="SemiBold" />
+            <CheckBox x:Name="DeleteConfirmBox" Content="我已备份，或确认不再需要这些数据" IsChecked="False" IsCheckedChanged="OnDeleteChoiceChanged" />
+          </StackPanel>
+        </Border>
         <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Foreground="#D14343" Margin="0,12,0,0" IsVisible="False" />
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,18,0,0">
           <Button Classes="ghost" Content="取消" Click="OnCancel" />

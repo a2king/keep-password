@@ -18,7 +18,21 @@ public static class InstallConstants
         @"Software\Google\Chrome\NativeMessagingHosts\" + NativeHostName,
         @"Software\Microsoft\Edge\NativeMessagingHosts\" + NativeHostName
     ];
-    public const string Version = "0.9.0";
+    /// <summary>当前版本号，取自 Directory.Build.props 编进程序集的版本，不再在代码里另写一份。</summary>
+    public static string Version { get; } = ReadVersion();
+
+    private static string ReadVersion()
+    {
+        var assembly = typeof(InstallConstants).Assembly;
+        var text = assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .FirstOrDefault()?.InformationalVersion
+            ?? assembly.GetName().Version?.ToString(3)
+            ?? "0.0.0";
+        var plus = text.IndexOf('+');
+        return plus >= 0 ? text[..plus] : text;
+    }
 
     public static string DefaultInstallDirectory()
     {

@@ -136,6 +136,52 @@ public class DetailPanelInteractionTests
     }
 
     [AvaloniaFact]
+    public async Task ClickingAValue_EntersEditModeForEveryEditableRow()
+    {
+        using var fixture = new PanelFixture();
+        fixture.Show();
+        await Task.Delay(40); fixture.Window.UpdateLayout();
+        var report = new List<string>();
+        foreach (var row in fixture.Panel.GetVisualDescendants().OfType<FieldRow>().Where(r => r.CanEdit && r.ValueContent is null).ToList())
+        {
+            row.BringIntoView();
+            fixture.Window.UpdateLayout();
+            var value = row.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "PART_ValueButton");
+            var point = value.TranslatePoint(new Point(12, value.Bounds.Height / 2), fixture.Window)!.Value;
+            fixture.Window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
+            fixture.Window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
+            await WaitUntil(fixture.Window, () => row.IsEditing, 500);
+            report.Add($"{row.Label}={(row.IsEditing ? "edit" : "NO")}");
+            row.EndEdit(cancel: true);
+            fixture.Window.UpdateLayout();
+        }
+        Assert.NotEmpty(report);
+        Assert.All(report, line => Assert.EndsWith("=edit", line));
+    }
+
+    [AvaloniaFact]
+    public async Task ClickingTheTotpCode_EditsTheSecretAndFocusesTheEditor()
+    {
+        var totp = new TotpField { Label = "验证码", Value = "JBSWY3DPEHPK3PXP" };
+        var window = new Window { Width = 480, Height = 180, Content = totp };
+        try
+        {
+            window.Show(); window.UpdateLayout(); await Task.Delay(50);
+            var value = totp.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "PART_ValueButton");
+            var point = value.TranslatePoint(new Point(12, value.Bounds.Height / 2), window)!.Value;
+            window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
+            window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
+            await WaitUntil(window, () => totp.IsEditing, 500);
+            Assert.True(totp.IsEditing);
+            var editor = totp.GetVisualDescendants().OfType<TextBox>().Single(b => b.Name == "PART_Editor");
+            await WaitUntil(window, () => editor.IsFocused, 500);
+            Assert.True(editor.IsFocused);
+            Assert.Equal("JBSWY3DPEHPK3PXP", editor.Text);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
     public async Task HoveringRowsAndButtons_ChangesNothingVisually()
     {
         using var fixture = new PanelFixture();
@@ -160,6 +206,40 @@ public class DetailPanelInteractionTests
         Assert.True(quick.IsPointerOver);
         var presenter = quick.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().First();
         Assert.Equal(((ISolidColorBrush)quick.Background!).Color, ((ISolidColorBrush)presenter.Background!).Color);
+    }
+
+    [AvaloniaFact]
+    public async Task EditingARow_OnlyTheInputChangesNotTheWholeRow()
+    {
+        using var fixture = new PanelFixture();
+        fixture.Show();
+        await Task.Delay(40); fixture.Window.UpdateLayout();
+        var row = UsernameRow(fixture.Panel);
+        var shown = row.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "PART_ValueText");
+        var before = shown.TranslatePoint(default, fixture.Window)!.Value;
+        var rowBox = new Rect(row.TranslatePoint(default, fixture.Window)!.Value, row.Bounds.Size);
+
+        row.BeginEdit();
+        await WaitUntil(fixture.Window, () => row.IsEditing, 500);
+        await Task.Delay(300); fixture.Window.UpdateLayout();   // 等过渡动画走完
+
+        // 1) 整行不变灰
+        Assert.Equal(0, row.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PART_Hover").Opacity);
+        // 2) 输入框自己有 1px 中性边框和独立底色（不是强调色，所以点进去不会出现蓝框）
+        var editor = row.GetVisualDescendants().OfType<TextBox>().Single(x => x.Name == "PART_Editor");
+        Assert.True(editor.IsVisible);
+        Assert.Equal(new Thickness(1), editor.BorderThickness);
+        var border = Assert.IsAssignableFrom<ISolidColorBrush>(editor.BorderBrush);
+        Assert.True(editor.TryFindResource("Detail.Focus", editor.ActualThemeVariant, out var focus), "找不到 Detail.Focus");
+        Assert.NotEqual(((ISolidColorBrush)focus!).Color, border.Color);
+        // 3) 进入编辑后文字没有位移：输入框的文字起点与原来显示文字的起点一致（边框画在文字外面）
+        var presenter = editor.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.TextPresenter>().First();
+        var after = presenter.TranslatePoint(default, fixture.Window)!.Value;
+        Assert.InRange(Math.Abs(after.X - before.X), 0, 1.5);
+        // 4) 整个编辑框仍在这一行之内，没有顶到别的行
+        var editorBox = new Rect(editor.TranslatePoint(default, fixture.Window)!.Value, editor.Bounds.Size);
+        Assert.InRange(editorBox.Top, rowBox.Top - 0.5, rowBox.Bottom);
+        Assert.InRange(editorBox.Bottom, rowBox.Top, rowBox.Bottom + 0.5);
     }
 
     [AvaloniaFact]

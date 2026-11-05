@@ -7,6 +7,7 @@ public static class UpdatePaths
     public const string CacheFolderName = "cache";
     public const string SetupAssetName = "KeepPassword-Setup-win-x64.exe";
     public const string Sha256AssetName = SetupAssetName + ".sha256";
+    public const string SignatureAssetName = SetupAssetName + UpdateSignature.AssetSuffix;
     public const string GitHubOwner = "a2king";
     public const string GitHubRepo = "keep-password";
 

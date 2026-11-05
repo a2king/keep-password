@@ -74,6 +74,8 @@ Release 中的 `KeepPassword-Chrome-Extension-<版本>.zip` 与安装目录里�
 
 源码中的 `extension` 可直接加载，但必须先发布 NativeHost，再把已发布的 EXE 路径传给注册脚本。现有 Windows 发布包将宿主放在安装根目录，**不是固定放在 `native-host` 子目录**。修改扩展后在扩展管理页点击「重新加载」，再刷新登录网页；修改桌面端 / NativeHost 后还需要重新构建并重启桌面程序。
 
+扩展与宿主之间是一个常驻连接：浏览器第一次查询时启动 `KeepPassword.NativeHost`，之后的查询复用同一进程，空闲 5 分钟后自动断开退出。重新构建 NativeHost 前，先在扩展管理页「重新加载」扩展（或关闭浏览器），否则 EXE 仍被占用。登录页加载时扩展会预取当前站点的候选（只含名称、用户名和域名），聚焦密码框时直接显示，再在后台刷新一次。
+
 扩展回归检查（需要 Node.js）：
 
 ```powershell

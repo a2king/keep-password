@@ -73,13 +73,22 @@ public sealed class AutofillChannel
 
         try
         {
-            var dto = JsonSerializer.Deserialize<SessionDto>(File.ReadAllText(path), Options);
-            if (dto is null || dto.Port is < 1 or > 65535 || string.IsNullOrWhiteSpace(dto.Token))
+            // 用 JsonDocument 手动取值，避开反射序列化器的首次初始化，宿主冷启动更快。
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("port", out var portElement)
+                || !portElement.TryGetInt32(out var port)
+                || port is < 1 or > 65535
+                || !root.TryGetProperty("token", out var tokenElement)
+                || tokenElement.ValueKind != JsonValueKind.String
+                || tokenElement.GetString() is not { } token
+                || string.IsNullOrWhiteSpace(token))
             {
                 return false;
             }
 
-            channel = new AutofillChannel(dto.Port, dto.Token);
+            channel = new AutofillChannel(port, token);
             return true;
         }
         catch (JsonException)

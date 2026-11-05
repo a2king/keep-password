@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    全仓库唯一的版本号来源。发版时只改这一处（连同 extension/manifest.json，用 scripts/set-version.ps1 一起改）。
+    InstallConstants.Version、安装向导、卸载信息里的 DisplayVersion 都在运行时读取程序集版本，不再各写一份。
+    显式设置 InformationalVersion，避免 SDK 自动追加 "+提交哈希" 后缀。
+  -->
+  <PropertyGroup>
+    <Version>0.9.0</Version>
+    <InformationalVersion>$(Version)</InformationalVersion>
+  </PropertyGroup>
+</Project>

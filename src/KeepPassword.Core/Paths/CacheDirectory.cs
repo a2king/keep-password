@@ -262,9 +262,27 @@ public static class CacheDirectory
     public static void SetAutofillHotkey(string settingsFile, string hotkey) =>
         Update(settingsFile, dto => dto.AutofillHotkey = hotkey);
 
-    /// <summary>未配置时默认开启开机启动。</summary>
+    /// <summary>未配置时默认不开启：全新安装不再悄悄加入开机启动，由用户在安装向导或设置里自己打开。</summary>
     public static bool GetLaunchAtStartup(string settingsFile) =>
-        ReadBool(settingsFile, dto => dto.LaunchAtStartup, defaultValue: true);
+        ReadBool(settingsFile, dto => dto.LaunchAtStartup, defaultValue: false);
+
+    /// <summary>用户是否明确选择过；从未选择（旧版靠默认值自动登记的用户也算）返回 null，由调用方决定如何沿用。</summary>
+    public static bool? TryGetLaunchAtStartup(string settingsFile)
+    {
+        if (!File.Exists(settingsFile))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<SettingsDto>(File.ReadAllText(settingsFile), Options)?.LaunchAtStartup;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     public static void SetLaunchAtStartup(string settingsFile, bool enabled) =>
         Update(settingsFile, dto => dto.LaunchAtStartup = enabled);

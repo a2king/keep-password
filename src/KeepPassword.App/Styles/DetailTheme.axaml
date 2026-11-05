@@ -50,6 +50,8 @@
           <SolidColorBrush x:Key="Detail.AccentSoft" Color="#EDF2FF" />
           <SolidColorBrush x:Key="Detail.Hover" Color="#F1F4FA" />
           <SolidColorBrush x:Key="Detail.Focus" Color="#2F7CF6" />
+          <!-- 编辑中的输入框边框：中性灰，不是强调色，所以点进去不会出现蓝框。 -->
+          <SolidColorBrush x:Key="Detail.InputBorder" Color="#C9D0DC" />
           <SolidColorBrush x:Key="Detail.Danger" Color="#BD3548" />
           <SolidColorBrush x:Key="Detail.Success" Color="#197A55" />
           <SolidColorBrush x:Key="Detail.Warning" Color="#956300" />
@@ -83,6 +85,7 @@
           <SolidColorBrush x:Key="Detail.AccentSoft" Color="#333E5C" />
           <SolidColorBrush x:Key="Detail.Hover" Color="#232733" />
           <SolidColorBrush x:Key="Detail.Focus" Color="#5B9BFF" />
+          <SolidColorBrush x:Key="Detail.InputBorder" Color="#4A5160" />
           <SolidColorBrush x:Key="Detail.Danger" Color="#FF99A6" />
           <SolidColorBrush x:Key="Detail.Success" Color="#72D3AA" />
           <SolidColorBrush x:Key="Detail.Warning" Color="#F3C872" />

@@ -8,13 +8,31 @@ export DOTNET_ROOT="${HOME}/.dotnet"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 
 OUT="${1:-/tmp/kp-windows-package}"
+SETUP_SRC="$ROOT/src/KeepPassword.Setup"
+# 打包中途失败时也要清掉写进源码目录的巨大临时文件（PowerShell 版用 finally，这里用 trap）。
+trap 'rm -f "$SETUP_SRC/payload.zip" "$SETUP_SRC/payload.sha256"' EXIT
 STAGING="$OUT/staging"
 SETUP_OUT="$OUT/setup"
 NH_OUT="$OUT/native-host-build"
 UNINSTALL_OUT="$OUT/uninstall-build"
 RID=win-x64
+VERSION="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$ROOT/Directory.Build.props" | head -1)"
+if [ -z "$VERSION" ]; then echo "无法从 Directory.Build.props 读取版本号" >&2; exit 1; fi
+RELEASE_DLL="$OUT/release-tool/KeepPassword.Release.dll"
 
 rm -rf "$OUT"
+echo "== 发布者工具（更新签名） =="
+dotnet build "$ROOT/tools/KeepPassword.Release/KeepPassword.Release.csproj" -c Release -o "$OUT/release-tool" --nologo -v q
+set +e
+dotnet "$RELEASE_DLL" status
+TRUST=$?
+set -e
+# 退出码 0 = 已启用签名强制，3 = 未启用，其他 = 工具本身出错（必须中止，不能当成"未启用"）。
+if [ "$TRUST" -ne 0 ] && [ "$TRUST" -ne 3 ]; then echo "无法确认更新签名状态（退出码 $TRUST）" >&2; exit 1; fi
+if [ "$TRUST" -eq 0 ] && [ -z "${KP_UPDATE_KEY:-}" ]; then
+  echo "仓库已启用更新签名强制，请设置 KP_UPDATE_KEY 指向私钥文件，否则发出去的更新会被客户端拒绝。" >&2
+  exit 1
+fi
 mkdir -p "$STAGING/extension" "$SETUP_OUT" "$NH_OUT" "$UNINSTALL_OUT"
 
 echo "== 发布主程序（自包含，共用运行时，非单文件） =="
@@ -56,22 +74,8 @@ rm -f "$STAGING/createdump.exe" || true
 echo "== 扩展与说明 =="
 cp -a "$ROOT/extension/." "$STAGING/extension/"
 rm -rf "$STAGING/extension/tests"
-python3 - <<'PY' > "$STAGING/使用说明.txt"
-text = """Keep Password
-
-这是自包含安装包，不需要另外安装 .NET。
-
-双击 KeepPassword.exe 启动。
-卸载请运行 Uninstall.exe。默认不会删除缓存目录。
-
-浏览器扩展见 extension 文件夹。
-Native Messaging 宿主为本目录下的 KeepPassword.NativeHost.exe，例如：
-
-  .\\extension\\register-windows.ps1 -HostExe .\\KeepPassword.NativeHost.exe -ExtensionId <扩展ID>
-"""
-import sys
-sys.stdout.buffer.write(b"\xef\xbb\xbf" + text.encode("utf-8"))
-PY
+# 说明文字放在 scripts/install-readme.txt，与 PowerShell 版共用；带 UTF-8 BOM 方便 Windows 记事本识别。
+python3 -c "import sys; sys.stdout.buffer.write(b'ï»¿' + open(sys.argv[1], 'rb').read())"   "$ROOT/scripts/install-readme.txt" > "$STAGING/使用说明.txt"
 
 echo "== 高压缩打包 payload =="
 (
@@ -103,6 +107,8 @@ rm -f "$ROOT/src/KeepPassword.Setup/payload.zip" "$ROOT/src/KeepPassword.Setup/p
 
 SETUP_EXE="$OUT/KeepPassword-Setup-win-x64.exe"
 cp -f "$SETUP_OUT/KeepPassword.Setup.exe" "$SETUP_EXE"
+# 注意：Linux 上没有 Authenticode 签名（需要 Windows 的 signtool 或 osslsigncode）。
+# 要发出带 Authenticode 签名的正式包，请在 Windows 上用 artifacts/package.ps1。
 python3 - <<PY
 import hashlib, pathlib
 setup = pathlib.Path(r"$SETUP_EXE")
@@ -114,6 +120,15 @@ PY
   cd "$STAGING"
   zip -r -q -9 "$OUT/KeepPassword-win-x64.zip" .
 )
+
+# 更新签名：对"版本号 + 最终 Setup.exe 的 SHA-256"签名，客户端用内置公钥验签。
+if [ -n "${KP_UPDATE_KEY:-}" ]; then
+  echo "== 更新签名 =="
+  dotnet "$RELEASE_DLL" sign --private "$KP_UPDATE_KEY" --file "$SETUP_EXE" --version "v$VERSION" --out "$SETUP_EXE.sig"
+  dotnet "$RELEASE_DLL" verify --file "$SETUP_EXE" --version "v$VERSION" --sig "$SETUP_EXE.sig"
+else
+  echo "提示：未做更新签名（没有设置 KP_UPDATE_KEY），客户端目前只校验 SHA-256。" >&2
+fi
 
 echo "== 打包浏览器扩展 =="
 EXT_VERSION="$(python3 -c "import json, sys; print(json.load(open(sys.argv[1], encoding='utf-8'))['version'])" "$ROOT/extension/manifest.json")"

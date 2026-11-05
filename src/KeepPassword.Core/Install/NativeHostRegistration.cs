@@ -105,30 +105,55 @@ public static partial class NativeHostRegistration
     [SupportedOSPlatform("windows")]
     public static string Register(string hostExe)
     {
+        var where = InstallLocations.Default();
+        Register(hostExe, where, DiscoverInstalledOrigins().ToList(), new RegistryWriter());
+        return where.NativeHostManifest;
+    }
+
+    /// <summary>
+    /// 写入宿主清单并登记到浏览器。清单内容和注册表值都只在真正变化时才写，
+    /// 所以每次启动 / 重新安装调用它，只要没变化就不会产生任何写入。返回是否有实际改动。
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    internal static bool Register(
+        string hostExe,
+        InstallLocations where,
+        IReadOnlyCollection<string> discovered,
+        RegistryWriter registry)
+    {
         var hostPath = Path.GetFullPath(hostExe);
         if (!File.Exists(hostPath))
         {
             throw new FileNotFoundException("找不到 Native Host。", hostPath);
         }
 
-        var manifestPath = ManifestPath();
-        var folder = Path.GetDirectoryName(manifestPath);
+        var manifestPath = where.NativeHostManifest;
+        var origins = AllowedOrigins(ReadExistingOrigins(manifestPath).Concat(discovered));
+        var json = JsonSerializer.Serialize(new HostManifest(hostPath, origins), JsonOptions);
+        var changed = WriteIfDifferent(manifestPath, json);
+        foreach (var keyPath in where.NativeHostKeys)
+        {
+            changed |= registry.SetString(keyPath, "", manifestPath);
+        }
+
+        return changed;
+    }
+
+    private static bool WriteIfDifferent(string path, string content)
+    {
+        if (File.Exists(path) && File.ReadAllText(path) == content)
+        {
+            return false;
+        }
+
+        var folder = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(folder))
         {
             Directory.CreateDirectory(folder);
         }
 
-        var origins = AllowedOrigins(ReadExistingOrigins(manifestPath).Concat(DiscoverInstalledOrigins()));
-        var json = JsonSerializer.Serialize(new HostManifest(hostPath, origins), JsonOptions);
-        File.WriteAllText(manifestPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-
-        foreach (var keyPath in InstallConstants.NativeHostRegistryKeys)
-        {
-            using var key = Registry.CurrentUser.CreateSubKey(keyPath);
-            key?.SetValue("", manifestPath);
-        }
-
-        return manifestPath;
+        File.WriteAllText(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        return true;
     }
 
     public static string ExtensionIdForPath(string path)
@@ -153,6 +178,8 @@ public static partial class NativeHostRegistration
 
         return new string(chars);
     }
+
+    internal static IReadOnlyList<string> DiscoverOrigins() => DiscoverInstalledOrigins().ToList();
 
     private static IEnumerable<string> DiscoverInstalledOrigins()
     {

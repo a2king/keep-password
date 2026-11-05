@@ -220,7 +220,8 @@ public class SecurityPhaseTests
         Assert.Contains("fill-request", content);
         Assert.DoesNotContain("host_permissions", manifest);
         Assert.Contains("fill-password", manifest);
-        Assert.Contains("\"version\": \"0.9.0\"", manifest);
+        // 版本号是否与桌面端一致由 VersionConsistencyTests 统一检查，这里不再写死某个版本。
+        Assert.Contains("\"version\": \""+InstallConstants.Version+"\"", manifest);
     }
 
     [Fact]
