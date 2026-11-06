@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light">
+  <title>Keep Password 账号选择</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; color-scheme: light; overflow: hidden; }
+    body { padding: 10px; box-sizing: border-box; height: 100vh; }
+    .box { box-sizing: border-box; width: 100%; max-height: 100%; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d8dee8; border-radius: 12px; background: #fff; color: #1f2937; box-shadow: 0 6px 18px rgba(15,23,42,.2); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    .head { flex: none; padding: 13px 15px 9px; border-bottom: 1px solid #edf0f4; display: flex; align-items: center; justify-content: space-between; }
+    .brand { font-weight: 650; font-size: 14px; }
+    .close { border: 0; background: transparent; color: #7b8491; cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 4px; }
+    .hint { flex: none; padding: 9px 15px 5px; color: #7b8491; font-size: 12px; }
+    .list { flex: 1 1 auto; min-height: 0; padding: 4px 8px 8px; overflow-y: auto; }
+    .candidate { width: 100%; border: 0; background: transparent; border-radius: 9px; text-align: left; cursor: pointer; padding: 9px 8px; display: block; font: inherit; color: inherit; }
+    .candidate:hover, .candidate:focus { background: #edf5ff; outline: none; }
+    .name { font-weight: 600; color: #1d2939; }
+    .meta { color: #637083; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .domain { color: #8792a2; font-size: 12px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .key { flex: none; display: none; padding: 10px 14px 14px; border-top: 1px solid #edf0f4; }
+    .key.visible { display: block; }
+    .key-label { color: #667085; font-size: 12px; margin-bottom: 6px; }
+    .key-row { display: flex; gap: 7px; }
+    .key-input { flex: 1; min-width: 0; border: 1px solid #cbd5e1; border-radius: 7px; padding: 8px 9px; font: inherit; outline: none; }
+    .key-input:focus { border-color: #3984e8; box-shadow: 0 0 0 2px #3984e833; }
+    .fill { border: 0; border-radius: 7px; padding: 0 12px; background: #1677e8; color: #fff; cursor: pointer; font: inherit; font-weight: 600; }
+    .fill:disabled { opacity: .6; cursor: default; }
+    .back { border: 0; background: transparent; color: #3478c8; cursor: pointer; padding: 8px 0 0; font: inherit; font-size: 12px; }
+    .error { color: #c0392b; font-size: 12px; margin-top: 7px; min-height: 0; }
+  </style>
+</head>
+<body>
+  <div class="box" role="dialog" aria-label="Keep Password 账号选择">
+    <div class="head">
+      <div class="brand">选择 Keep Password 账号</div>
+      <button class="close" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="hint"></div>
+    <div class="list" role="listbox"></div>
+    <div class="key">
+      <div class="key-label">短密钥</div>
+      <div class="key-row">
+        <input class="key-input" type="password" autocomplete="off" placeholder="输入短密钥" aria-label="短密钥">
+        <button class="fill" type="button">授权填入</button>
+      </div>
+      <div class="error" role="alert"></div>
+      <button class="back" type="button">返回账号列表</button>
+    </div>
+  </div>
+  <script src="chooser.js"></script>
+</body>
+</html>

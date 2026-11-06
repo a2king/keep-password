@@ -24,6 +24,9 @@ function showResult(tabId, response) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message && typeof message.type === "string" && message.type.startsWith("chooser-")) {
+    return handleChooserMessage(message, sender, sendResponse);
+  }
   if (message && message.type === "password-focused" && sender.tab) {
     // 只记录最后聚焦的 frame，供工具栏按钮和快捷键使用；候选由内容脚本直接查询。
     // Session storage survives Manifest V3 worker suspension, but contains no credentials.
@@ -184,10 +187,12 @@ function requestFill(tabId, automatic = false) {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   chrome.storage.session.remove(focusKey(tabId));
+  endTabSessions(tabId);
 });
 chrome.tabs.onUpdated.addListener((tabId, change) => {
   if (change.status === "loading") {
     chrome.storage.session.remove(focusKey(tabId));
+    endTabSessions(tabId);
   }
 });
 
@@ -200,5 +205,236 @@ chrome.commands.onCommand.addListener((command) => {
     if (tabs[0]) {
       requestFill(tabs[0].id, false);
     }
+  });
+});
+
+// ---- 候选框会话 ----
+// 密码框所在 frame 发 chooser-open：后台记下会话（标签页、frame、页面地址、候选），让顶层页面挂上
+// 扩展自己的候选框 iframe。候选框页面凭一次性 nonce 连上来领取候选、提交短密钥；
+// 后台用会话里记下的页面地址向桌面端请求凭据，并只把凭据送回那个 frame。
+// 会话只含候选元数据（无密码），存在 storage.session 里，service worker 休眠后仍能续上。
+const CHOOSER_KEY = "chooser-sessions";
+const MAX_CANDIDATES = 200;
+let chooserSessions = null;
+const chooserPorts = new Map();
+
+function loadSessions(callback) {
+  if (chooserSessions) {
+    callback(chooserSessions);
+    return;
+  }
+  chrome.storage.session.get(CHOOSER_KEY, (stored) => {
+    void chrome.runtime.lastError;
+    chooserSessions = chooserSessions || (stored && stored[CHOOSER_KEY]) || {};
+    callback(chooserSessions);
+  });
+}
+
+function saveSessions() {
+  chrome.storage.session.set({ [CHOOSER_KEY]: chooserSessions || {} }, () => void chrome.runtime.lastError);
+}
+
+function randomToken() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+function cleanCandidates(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, MAX_CANDIDATES).map((item) => ({
+    id: String((item && item.id) || ""),
+    accountId: String((item && item.accountId) || ""),
+    name: String((item && item.name) || ""),
+    username: String((item && item.username) || ""),
+    domain: String((item && item.domain) || "")
+  })).filter((item) => item.id && item.accountId);
+}
+
+function frameTarget(session) {
+  const target = { frameId: session.frameId };
+  if (session.documentId) target.documentId = session.documentId;
+  return target;
+}
+
+function tellFrame(tabId, target, message, callback) {
+  chrome.tabs.sendMessage(tabId, message, target, (reply) => {
+    void chrome.runtime.lastError;
+    if (callback) callback(reply);
+  });
+}
+function endSession(probe, { skipFrame } = {}) {
+  const session = chooserSessions && chooserSessions[probe];
+  if (!session) return;
+  delete chooserSessions[probe];
+  saveSessions();
+  const port = chooserPorts.get(probe);
+  chooserPorts.delete(probe);
+  if (port) {
+    try {
+      port.disconnect();
+    } catch (_error) {
+      // 候选框已经关闭。
+    }
+  }
+  const unmount = { type: "chooser-unmount", probe };
+  if (session.mountFrameId !== undefined && session.mountFrameId !== skipFrame) {
+    tellFrame(session.tabId, { frameId: session.mountFrameId }, unmount);
+  }
+  if (session.frameId !== session.mountFrameId && session.frameId !== skipFrame) {
+    tellFrame(session.tabId, frameTarget(session), unmount);
+  }
+}
+
+function endTabSessions(tabId) {
+  loadSessions((sessions) => {
+    for (const [probe, session] of Object.entries(sessions)) {
+      if (session.tabId === tabId) endSession(probe);
+    }
+  });
+}
+
+function openSession(sessions, probe, message, sender, sendResponse) {
+  const tabId = sender.tab.id;
+  if (!sender.url || !/^https?:\/\//i.test(sender.url)) {
+    sendResponse({ type: "error" });
+    return;
+  }
+  // 同一标签页同时只保留一个候选框。
+  for (const [other, existing] of Object.entries(sessions)) {
+    if (existing.tabId === tabId) endSession(other, { skipFrame: sender.frameId });
+  }
+  const session = {
+    tabId, frameId: sender.frameId, documentId: sender.documentId, url: sender.url,
+    title: String(message.title || ""), mode: message.mode === "username" ? "username" : "password",
+    candidates: cleanCandidates(message.candidates), nonce: randomToken()
+  };
+  sessions[probe] = session;
+  const mountHere = () => {
+    session.mountFrameId = sender.frameId;
+    saveSessions();
+    sendResponse({ type: "mount-here", nonce: session.nonce });
+  };
+  if (sender.frameId === 0) {
+    mountHere();
+    return;
+  }
+  // 登录框在 iframe 里：挂到顶层页面，避免被 iframe 边界裁掉。
+  tellFrame(tabId, { frameId: 0 }, { type: "chooser-mount", probe, nonce: session.nonce }, (reply) => {
+    if (sessions[probe] !== session) {
+      sendResponse({ type: "error" });
+      return;
+    }
+    if (reply && reply.type === "mounted") {
+      session.mountFrameId = 0;
+      saveSessions();
+      sendResponse({ type: "mounting" });
+    } else {
+      mountHere();
+    }
+  });
+}
+function handleChooserMessage(message, sender, sendResponse) {
+  const tabId = sender.tab && sender.tab.id;
+  const probe = typeof message.probe === "string" ? message.probe : "";
+  if (!Number.isInteger(tabId) || !probe || probe.length > 64) {
+    sendResponse({ type: "error" });
+    return false;
+  }
+  loadSessions((sessions) => {
+    if (message.type === "chooser-open") {
+      openSession(sessions, probe, message, sender, sendResponse);
+      return;
+    }
+    const session = sessions[probe];
+    if (!session || session.tabId !== tabId) {
+      sendResponse({ type: "error" });
+      return;
+    }
+    if (message.type === "chooser-update" && sender.frameId === session.frameId) {
+      session.candidates = cleanCandidates(message.candidates);
+      saveSessions();
+      const port = chooserPorts.get(probe);
+      if (port) port.postMessage({ type: "update", candidates: session.candidates, mode: session.mode });
+    } else if (message.type === "chooser-close" && (sender.frameId === session.frameId || sender.frameId === session.mountFrameId)) {
+      endSession(probe, { skipFrame: sender.frameId });
+    }
+    sendResponse({ type: "ready" });
+  });
+  return true;
+}
+
+function isChooserPage(sender) {
+  return !!sender && typeof sender.url === "string" && sender.url.startsWith(chrome.runtime.getURL("chooser.html"));
+}
+
+function findByNonce(sessions, nonce, tabId) {
+  if (typeof nonce !== "string" || nonce.length < 16) return null;
+  for (const [probe, session] of Object.entries(sessions)) {
+    if (session.nonce === nonce && session.tabId === tabId) return probe;
+  }
+  return null;
+}
+
+function submitFill(probe, session, message, port) {
+  const candidate = session.candidates.find((item) => item.id === message.entryId && item.accountId === message.accountId);
+  if (!candidate) {
+    port.postMessage({ type: "error", message: "账号已变化，请重新选择。" });
+    return;
+  }
+  // 地址取自会话：是密码框所在 frame 打开候选框时浏览器报告的地址，而不是候选框页面自己说的。
+  sendNative({
+    type: "fill-candidate", url: session.url, title: session.title,
+    entryId: candidate.id, accountId: candidate.accountId, shortKey: String(message.shortKey || "")
+  }, (result) => {
+    if (!result || result.type !== "fill") {
+      port.postMessage({ type: "error", message: (result && result.message) || "无法完成填充。" });
+      return;
+    }
+    const fill = { type: "chooser-fill", probe, username: result.username || "", password: result.password || "" };
+    result.username = "";
+    result.password = "";
+    tellFrame(session.tabId, frameTarget(session), fill, (reply) => {
+      fill.username = "";
+      fill.password = "";
+      if (reply && reply.type === "filled") {
+        endSession(probe, { skipFrame: session.frameId });
+      } else {
+        port.postMessage({ type: "error", message: (reply && reply.message) || "登录页面或输入框已变化，请重新点击。" });
+      }
+    });
+  });
+}
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "kp-chooser" || !isChooserPage(port.sender) || !port.sender.tab) {
+    port.disconnect();
+    return;
+  }
+  const tabId = port.sender.tab.id;
+  let probe = null;
+  port.onDisconnect.addListener(() => {
+    if (probe && chooserPorts.get(probe) === port) chooserPorts.delete(probe);
+  });
+  port.onMessage.addListener((message) => {
+    if (!message || typeof message !== "object") return;
+    loadSessions((sessions) => {
+      if (message.type === "hello") {
+        const found = findByNonce(sessions, message.nonce, tabId);
+        if (!found) {
+          port.postMessage({ type: "denied" });
+          return;
+        }
+        probe = found;
+        chooserPorts.set(probe, port);
+        const session = sessions[probe];
+        port.postMessage({ type: "init", candidates: session.candidates, mode: session.mode });
+        return;
+      }
+      const session = probe && sessions[probe];
+      if (!session) return;
+      if (message.type === "close") endSession(probe);
+      else if (message.type === "fill") submitFill(probe, session, message, port);
+    });
   });
 });

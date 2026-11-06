@@ -212,12 +212,17 @@ public class SecurityPhaseTests
         var root = RepoRoot();
         var content = File.ReadAllText(Path.Combine(root, "extension", "content.js"));
         var manifest = File.ReadAllText(Path.Combine(root, "extension", "manifest.json"));
+        // 短密钥在扩展自己的候选框页面里输入，由后台以记录下的页面地址向桌面端请求 fill-candidate。
+        var chooser = File.ReadAllText(Path.Combine(root, "extension", "chooser.js"));
+        var background = File.ReadAllText(Path.Combine(root, "extension", "background.js"));
         Assert.DoesNotContain("MutationObserver", content);
         Assert.Contains("password-focused", content);
         Assert.Contains("discover-candidates", content);
-        Assert.Contains("fill-candidate", content);
-        Assert.Contains("shortKey", content);
+        Assert.Contains("chooser-open", content);
         Assert.Contains("fill-request", content);
+        Assert.Contains("shortKey", chooser);
+        Assert.Contains("fill-candidate", background);
+        Assert.Contains("url: session.url", background);
         Assert.DoesNotContain("host_permissions", manifest);
         Assert.Contains("fill-password", manifest);
         // 版本号是否与桌面端一致由 VersionConsistencyTests 统一检查，这里不再写死某个版本。

@@ -290,6 +290,58 @@ public class DetailPanelInteractionTests
     }
 
     [AvaloniaFact]
+    public async Task SaveBar_IsAlwaysPresentGreyWhenCleanAndEnabledWhenDirty_CancelLeftSaveRight()
+    {
+        using var fixture = new PanelFixture();
+        fixture.Show();
+        await Task.Delay(40); fixture.Window.UpdateLayout();
+        var cancel = fixture.Panel.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "PART_Cancel");
+        var save = fixture.Panel.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "PART_SaveButton");
+        // 没有修改：保存栏常驻可见，两个按钮灰色禁用，也没有提示文字。
+        Assert.True(cancel.IsVisible && save.IsVisible);
+        Assert.False(cancel.IsEnabled);
+        Assert.False(save.IsEnabled);
+        var bar = fixture.Panel.GetVisualDescendants().OfType<SaveBar>().Single();
+        Assert.DoesNotContain(bar.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "有未保存的修改");
+        // 撤销靠左、保存靠右。
+        Assert.True(cancel.TranslatePoint(default, bar)!.Value.X < save.TranslatePoint(default, bar)!.Value.X);
+        Assert.True(cancel.TranslatePoint(default, bar)!.Value.X < bar.Bounds.Width / 2);
+        Assert.True(save.TranslatePoint(default, bar)!.Value.X + save.Bounds.Width > bar.Bounds.Width / 2);
+        // 有修改后两个按钮恢复可用；撤销回原值后再次变灰。
+        var row = UsernameRow(fixture.Panel);
+        row.BeginEdit();
+        await Task.Delay(40);
+        fixture.Window.KeyTextInput("x");
+        await WaitUntil(fixture.Window, () => save.IsEnabled);
+        Assert.True(cancel.IsEnabled);
+        Assert.True(save.IsEnabled);
+        row.EndEdit(cancel: true);
+        await WaitUntil(fixture.Window, () => !save.IsEnabled);
+        Assert.False(cancel.IsEnabled);
+        Assert.False(save.IsEnabled);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("Light", 0xFFFFFFFFu, 0xFFEEF0F5u)]
+    [InlineData("Dark", 0xFF1B1E26u, 0xFF262A34u)]
+    public async Task SaveBar_BackgroundAndDisabledButtonsFollowTheTheme(string variant, uint expectedBar, uint expectedDisabled)
+    {
+        using var fixture = new PanelFixture();
+        fixture.Window.RequestedThemeVariant = variant == "Dark" ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light;
+        fixture.Show();
+        await Task.Delay(40); fixture.Window.UpdateLayout();
+        var bar = fixture.Panel.GetVisualDescendants().OfType<SaveBar>().Single();
+        var surface = bar.GetVisualDescendants().OfType<Border>().First();
+        Assert.Equal(expectedBar, Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(surface.Background).Color.ToUInt32());
+        // 保存栏底色与详情卡片同色，不再是固定的深蓝。
+        var card = fixture.Panel.GetVisualDescendants().OfType<DetailGroup>().First().GetVisualDescendants().OfType<Border>().First();
+        Assert.Equal(expectedBar, Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(card.Background).Color.ToUInt32());
+        var save = bar.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "PART_SaveButton");
+        var presenter = save.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().First();
+        Assert.Equal(expectedDisabled, Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(presenter.Background).Color.ToUInt32());
+    }
+
+    [AvaloniaFact]
     public async Task TypingInRealDetailEditor_PreservesTextBoxFocusAndCaretAcrossRefreshes()
     {
         using var fixture = new PanelFixture();

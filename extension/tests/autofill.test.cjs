@@ -11,7 +11,7 @@ function event() {
   return { listeners: [], addListener(callback) { this.listeners.push(callback); } };
 }
 
-function background(store = {}) {
+function background(store = {}, frameReply = null) {
   const sent = [];
   const badges = [];
   const titles = [];
@@ -27,7 +27,11 @@ function background(store = {}) {
   const port = makePort();
   let connects = 0;
   const chrome = {
-    runtime: { onMessage: event(), connectNative: () => (connects++ === 0 ? port : makePort()) },
+    runtime: {
+      onMessage: event(), onConnect: event(),
+      connectNative: () => (connects++ === 0 ? port : makePort()),
+      getURL: (path) => `chrome-extension://kp/${path}`
+    },
     storage: { session: {
       set(values, callback) { Object.assign(store, values); callback?.(); },
       get(key, callback) { callback(store); },
@@ -40,18 +44,94 @@ function background(store = {}) {
     commands: { onCommand: event() },
     tabs: {
       onRemoved: event(), onUpdated: event(),
-      sendMessage(tabId, message, target, callback) { sent.push({ tabId, message, target }); callback({ type: "filled" }); }
+      sendMessage(tabId, message, target, callback) {
+        sent.push({ tabId, message, target });
+        callback(frameReply ? frameReply(tabId, message, target) : { type: "filled" });
+      }
     }
   };
   vm.runInNewContext(backgroundSource, {
-    chrome,
+    chrome, crypto: require("node:crypto").webcrypto,
     setTimeout(callback, ms) { timers.set(++timerId, { callback, ms }); return timerId; },
     clearTimeout(id) { timers.delete(id); }
   });
   return { chrome, store, sent, badges, titles, nativeMessages, port, ports, timers,
     connects: () => connects,
+    connect: (sender) => {
+      const chooserPort = { name: "kp-chooser", sender, onMessage: event(), onDisconnect: event(), posted: [],
+        postMessage(message) { this.posted.push(message); }, disconnect() { this.disconnected = true; } };
+      chrome.runtime.onConnect.listeners[0](chooserPort);
+      return chooserPort;
+    },
     receive: chrome.runtime.onMessage.listeners[0], click: chrome.action.onClicked.listeners[0] };
 }
+
+test("a login form inside an iframe gets its chooser mounted on the top page and filled back in its own frame", () => {
+  let mountNonce;
+  const harness = background({}, (_tabId, message, target) => {
+    if (message.type === "chooser-mount") {
+      assert.equal(target.frameId, 0);
+      mountNonce = message.nonce;
+      return { type: "mounted" };
+    }
+    return message.type === "chooser-fill" ? { type: "filled" } : { type: "ready" };
+  });
+  const frameSender = { tab: { id: 9 }, frameId: 3, documentId: "login-doc", url: "https://dl.reg.163.com/webzj/login" };
+  let opened;
+  harness.receive({ type: "chooser-open", probe: "p1", mode: "password", title: "163",
+    candidates: [{ id: "e1", accountId: "a1", name: "163邮箱", username: "kp@163.com", domain: "163.com", password: "leak" }] },
+  frameSender, (reply) => { opened = reply; });
+  assert.equal(opened.type, "mounting");
+  assert.ok(mountNonce && mountNonce.length >= 32);
+
+  const page = { tab: { id: 9 }, frameId: 0, url: "chrome-extension://kp/chooser.html" };
+  const forged = harness.connect(page);
+  forged.onMessage.listeners[0]({ type: "hello", nonce: "f".repeat(32) });
+  assert.equal(forged.posted[0].type, "denied");
+
+  const otherTab = harness.connect({ ...page, tab: { id: 10 } });
+  otherTab.onMessage.listeners[0]({ type: "hello", nonce: mountNonce });
+  assert.equal(otherTab.posted[0].type, "denied");
+
+  const chooserPort = harness.connect(page);
+  chooserPort.onMessage.listeners[0]({ type: "hello", nonce: mountNonce });
+  assert.equal(chooserPort.posted[0].type, "init");
+  assert.equal(chooserPort.posted[0].candidates[0].username, "kp@163.com");
+  assert.equal(chooserPort.posted[0].candidates[0].password, undefined);
+
+  chooserPort.onMessage.listeners[0]({ type: "fill", entryId: "e1", accountId: "a1", shortKey: "1234", url: "https://evil.example" });
+  const request = harness.nativeMessages.at(-1);
+  assert.equal(request.type, "fill-candidate");
+  assert.equal(request.url, "https://dl.reg.163.com/webzj/login");
+  assert.equal(request.shortKey, "1234");
+  harness.port.onMessage.listeners[0]({ type: "fill", username: "kp@163.com", password: "secret", requestId: request.requestId });
+
+  const fill = harness.sent.find((item) => item.message.type === "chooser-fill");
+  assert.equal(fill.target.frameId, 3);
+  assert.equal(fill.target.documentId, "login-doc");
+  assert.equal(fill.message.password, "");
+  assert.ok(harness.sent.some((item) => item.message.type === "chooser-unmount" && item.target.frameId === 0));
+  assert.equal(chooserPort.disconnected, true);
+});
+
+test("a chooser cannot pick an account that the frame did not offer, and falls back to its own frame when the top page cannot mount", () => {
+  const harness = background({}, (_tabId, message) => (message.type === "chooser-mount" ? undefined : { type: "ready" }));
+  let opened;
+  harness.receive({ type: "chooser-open", probe: "p2", candidates: [{ id: "e1", accountId: "a1" }] },
+    { tab: { id: 4 }, frameId: 2, url: "https://login.example/" }, (reply) => { opened = reply; });
+  assert.equal(opened.type, "mount-here");
+  const chooserPort = harness.connect({ tab: { id: 4 }, frameId: 2, url: "chrome-extension://kp/chooser.html" });
+  chooserPort.onMessage.listeners[0]({ type: "hello", nonce: opened.nonce });
+  chooserPort.onMessage.listeners[0]({ type: "fill", entryId: "other", accountId: "a1", shortKey: "x" });
+  assert.equal(harness.nativeMessages.length, 0);
+  assert.equal(chooserPort.posted.at(-1).type, "error");
+});
+
+test("a page that is not the extension chooser cannot open a chooser port", () => {
+  const harness = background();
+  const port = harness.connect({ tab: { id: 1 }, frameId: 0, url: "https://evil.example/" });
+  assert.equal(port.disconnected, true);
+});
 
 test("one request reaches only the last focused frame, including after worker suspension", () => {
   const first = background();
