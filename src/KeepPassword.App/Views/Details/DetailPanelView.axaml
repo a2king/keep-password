@@ -7,7 +7,7 @@
     <DataTemplate DataType="views:ServerDetailContent"><views:ServerDetailView /></DataTemplate>
     <DataTemplate DataType="views:DatabaseDetailContent"><views:DatabaseDetailView /></DataTemplate>
   </UserControl.DataTemplates>
-  <Grid RowDefinitions="104,*,80">
+  <Grid RowDefinitions="104,*,64">
     <d:DetailHeader x:Name="HeaderControl" />
     <ScrollViewer x:Name="DetailScroll" Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
       <StackPanel Spacing="18" Margin="20,12,20,20">

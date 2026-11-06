@@ -173,4 +173,65 @@ public class DetailFieldControlTests
         }
         finally { window.Close(); }
     }
+
+    [AvaloniaFact]
+    public async Task ChoosingAChip_ClosesThePickerAndDoesNotReopenItForTheNextOne()
+    {
+        var first = new LabelChipView { Name = "开发" };
+        var second = new LabelChipView { Name = "生产" };
+        var editor = new ChipsEditor { Multiple = true, Items = new[] { first, second } };
+        var window = new Window { Width = 480, Height = 260, Content = editor };
+        window.Show();
+        try
+        {
+            window.UpdateLayout();
+            var toggled = new List<string>();
+            editor.Toggled += toggled.Add;
+            var add = editor.GetVisualDescendants().OfType<Button>().Single(control => control.Name == "PART_Add");
+            var input = editor.GetVisualDescendants().OfType<TextBox>().Single(control => control.Name == "PART_Input");
+            var popup = editor.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.Popup>().Single(control => control.Name == "PART_Suggestions");
+            add.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await Task.Delay(60);
+            Assert.True(popup.IsOpen);
+            var option = popup.Child!.GetVisualDescendants().OfType<Button>().First(button => (string?)button.Tag == "开发");
+            option.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await Task.Delay(60);
+            Assert.Equal(["开发"], toggled);
+            Assert.False(popup.IsOpen);
+            Assert.False(input.IsVisible);
+            Assert.True(add.IsVisible);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task WheelInsideTheSuggestionList_NeverScrollsTheDetailPage()
+    {
+        var editor = new ChipsEditor { Multiple = true, Items = Enumerable.Range(0, 12).Select(index => new LabelChipView { Name = "标签" + index }).ToArray() };
+        var page = new ScrollViewer
+        {
+            Content = new StackPanel { Children = { new Border { Height = 160 }, editor, new Border { Height = 900 } } }
+        };
+        var window = new Window { Width = 480, Height = 320, Content = page };
+        window.Show();
+        try
+        {
+            window.UpdateLayout();
+            page.Offset = new Vector(0, 40);
+            editor.GetVisualDescendants().OfType<Button>().Single(control => control.Name == "PART_Add").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await Task.Delay(80);
+            var popup = editor.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.Popup>().Single(control => control.Name == "PART_Suggestions");
+            Assert.True(popup.IsOpen);
+            var list = popup.Child!.GetVisualDescendants().OfType<ScrollViewer>().First();
+            var before = page.Offset;
+            var wheel = new Avalonia.Input.PointerWheelEventArgs(
+                list, new Avalonia.Input.Pointer(Avalonia.Input.Pointer.GetNextFreeId(), Avalonia.Input.PointerType.Mouse, true), window, default, 0,
+                new Avalonia.Input.PointerPointProperties(), Avalonia.Input.KeyModifiers.None, new Vector(0, -3))
+            { RoutedEvent = Avalonia.Input.InputElement.PointerWheelChangedEvent };
+            list.RaiseEvent(wheel);
+            Assert.True(wheel.Handled);
+            Assert.Equal(before, page.Offset);
+        }
+        finally { window.Close(); }
+    }
 }

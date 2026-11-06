@@ -144,6 +144,7 @@ public partial class DetailPanelView : UserControl
             TagsEditor.Items = [];
             QuickActions.SetActions([]);
             Footer.IsShown = false;
+            Footer.CanSave = false;
             _detailId = Guid.Empty;
             return;
         }
@@ -467,9 +468,7 @@ public partial class DetailPanelView : UserControl
         if (_source is not { } source || _presentation is not { } presentation) return;
         Footer.IsNew = source.IsNewItem;
         Footer.IsShown = source.IsNewItem || presentation.IsDirty;
-        Footer.CanSave = presentation.CanSave;
-        Footer.Message = presentation.ValidationMessage.Length > 0 ? presentation.ValidationMessage
-            : source.IsNewItem ? "填写完成后创建条目" : "有未保存的修改";
+        Footer.CanSave = Footer.IsShown && presentation.CanSave;
         if (HeaderControl.ValidationMessage.Length > 0 && !string.IsNullOrWhiteSpace(source.Name)) HeaderControl.ValidationMessage = "";
     }
 
@@ -497,7 +496,6 @@ public partial class DetailPanelView : UserControl
     private void ShowValidation(string error)
     {
         Toast.Show(error);
-        Footer.Message = error;
         if (_source is null) return;
         if (string.IsNullOrWhiteSpace(_source.Name))
         {

@@ -8,17 +8,20 @@
   <Styles.Resources>
     <ResourceDictionary>
       <ResourceDictionary.ThemeDictionaries>
+        <!-- 保存栏跟随主题：底色/描边与详情卡片一致，禁用按钮按明暗各用一套灰。 -->
         <ResourceDictionary x:Key="Light">
-          <SolidColorBrush x:Key="Detail.SaveBackground" Color="#293148" />
-          <SolidColorBrush x:Key="Detail.SaveText" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="Detail.SaveMuted" Color="#D2D9E8" />
-          <SolidColorBrush x:Key="Detail.SaveBorder" Color="#45516C" />
+          <SolidColorBrush x:Key="Detail.SaveBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Detail.SaveBorder" Color="#E3E6EE" />
+          <SolidColorBrush x:Key="Detail.SaveDisabledBackground" Color="#EEF0F5" />
+          <SolidColorBrush x:Key="Detail.SaveDisabledBorder" Color="#E1E4EC" />
+          <SolidColorBrush x:Key="Detail.SaveDisabledText" Color="#8A93A5" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
-          <SolidColorBrush x:Key="Detail.SaveBackground" Color="#30384C" />
-          <SolidColorBrush x:Key="Detail.SaveText" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="Detail.SaveMuted" Color="#D2D9E8" />
-          <SolidColorBrush x:Key="Detail.SaveBorder" Color="#4C5874" />
+          <SolidColorBrush x:Key="Detail.SaveBackground" Color="#1B1E26" />
+          <SolidColorBrush x:Key="Detail.SaveBorder" Color="#2F3441" />
+          <SolidColorBrush x:Key="Detail.SaveDisabledBackground" Color="#262A34" />
+          <SolidColorBrush x:Key="Detail.SaveDisabledBorder" Color="#323744" />
+          <SolidColorBrush x:Key="Detail.SaveDisabledText" Color="#7D8699" />
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
     <ControlTheme x:Key="{x:Type d:DetailHeader}" TargetType="d:DetailHeader">
@@ -83,33 +86,21 @@
     </ControlTheme>
 
     <ControlTheme x:Key="{x:Type d:SaveBar}" TargetType="d:SaveBar">
-      <!-- 始终预留底部槽位；胶囊显隐只改变透明度和位移，不重新排版正文。 -->
-      <Setter Property="Height" Value="80" />
-      <Setter Property="Opacity" Value="0" />
-      <Setter Property="RenderTransform" Value="translate(0px, 8px)" />
-      <Setter Property="Transitions">
-        <Transitions>
-          <DoubleTransition Property="Opacity" Duration="0:0:0.25" Easing="CubicEaseOut" />
-          <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.25" Easing="CubicEaseOut" />
-        </Transitions>
-      </Setter>
+      <!-- 常驻底栏：撤销在左、保存在右；没有修改时两个按钮都是灰色禁用，不再有提示文字。 -->
+      <Setter Property="Height" Value="64" />
       <Setter Property="Template">
         <ControlTemplate>
           <Border Background="{DynamicResource Detail.SaveBackground}" BorderBrush="{DynamicResource Detail.SaveBorder}"
-                  BorderThickness="1" CornerRadius="16" Margin="16,4,16,10" Padding="12,7,12,8" BoxShadow="{DynamicResource Detail.PopupShadow}">
-            <Grid RowDefinitions="18,30" ColumnDefinitions="*,Auto,8,Auto">
-              <TextBlock Grid.ColumnSpan="4" Text="{TemplateBinding Message}" FontSize="11"
-                         Foreground="{DynamicResource Detail.SaveMuted}" TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="{TemplateBinding Message}" />
-              <Button x:Name="PART_Cancel" Grid.Row="1" Grid.Column="1" Classes="detail-save-cancel"
-                      Content="{TemplateBinding CancelLabel}" />
-              <Button x:Name="PART_SaveButton" Grid.Row="1" Grid.Column="3" Classes="detail-save-primary"
-                      Content="{TemplateBinding SaveLabel}" IsEnabled="{TemplateBinding CanSave}" MinWidth="96" />
+                  BorderThickness="1" CornerRadius="16" Margin="16,6,16,12" Padding="12,0" BoxShadow="{DynamicResource Detail.PopupShadow}">
+            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+              <Button x:Name="PART_Cancel" Grid.Column="0" Classes="detail-save-cancel" MinWidth="96"
+                      Content="{TemplateBinding CancelLabel}" IsEnabled="{TemplateBinding IsShown}" />
+              <Button x:Name="PART_SaveButton" Grid.Column="2" Classes="detail-save-primary" MinWidth="96"
+                      Content="{TemplateBinding SaveLabel}" IsEnabled="{TemplateBinding CanSave}" />
             </Grid>
           </Border>
         </ControlTemplate>
       </Setter>
-      <Style Selector="^:shown"><Setter Property="Opacity" Value="1" /><Setter Property="RenderTransform" Value="translate(0px, 0px)" /></Style>
     </ControlTheme>
 
     <ControlTheme x:Key="{x:Type d:AccountSection}" TargetType="d:AccountSection">
@@ -157,8 +148,10 @@
     <Setter Property="Background" Value="{DynamicResource Kp.Button.Primary}" /><Setter Property="Foreground" Value="White" />
     <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.PrimaryBorder}" /><Setter Property="BorderThickness" Value="1" />
   </Style>
-  <Style Selector="Button.detail-save-primary:disabled /template/ ContentPresenter">
-    <Setter Property="Opacity" Value="0.45" /><Setter Property="Background" Value="{DynamicResource Kp.Button.Primary}" /><Setter Property="Foreground" Value="White" />
+  <!-- 禁用态：灰底灰字，和可用的蓝底白字一眼能分开。 -->
+  <Style Selector="Button.detail-save-cancel:disabled /template/ ContentPresenter, Button.detail-save-primary:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Detail.SaveDisabledBackground}" /><Setter Property="BorderBrush" Value="{DynamicResource Detail.SaveDisabledBorder}" />
+    <Setter Property="Foreground" Value="{DynamicResource Detail.SaveDisabledText}" />
   </Style>
   <Style Selector="Button.detail-icon">
     <Setter Property="Width" Value="32" /><Setter Property="Height" Value="32" />

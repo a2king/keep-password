@@ -90,7 +90,10 @@ function closeChooser() {
   if (!chooser) return;
   const current = chooser;
   chooser = null;
-  current.root.remove();
+  if (mounted && mounted.probe === current.probe) unmountChooser();
+  chrome.runtime.sendMessage({ type: "chooser-close", probe: current.probe }, () => {
+    void chrome.runtime.lastError;
+  });
 }
 
 function rememberPassword(input, automatic = true) {
@@ -130,17 +133,8 @@ function fill(input, value) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-function addElement(parent, tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) element.className = className;
-  if (text !== undefined) element.textContent = text;
-  parent.appendChild(element);
-  return element;
-}
-
 const CHOOSER_MIN_WIDTH = 260;
 const CHOOSER_GAP = 8;
-const CHOOSER_VISIBLE_ROWS = 5;
 
 function hostLabels(value) {
   const text = String(value || "").trim().toLowerCase();
@@ -184,177 +178,260 @@ function chooserFrame(rect, viewportWidth) {
   return { left, top: rect.bottom + CHOOSER_GAP, width };
 }
 
-function positionChooser(root, password) {
-  if (!password || !password.getBoundingClientRect || typeof window === "undefined") return;
-  const frame = chooserFrame(password.getBoundingClientRect(), window.innerWidth);
-  root.style.left = `${frame.left}px`;
-  root.style.top = `${frame.top}px`;
-  root.style.width = `${frame.width}px`;
-  const list = chooser && chooser.list;
-  const row = list && list.querySelector ? list.querySelector(".candidate") : null;
-  if (!list || !row || !row.getBoundingClientRect) return;
-  const rowHeight = row.getBoundingClientRect().height;
-  if (rowHeight <= 0) return;
-  const room = window.innerHeight - frame.top - CHOOSER_GAP;
-  const header = Math.max(0, root.getBoundingClientRect().height - list.getBoundingClientRect().height);
-  const visible = Math.max(rowHeight, Math.min(rowHeight * CHOOSER_VISIBLE_ROWS, room - header));
-  list.style.maxHeight = `${visible}px`;
-  list.style.overflowY = "auto";
+// 候选框画在扩展自己的 iframe（chooser.html）里，并挂到顶层页面：
+// 登录框在 iframe 里时（例如 163 邮箱的 dl.reg.163.com）不会被 iframe 边界裁掉，
+// 网页脚本也读不到候选名单和短密钥。账号、短密钥和填入结果都经后台转发，凭据只回到密码框所在的 frame。
+// 位置信息沿 frame 链逐级 postMessage 上传，每一级加上自己 iframe 元素的偏移。
+const GEOMETRY_MESSAGE = "keep-password-geometry";
+const SIZE_MESSAGE = "keep-password-chooser-size";
+const CHOOSER_PAD = 10;
+let mounted = null;
+const childGeometry = new Map();
+let lastRelayed = null;
+
+function randomId() {
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+function isTopFrame() {
+  try {
+    return typeof window === "undefined" || window.top === window;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function plainRect(rect) {
+  return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+}
+
+function validRect(rect) {
+  return !!rect && ["left", "top", "right", "bottom"].every((key) => Number.isFinite(rect[key]));
+}
+
+function shiftRect(rect, offset) {
+  return { left: rect.left + offset.left, top: rect.top + offset.top, right: rect.right + offset.left, bottom: rect.bottom + offset.top };
+}
+
+// 找到承载 source 窗口的 iframe 元素，返回其内容区左上角在本视口里的位置。
+function frameOffset(source) {
+  if (!document.querySelectorAll) return null;
+  for (const frame of document.querySelectorAll("iframe, frame")) {
+    if (frame.contentWindow !== source) continue;
+    const box = frame.getBoundingClientRect();
+    const style = typeof getComputedStyle === "function" ? getComputedStyle(frame) : null;
+    const padLeft = style ? parseFloat(style.paddingLeft) || 0 : 0;
+    const padTop = style ? parseFloat(style.paddingTop) || 0 : 0;
+    return { left: box.left + (frame.clientLeft || 0) + padLeft, top: box.top + (frame.clientTop || 0) + padTop };
+  }
+  return null;
+}
+
+function relayGeometry(id) {
+  const entry = childGeometry.get(id);
+  const offset = entry && frameOffset(entry.source);
+  if (!offset || isTopFrame()) return;
+  lastRelayed = id;
+  window.parent.postMessage({ kp: GEOMETRY_MESSAGE, id, rect: shiftRect(entry.rect, offset) }, "*");
+}
+
+// 密码框所在 frame：把输入框位置报给挂载候选框的 frame。
+function reportGeometry() {
+  if (!chooser || !chooser.password || !chooser.password.isConnected || !chooser.password.getBoundingClientRect) return;
+  if (mounted && mounted.probe === chooser.probe) layoutMounted();
+  if (!isTopFrame()) {
+    window.parent.postMessage({ kp: GEOMETRY_MESSAGE, id: chooser.probe, rect: plainRect(chooser.password.getBoundingClientRect()) }, "*");
+  }
+}
+
+function mountedRect() {
+  if (!mounted) return null;
+  if (chooser && chooser.probe === mounted.probe) {
+    return chooser.password && chooser.password.getBoundingClientRect ? plainRect(chooser.password.getBoundingClientRect()) : null;
+  }
+  const entry = childGeometry.get(mounted.probe);
+  const offset = entry && frameOffset(entry.source);
+  return offset ? shiftRect(entry.rect, offset) : null;
+}
+
+function setStyle(element, values) {
+  for (const [name, value] of Object.entries(values)) element.style.setProperty(name, value, "important");
+}
+
+function layoutMounted() {
+  if (!mounted || typeof window === "undefined") return;
+  const rect = mountedRect();
+  if (!rect) return;
+  const frame = chooserFrame(rect, window.innerWidth);
+  const want = mounted.height || 0;
+  const below = window.innerHeight - frame.top - CHOOSER_GAP;
+  const above = rect.top - CHOOSER_GAP * 2;
+  let top = frame.top;
+  let room = below;
+  // 下方放不下且上方更宽敞时，翻到输入框上方。
+  if (want > below && above > below) {
+    room = above;
+    top = Math.max(CHOOSER_GAP, rect.top - CHOOSER_GAP - Math.min(want, above));
+  }
+  const height = Math.max(0, Math.min(want, room));
+  setStyle(mounted.iframe, {
+    left: `${frame.left - CHOOSER_PAD}px`,
+    top: `${top - CHOOSER_PAD}px`,
+    width: `${frame.width + CHOOSER_PAD * 2}px`,
+    height: `${height + CHOOSER_PAD * 2}px`,
+    opacity: want > 0 ? "1" : "0"
+  });
+}
+
+function unmountChooser() {
+  if (!mounted) return;
+  const current = mounted;
+  mounted = null;
+  current.iframe.remove();
+}
+
+function mountChooser(probe, nonce) {
+  unmountChooser();
+  const parent = document.body || document.documentElement;
+  if (!parent || typeof document.createElement !== "function" || !chrome.runtime.getURL) return false;
+  if (parent.tagName && parent.tagName.toUpperCase() === "FRAMESET") return false;
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("title", "Keep Password 账号选择");
+  iframe.setAttribute("allowtransparency", "true");
+  iframe.setAttribute("tabindex", "-1");
+  setStyle(iframe, {
+    position: "fixed", "z-index": "2147483647", border: "0", margin: "0", padding: "0",
+    background: "transparent", "color-scheme": "light", display: "block", visibility: "visible",
+    "min-width": "0", "min-height": "0", "max-width": "none", "max-height": "none",
+    width: "0", height: "0", opacity: "0", transform: "none", transition: "opacity 120ms ease", "pointer-events": "auto"
+  });
+  iframe.src = chrome.runtime.getURL("chooser.html");
+  mounted = { probe, iframe, height: 0 };
+  // 把一次性 nonce 交给候选框页面，它凭此向后台领取候选。目标源限定为扩展自身。
+  iframe.addEventListener("load", () => {
+    if (mounted && mounted.iframe === iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage({ kp: "keep-password-nonce", nonce }, new URL(iframe.src).origin);
+    }
+  });
+  parent.appendChild(iframe);
+  trackChooser();
+  layoutMounted();
+  return true;
+}
+
+// 关闭由别的 frame 请求挂载在这里的候选框（点网页其他位置、按 Esc）。
+function closeMounted() {
+  if (!mounted) return;
+  const probe = mounted.probe;
+  unmountChooser();
+  chrome.runtime.sendMessage({ type: "chooser-close", probe }, () => {
+    void chrome.runtime.lastError;
+  });
 }
 
 function trackChooser() {
   if (typeof window === "undefined" || window.__kpChooserTracked) return;
   window.__kpChooserTracked = true;
+  let scheduled = false;
   const refresh = () => {
-    if (chooser && chooser.password && chooser.password.isConnected) positionChooser(chooser.root, chooser.password);
+    scheduled = false;
+    reportGeometry();
+    if (mounted) layoutMounted();
+    if (lastRelayed && childGeometry.has(lastRelayed)) relayGeometry(lastRelayed);
   };
-  window.addEventListener("scroll", refresh, true);
-  window.addEventListener("resize", refresh);
+  const schedule = () => {
+    if (scheduled) return;
+    scheduled = true;
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(refresh);
+    else refresh();
+  };
+  window.addEventListener("scroll", schedule, true);
+  window.addEventListener("resize", schedule);
+}
+
+if (typeof window !== "undefined" && window.addEventListener) {
+  window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (!data || typeof data !== "object") return;
+    if (data.kp === SIZE_MESSAGE) {
+      // 只接受我们自己挂上的扩展 iframe 报来的高度。
+      if (mounted && event.source === mounted.iframe.contentWindow && Number.isFinite(data.height) && data.height >= 0) {
+        mounted.height = Math.min(data.height, 2000);
+        layoutMounted();
+      }
+      return;
+    }
+    if (data.kp !== GEOMETRY_MESSAGE || typeof data.id !== "string" || data.id.length > 64 || !validRect(data.rect)) return;
+    if (!event.source || event.source === window || !frameOffset(event.source)) return;
+    childGeometry.set(data.id, { source: event.source, rect: plainRect(data.rect) });
+    while (childGeometry.size > 8) childGeometry.delete(childGeometry.keys().next().value);
+    trackChooser();
+    if (mounted && mounted.probe === data.id) layoutMounted();
+    if (!isTopFrame()) relayGeometry(data.id);
+  });
 }
 
 function showCandidates(candidates, password) {
   closeChooser();
   if (!Array.isArray(candidates) || candidates.length === 0 || !password || !password.isConnected) return;
-  const parent = document.body || document.documentElement;
-  if (!parent || typeof document.createElement !== "function") return;
-
-  const root = document.createElement("div");
-  root.setAttribute("role", "dialog");
-  root.setAttribute("aria-label", "Keep Password 账号选择");
-  root.style.cssText = "position:fixed;z-index:2147483646;opacity:0;transform:translateY(-4px) scale(.985);transition:opacity 140ms ease,transform 140ms ease;";
-  const shadow = root.attachShadow ? root.attachShadow({ mode: "open" }) : root;
-  const style = addElement(shadow, "style", "", `
-    :host { all: initial; }
-    .box { box-sizing:border-box; width:100%; overflow:hidden; border:1px solid #d8dee8; border-radius:12px; background:#fff; color:#1f2937; box-shadow:0 12px 32px rgba(15,23,42,.22); font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-    .head { padding:13px 15px 9px; border-bottom:1px solid #edf0f4; display:flex; align-items:center; justify-content:space-between; }
-    .brand { font-weight:650; font-size:14px; }
-    .close { border:0; background:transparent; color:#7b8491; cursor:pointer; font-size:18px; line-height:1; padding:2px 4px; }
-    .hint { padding:9px 15px 5px; color:#7b8491; font-size:12px; }
-    .list { padding:4px 8px 8px; overflow-y:auto; }
-    .candidate { width:100%; border:0; background:transparent; border-radius:9px; text-align:left; cursor:pointer; padding:9px 8px; display:block; }
-    .candidate:hover,.candidate:focus { background:#edf5ff; outline:none; }
-    .name { font-weight:600; color:#1d2939; }
-    .meta { color:#637083; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .domain { color:#8792a2; font-size:12px; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .key { display:none; padding:10px 14px 14px; border-top:1px solid #edf0f4; }
-    .key.visible { display:block; }
-    .key-label { color:#667085; font-size:12px; margin-bottom:6px; }
-    .key-row { display:flex; gap:7px; }
-    .key-input { flex:1; min-width:0; border:1px solid #cbd5e1; border-radius:7px; padding:8px 9px; font:inherit; letter-spacing:normal; outline:none; }
-    .key-input:focus { border-color:#3984e8; box-shadow:0 0 0 2px #3984e833; }
-    .fill { border:0; border-radius:7px; padding:0 12px; background:#1677e8; color:#fff; cursor:pointer; font-weight:600; }
-    .back { border:0; background:transparent; color:#3478c8; cursor:pointer; padding:8px 0 0; font-size:12px; }
-    .error { color:#c0392b; font-size:12px; margin-top:7px; }
-  `);
-  void style;
-  const box = addElement(shadow, "div", "box");
-  const head = addElement(box, "div", "head");
-  addElement(head, "div", "brand", "选择 Keep Password 账号");
-  const close = addElement(head, "button", "close", "×");
-  close.type = "button";
-  addElement(box, "div", "hint", isPassword(password)
-    ? `${candidates.length} 个匹配账号，选择后输入短密钥授权`
-    : "选择账号并输入短密钥后填入用户名，然后自行点击下一步");
-  const list = addElement(box, "div", "list");
-  const key = addElement(box, "div", "key");
-  addElement(key, "div", "key-label", "短密钥");
-  const keyRow = addElement(key, "div", "key-row");
-  const keyInput = addElement(keyRow, "input", "key-input");
-  keyInput.type = "password";
-  keyInput.autocomplete = "off";
-  keyInput.placeholder = "输入短密钥";
-  const fillButton = addElement(keyRow, "button", "fill", "授权填入");
-  fillButton.type = "button";
-  const error = addElement(key, "div", "error");
-  const back = addElement(key, "button", "back", "返回账号列表");
-  back.type = "button";
-
-  chooser = { root, password, version: focusVersion, list, key, keyInput, fillButton, error, selected: null };
-  close.addEventListener("click", closeChooser);
-  back.addEventListener("click", () => {
-    if (!chooser) return;
-    chooser.selected = null;
-    chooser.error.textContent = "";
-    chooser.key.classList.remove("visible");
-    chooser.list.style.display = "block";
-  });
-  fillButton.addEventListener("click", () => {
-    if (chooser?.selected) requestCandidateFill(chooser.selected, chooser.keyInput.value || "");
-  });
-  keyInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && chooser?.selected) requestCandidateFill(chooser.selected, chooser.keyInput.value || "");
-    if (event.key === "Escape") closeChooser();
-  });
-
+  const probe = randomId();
   const pageUrl = typeof location !== "undefined" ? location.href : "";
-  for (const candidate of sortCandidatesByAddress(candidates, pageUrl)) {
-    const button = addElement(list, "button", "candidate");
-    button.type = "button";
-    addElement(button, "div", "name", candidate.name || "未命名");
-    addElement(button, "div", "meta", candidate.username || "未设置用户名");
-    addElement(button, "div", "domain", candidate.domain || "未设置网站");
-    button.addEventListener("click", () => {
-      if (!chooser) return;
-      chooser.selected = candidate;
-      chooser.error.textContent = "";
-      chooser.list.style.display = "none";
-      chooser.key.classList.add("visible");
-      chooser.keyInput.value = "";
-      chooser.keyInput.focus();
-    });
-  }
-
-  parent.appendChild(root);
+  chooser = { probe, password, version: focusVersion, url: pageUrl };
+  const sorted = sortCandidatesByAddress(candidates, pageUrl).map((item) => ({
+    id: item.id, accountId: item.accountId, name: item.name, username: item.username, domain: item.domain
+  }));
+  chrome.runtime.sendMessage({
+    type: "chooser-open", probe, candidates: sorted,
+    mode: isPassword(password) ? "password" : "username", title: document.title
+  }, (reply) => {
+    void chrome.runtime.lastError;
+    if (!chooser || chooser.probe !== probe) return;
+    // 顶层页面挂不上（没有内容脚本、frameset 页面等）时，后台让我们在密码框所在的 frame 里显示。
+    if (reply && reply.type === "mount-here" && typeof reply.nonce === "string") mountChooser(probe, reply.nonce);
+  });
   trackChooser();
-  positionChooser(root, password);
-  requestAnimationFrame(() => {
-    if (root.isConnected) {
-      root.style.opacity = "1";
-      root.style.transform = "translateY(0) scale(1)";
-    }
+  reportGeometry();
+}
+
+function updateChooser(candidates) {
+  if (!chooser) return;
+  const sorted = sortCandidatesByAddress(candidates, chooser.url).map((item) => ({
+    id: item.id, accountId: item.accountId, name: item.name, username: item.username, domain: item.domain
+  }));
+  chrome.runtime.sendMessage({ type: "chooser-update", probe: chooser.probe, candidates: sorted }, () => {
+    void chrome.runtime.lastError;
   });
 }
 
-function requestCandidateFill(candidate, shortKey) {
-  if (!chooser || !chooser.password || !isLoginField(chooser.password)) {
-    closeChooser();
-    return;
+// 后台转来的已授权凭据：只在密码框、页面地址都没变时填入。
+function receiveFill(message) {
+  const result = { username: message.username || "", password: message.password || "" };
+  message.username = "";
+  message.password = "";
+  try {
+    if (!chooser || chooser.probe !== message.probe) {
+      return { type: "error", message: "候选框已关闭，请重新点击密码框。" };
+    }
+    const { password, version, url } = chooser;
+    if (version !== focusVersion || location.href !== url || !isLoginField(password) || focused !== password) {
+      return { type: "error", message: "登录页面或输入框已变化，请重新点击。" };
+    }
+    suppressFocusUntil = Date.now() + 1600;
+    fillLogin(password, result);
+    chooser = null;
+    if (mounted && mounted.probe === message.probe) unmountChooser();
+    showStatus({ type: "filled" });
+    return { type: "filled" };
+  } catch (_error) {
+    return { type: "error", message: "网页不允许填入当前输入框，请刷新网页后重试。" };
+  } finally {
+    result.username = "";
+    result.password = "";
   }
-  const password = chooser.password;
-  const requestVersion = chooser.version;
-  const requestedUrl = location.href;
-  chooser.fillButton.disabled = true;
-  chooser.error.textContent = "正在验证…";
-  chrome.runtime.sendMessage({ type: "fill-candidate", entryId: candidate.id, accountId: candidate.accountId, shortKey, url: requestedUrl, title: document.title }, (response) => {
-    const error = chrome.runtime.lastError;
-    const result = error ? { type: "error", message: error.message } : response;
-    if (!result || result.type !== "fill") {
-      if (chooser) {
-        chooser.fillButton.disabled = false;
-        chooser.error.textContent = result?.message || "无法完成填充。";
-        chooser.keyInput.value = "";
-        chooser.keyInput.focus();
-      }
-      return;
-    }
-    try {
-      if (requestVersion !== focusVersion || location.href !== requestedUrl || !isLoginField(password) || focused !== password) {
-        showStatus({ type: "error", message: "登录页面或输入框已变化，请重新点击。" });
-        return;
-      }
-      suppressFocusUntil = Date.now() + 1600;
-      fillLogin(password, result);
-      closeChooser();
-      showStatus({ type: "filled" });
-    } catch (_error) {
-      showStatus({ type: "error", message: "网页不允许填入当前输入框，请刷新网页后重试。" });
-    } finally {
-      result.username = "";
-      result.password = "";
-    }
-  });
 }
-
 // 候选缓存：页面加载时预取，聚焦时直接渲染，再后台刷新一次。只含名称、用户名、域名，不含密码。
 // 浏览器匹配只看页面主机名，所以按主机名缓存；SPA 内跳转不需要重新查询。
 const CANDIDATE_TTL_MS = 30 * 1000;
@@ -471,10 +548,10 @@ function requestCandidates(password, automatic, sendResponse) {
     fetchCandidates((fresh) => {
       // 后台刷新只在结果变化、且用户还停在同一个输入框、还没选账号时才更新界面。
       if (!cacheable(fresh) || resultKey(fresh) === shownKey) return;
-      if (requestVersion !== focusVersion || focused !== password || (chooser && chooser.selected)) return;
+      if (requestVersion !== focusVersion || focused !== password || !chooser || chooser.password !== password) return;
       if (fresh.type === "candidates") {
-        presentCandidates(fresh, password, automatic, requestVersion, requestedUrl);
-      } else if (chooser && chooser.password === password) {
+        updateChooser(fresh.candidates);
+      } else {
         closeChooser();
       }
     });
@@ -488,15 +565,41 @@ function requestCandidates(password, automatic, sendResponse) {
 
 document.addEventListener("focusin", (event) => rememberPassword(event.target, event.isTrusted !== false), true);
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeChooser();
+  if (event.key !== "Escape") return;
+  closeChooser();
+  closeMounted();
 }, true);
 document.addEventListener("pointerdown", (event) => {
-  if (chooser && event.target !== chooser.password && !chooser.root.contains(event.target)) closeChooser();
+  const onChooser = mounted && event.target === mounted.iframe;
+  if (chooser && event.target !== chooser.password && !onChooser) closeChooser();
+  else if (!chooser && mounted && !onChooser) closeMounted();
+}, true);
+// 关掉候选框后再点一次仍处于焦点的输入框，不会触发 focusin：用 click 重新打开。
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!chooser && event.isTrusted !== false && target === document.activeElement && isLoginField(target)) {
+    rememberPassword(target, true);
+  }
 }, true);
 if (document.activeElement) rememberPassword(document.activeElement, isIdentifier(document.activeElement));
 prefetchCandidates();
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message && message.type === "chooser-mount") {
+    // 只有顶层页面负责挂载；后台已核对这个 probe 来自同一标签页。
+    sendResponse({ type: mountChooser(String(message.probe || ""), String(message.nonce || "")) ? "mounted" : "failed" });
+    return false;
+  }
+  if (message && message.type === "chooser-unmount") {
+    if (mounted && mounted.probe === message.probe) unmountChooser();
+    if (chooser && chooser.probe === message.probe) chooser = null;
+    sendResponse({ type: "ready" });
+    return false;
+  }
+  if (message && message.type === "chooser-fill") {
+    sendResponse(receiveFill(message));
+    return false;
+  }
   if (!message || message.type !== "fill-request") return false;
   const automatic = message.automatic === true;
   const active = document.activeElement;

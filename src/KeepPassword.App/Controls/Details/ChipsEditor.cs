@@ -61,8 +61,11 @@ public sealed class ChipsEditor : TemplatedControl
         if (_add is not null) _add.Click += OnAdd;
         if (_input is not null) { _input.TextChanged += OnTextChanged; _input.KeyDown += OnInputKeyDown; _input.LostFocus += OnInputLostFocus; }
         if (_popup is not null) _popup.Closed += OnPopupClosed;
+        // 建议面板里的滚轮只属于面板：列表到顶/到底或不需要滚动时，也不能冒泡去滚动整个详情页。
+        if (_popup?.Child is { } surface) surface.AddHandler(PointerWheelChangedEvent, OnSuggestionWheel, RoutingStrategies.Bubble);
         RebuildChips();
     }
+    private static void OnSuggestionWheel(object? sender, PointerWheelEventArgs e) => e.Handled = true;
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
@@ -187,15 +190,8 @@ public sealed class ChipsEditor : TemplatedControl
         else { Created?.Invoke(text); FinishChoice(); }
     }
     private void Choose(string name) { Toggled?.Invoke(name); FinishChoice(); }
-    private void FinishChoice()
-    {
-        if (!Multiple) { ClosePopup(); _add?.Focus(); }
-        else
-        {
-            if (_input is not null) { _input.Text = ""; _input.Focus(); }
-            RebuildOptions();
-        }
-    }
+    // 选完（或新建）一个后一律收起输入和建议；要继续添加，由用户再点"+ 添加"。
+    private void FinishChoice() { ClosePopup(); _add?.Focus(); }
     private void RebuildOptions()
     {
         if (_options is null) return;
