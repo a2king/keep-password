@@ -1100,9 +1100,10 @@ public partial class SettingsView : UserControl
         }
 
         SyncStatusText.Text = sync.StatusMessage ?? "";
-        SyncBoundPanel.IsVisible = sync.IsBound;
-        SyncBindPanel.IsVisible = !sync.IsBound;
-        if (sync.IsBound)
+        var showBind = !sync.IsBound || sync.RequiresRebind;
+        SyncBoundPanel.IsVisible = sync.IsBound && !sync.RequiresRebind;
+        SyncBindPanel.IsVisible = showBind;
+        if (sync.IsBound && !showBind)
         {
             SyncAccountText.Text = sync.Email ?? "";
             SyncMetaText.Text =
@@ -1110,6 +1111,10 @@ public partial class SettingsView : UserControl
                 + (string.IsNullOrEmpty(sync.BindingKeyFingerprint)
                     ? ""
                     : $" · 绑定密钥指纹 {sync.BindingKeyFingerprint}");
+        }
+        else if (showBind && string.IsNullOrWhiteSpace(SyncEmailBox.Text) && !string.IsNullOrWhiteSpace(sync.Email))
+        {
+            SyncEmailBox.Text = sync.Email;
         }
     }
 
@@ -1123,10 +1128,11 @@ public partial class SettingsView : UserControl
         try
         {
             await _sync.RequestBindCodeAsync(SyncEmailBox.Text ?? "");
+            ErrorBox.IsVisible = false;
         }
-        catch (Exception ex) when (ex is SyncApiException or ArgumentException or HttpRequestException or TaskCanceledException)
+        catch (Exception ex)
         {
-            ShowError(ex.Message);
+            ShowError(SyncFailureText(ex));
         }
     }
 
@@ -1162,6 +1168,12 @@ public partial class SettingsView : UserControl
             return;
         }
 
+        var button = sender as Button;
+        if (button is not null)
+        {
+            button.IsEnabled = false;
+        }
+
         try
         {
             await _sync.BindAsync(
@@ -1170,13 +1182,28 @@ public partial class SettingsView : UserControl
                 SyncBindingKeyBox.Text ?? "",
                 SyncCodeBox.Text ?? "");
             ClearSyncSecrets();
+            if (_sync.HasError)
+            {
+                ShowError(_sync.StatusMessage ?? SyncMessages.VaultPending);
+            }
+            else
+            {
+                ErrorBox.IsVisible = false;
+            }
+
             VaultChanged?.Invoke(this, EventArgs.Empty);
             RefreshSyncUi();
         }
-        catch (Exception ex) when (ex is SyncApiException or InvalidOperationException or InvalidDataException
-                                       or ArgumentException or HttpRequestException or TaskCanceledException)
+        catch (Exception ex)
         {
-            ShowError(ex.Message);
+            ShowError(SyncFailureText(ex));
+        }
+        finally
+        {
+            if (button is not null)
+            {
+                button.IsEnabled = true;
+            }
         }
     }
 
@@ -1193,11 +1220,18 @@ public partial class SettingsView : UserControl
             VaultChanged?.Invoke(this, EventArgs.Empty);
             RefreshSyncUi();
         }
-        catch (Exception ex) when (ex is SyncApiException or InvalidDataException or HttpRequestException)
+        catch (Exception ex)
         {
-            ShowError(ex.Message);
+            ShowError(SyncFailureText(ex));
         }
     }
+
+    private static string SyncFailureText(Exception ex) => ex switch
+    {
+        SyncApiException or ArgumentException or InvalidDataException or InvalidOperationException
+            or CredentialRejectedException => ex.Message,
+        _ => "云同步失败，请稍后重试。本地数据仍可使用。"
+    };
 
     private async void OnSyncDisconnect(object? sender, RoutedEventArgs e)
     {

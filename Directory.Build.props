@@ -5,7 +5,7 @@
     显式设置 InformationalVersion，避免 SDK 自动追加 "+提交哈希" 后缀。
   -->
   <PropertyGroup>
-    <Version>0.9.0</Version>
+    <Version>0.9.1</Version>
     <InformationalVersion>$(Version)</InformationalVersion>
   </PropertyGroup>
 </Project>

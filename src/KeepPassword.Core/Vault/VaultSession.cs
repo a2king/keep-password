@@ -535,10 +535,140 @@ public sealed partial class VaultSession : IDisposable
         lock (_gate)
         {
             EnsureUnlocked();
-            VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _dataKey, _entries, _recovery, _labels, _passwordWrap,
-                _keyFileSaved, _formatVersion);
+            WriteCurrentFile();
             AutofillIndexStore.Write(_path, AliveEntries(_entries).Select(entry => entry.Clone()).ToList());
         }
+    }
+
+    /// <summary>用指定数据密钥加密一份快照，不修改当前会话或保险库文件。</summary>
+    internal byte[] EncryptSnapshot(byte[] dataKey, IReadOnlyList<VaultEntry> entries, IReadOnlyList<string> spaces, IReadOnlyList<string> tags)
+    {
+        ArgumentNullException.ThrowIfNull(dataKey);
+        ArgumentNullException.ThrowIfNull(entries);
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            var temp = Path.Combine(Path.GetTempPath(), "kp-sync-" + Guid.NewGuid().ToString("n") + ".kpvault");
+            try
+            {
+                var labels = VaultLabels.From(spaces, tags, entries);
+                VaultStore.WriteFile(temp, Account, _kdf, _shortKey, dataKey, entries, labels: labels,
+                    passwordWrap: _passwordWrap, keyFileSaved: _keyFileSaved, formatVersion: _formatVersion);
+                return File.ReadAllBytes(temp);
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(temp))
+                    {
+                        File.Delete(temp);
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 在确认云端已接受合并结果后，把本机保险库改写为云端数据密钥。
+    /// 失败时恢复原文件。不改变加密算法。
+    /// </summary>
+    internal void ReplaceWithDataKey(byte[] cloudKey, IReadOnlyList<VaultEntry> entries, IReadOnlyList<string> spaces, IReadOnlyList<string> tags)
+    {
+        ArgumentNullException.ThrowIfNull(cloudKey);
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            if (cloudKey.Length != _dataKey.Length)
+            {
+                throw new InvalidDataException("云端数据密钥长度不正确。本地数据未改动。");
+            }
+
+            if (CryptographicOperations.FixedTimeEquals(_dataKey, cloudKey))
+            {
+                ReplaceAllRecords(entries, spaces, tags);
+                Save();
+                return;
+            }
+
+            if (_shortWrapKey is null && !_deviceQuick)
+            {
+                throw new InvalidOperationException("当前解锁状态无法安全切换到云端密钥。请用短密钥重新解锁后再绑定。本地数据未改动。");
+            }
+
+            var vaultBackup = File.ReadAllBytes(_path);
+            var quickPath = _path + ".quick";
+            var quickBackup = File.Exists(quickPath) ? File.ReadAllBytes(quickPath) : null;
+            var previousEntries = _entries.Select(entry => entry.Clone()).ToList();
+            var previousSpaces = _labels.Spaces.ToList();
+            var previousTags = _labels.Tags.ToList();
+            var previousKey = _dataKey;
+            var previousWrap = _shortWrap;
+            var nextKey = cloudKey.ToArray();
+            VaultStore.ShortWrapMaterial? nextWrap = null;
+            if (_shortWrap is not null && _shortWrapKey is not null)
+            {
+                nextWrap = VaultStore.RewrapShortUnlock(_shortWrap, _shortWrapKey, nextKey);
+            }
+
+            try
+            {
+                _dataKey = nextKey;
+                if (nextWrap is not null)
+                {
+                    _shortWrap = nextWrap;
+                }
+
+                ReplaceAllRecords(entries, spaces, tags);
+                WriteCurrentFile();
+                if (nextWrap is not null)
+                {
+                    VaultStore.WriteQuickUnlock(_path, _kdf.Salt, nextWrap);
+                }
+                else if (_deviceQuick && !VaultStore.TryWriteDeviceQuickUnlock(_path, _kdf.Salt, nextKey))
+                {
+                    throw new IOException("无法更新本机快速解锁。");
+                }
+
+                AutofillIndexStore.Write(_path, AliveEntries(_entries).Select(entry => entry.Clone()).ToList());
+                CryptographicOperations.ZeroMemory(previousKey);
+            }
+            catch
+            {
+                _dataKey = previousKey;
+                _shortWrap = previousWrap;
+                _entries.Clear();
+                _entries.AddRange(previousEntries);
+                _labels.Spaces.Clear();
+                _labels.Tags.Clear();
+                _labels.Spaces.AddRange(previousSpaces);
+                _labels.Tags.AddRange(previousTags);
+                File.WriteAllBytes(_path, vaultBackup);
+                if (quickBackup is null)
+                {
+                    if (File.Exists(quickPath))
+                    {
+                        File.Delete(quickPath);
+                    }
+                }
+                else
+                {
+                    File.WriteAllBytes(quickPath, quickBackup);
+                }
+
+                CryptographicOperations.ZeroMemory(nextKey);
+                throw;
+            }
+        }
+    }
+
+    private void WriteCurrentFile()
+    {
+        VaultStore.WriteFile(_path, Account, _kdf, _shortKey, _dataKey, _entries, _recovery, _labels, _passwordWrap,
+            _keyFileSaved, _formatVersion);
     }
 
     /// <summary>升级到 v3 本地密钥格式：去掉主密码保护层，为条目补时间戳。须已保存 .kpkey。</summary>
