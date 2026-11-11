@@ -56,19 +56,20 @@ public sealed class SyncApiClient : IDisposable
         return await ReadAsync<VaultDownloadResponse>(response, authenticated: true, ct);
     }
 
-    public async Task<VaultUploadResponse> UploadVaultAsync(string deviceToken, long baseVersion, byte[] data, CancellationToken ct = default)
+    public async Task<VaultUploadResponse> UploadVaultAsync(string deviceToken, long baseVersion, long keyVersion, byte[] data, CancellationToken ct = default)
     {
         using var message = Authorized(HttpMethod.Put, "api/sync/vault", deviceToken);
         message.Content = JsonContent.Create(new
         {
             baseVersion,
+            keyVersion,
             dataBase64 = Convert.ToBase64String(data)
         }, options: JsonOptions);
         using var response = await SendAsync(message, ct);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             var error = await ReadErrorAsync(response, ct);
-            throw new SyncConflictException(error?.VaultVersion ?? 0, error?.ServerTime);
+            throw ConflictFrom(error);
         }
 
         return await ReadAsync<VaultUploadResponse>(response, authenticated: true, ct);
@@ -94,6 +95,34 @@ public sealed class SyncApiClient : IDisposable
         message.Content = JsonContent.Create(new { dataBase64 = Convert.ToBase64String(wrapped) }, options: JsonOptions);
         using var response = await SendAsync(message, ct);
         await EnsureSuccess(response, authenticated: true, ct);
+    }
+
+    public async Task<SyncCommitResponse> CommitAsync(
+        string deviceToken,
+        string purpose,
+        long expectedKeyVersion,
+        long expectedVaultVersion,
+        byte[] vault,
+        byte[]? wrapped,
+        CancellationToken ct = default)
+    {
+        using var message = Authorized(HttpMethod.Put, "api/sync/commit", deviceToken);
+        message.Content = JsonContent.Create(new
+        {
+            purpose,
+            expectedKeyVersion,
+            expectedVaultVersion,
+            dataBase64 = Convert.ToBase64String(vault),
+            wrappedKeyBase64 = wrapped is null ? null : Convert.ToBase64String(wrapped)
+        }, options: JsonOptions);
+        using var response = await SendAsync(message, ct);
+        if (response.StatusCode is HttpStatusCode.Conflict or (HttpStatusCode)426)
+        {
+            var error = await ReadErrorAsync(response, ct);
+            throw ConflictFrom(error, (int)response.StatusCode);
+        }
+
+        return await ReadAsync<SyncCommitResponse>(response, authenticated: true, ct);
     }
 
     public async Task<byte[]?> DownloadWrappedKeyAsync(string deviceToken, CancellationToken ct = default)
@@ -198,9 +227,9 @@ public sealed class SyncApiClient : IDisposable
         var status = (int)response.StatusCode;
         var body = await ReadErrorAsync(response, ct);
         var sessionInvalid = authenticated && response.StatusCode == HttpStatusCode.Unauthorized;
-        if (response.StatusCode == HttpStatusCode.Conflict)
+        if (response.StatusCode is HttpStatusCode.Conflict or (HttpStatusCode)426)
         {
-            return new SyncConflictException(body?.VaultVersion ?? 0, body?.ServerTime);
+            return ConflictFrom(body, status);
         }
 
         return new SyncApiException(KindFor(status), MessageFor(status, body?.Error, sessionInvalid), status, sessionInvalid);
@@ -307,6 +336,11 @@ public sealed class SyncApiClient : IDisposable
         }
 
         var lower = text.ToLowerInvariant();
+        if (lower.Contains("password") || lower.Contains("secret") || lower.Contains("smtp_password") || text.Contains("授权码"))
+        {
+            return false;
+        }
+
         return !lower.Contains("bearer", StringComparison.Ordinal)
             && !lower.Contains("kpb-", StringComparison.Ordinal)
             && !text.Contains("eyJ", StringComparison.Ordinal)
@@ -314,10 +348,28 @@ public sealed class SyncApiClient : IDisposable
             && !text.Contains("dataBase64", StringComparison.Ordinal);
     }
 
+    private static SyncApiException ConflictFrom(ErrorBody? body, int status = 409)
+    {
+        if (status == 426 || body?.UpgradeRequired == true)
+        {
+            return new SyncKeyChangedException(body?.KeyVersion ?? 0, upgradeRequired: true);
+        }
+
+        if (body?.KeyChanged == true)
+        {
+            return new SyncKeyChangedException(body.KeyVersion, upgradeRequired: false);
+        }
+
+        return new SyncConflictException(body?.VaultVersion ?? 0, body?.ServerTime);
+    }
+
     private sealed class ErrorBody
     {
         public string? Error { get; set; }
         public bool Conflict { get; set; }
+        public bool KeyChanged { get; set; }
+        public bool UpgradeRequired { get; set; }
+        public long KeyVersion { get; set; }
         public long VaultVersion { get; set; }
         public string? ServerTime { get; set; }
     }
@@ -361,6 +413,23 @@ public class SyncApiException : Exception
     public bool SessionInvalid { get; }
 }
 
+public sealed class SyncKeyChangedException : SyncApiException
+{
+    public SyncKeyChangedException(long keyVersion, bool upgradeRequired)
+        : base(
+            upgradeRequired ? SyncFailureKind.Validation : SyncFailureKind.Conflict,
+            upgradeRequired ? SyncMessages.UpgradeRequired : SyncMessages.KeyChanged,
+            upgradeRequired ? 426 : 409)
+    {
+        KeyVersion = keyVersion;
+        UpgradeRequired = upgradeRequired;
+    }
+
+    public long KeyVersion { get; }
+
+    public bool UpgradeRequired { get; }
+}
+
 public sealed class SyncConflictException : SyncApiException
 {
     public SyncConflictException(long serverVersion, string? serverTime)
@@ -394,6 +463,7 @@ public sealed class DeviceBindResponse
     public string? BindingKeyFingerprint { get; set; }
     public bool HasVault { get; set; }
     public bool HasWrappedKey { get; set; }
+    public long KeyVersion { get; set; }
     public string? ServerTime { get; set; }
 }
 
@@ -405,6 +475,7 @@ public sealed class SyncStatusResponse
     public string? BindingKeyFingerprint { get; set; }
     public string? BindingKeyCreatedAt { get; set; }
     public bool HasWrappedKey { get; set; }
+    public long KeyVersion { get; set; }
     public string? ServerTime { get; set; }
 }
 
@@ -430,6 +501,15 @@ public sealed class VaultConflictResponse
 {
     public long VaultVersion { get; set; }
     public string? ServerTime { get; set; }
+}
+
+public sealed class SyncCommitResponse
+{
+    public bool Ok { get; set; }
+    public bool Idempotent { get; set; }
+    public long KeyVersion { get; set; }
+    public long VaultVersion { get; set; }
+    public string? VaultSha256 { get; set; }
 }
 
 public sealed class WrappedKeyResponse

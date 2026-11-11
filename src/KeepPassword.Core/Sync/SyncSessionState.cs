@@ -22,6 +22,9 @@ public sealed class SyncSessionState
     public string DeviceToken { get; set; } = "";
     public int DeviceId { get; set; }
     public long VaultVersion { get; set; }
+    public long KeyVersion { get; set; }
+    public bool SyncBlocked { get; set; }
+    public string? SyncBlockReason { get; set; }
     public string? BindingKeyFingerprint { get; set; }
     public string BaseUrl { get; set; } = SyncDefaults.BaseUrl;
     public int PollMinutes { get; set; } = (int)SyncDefaults.DefaultPollInterval.TotalMinutes;

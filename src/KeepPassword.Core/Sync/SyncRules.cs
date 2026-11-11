@@ -41,4 +41,21 @@ public static class SyncMessages
     public const string AdoptedHint = "本机已改用云端加密密钥，原先保存的 .kpkey 不能再解开此库；短密钥仍可解锁。";
 
     public const string EnabledPrefix = "已开启云同步";
+    public const string KeyChanged =
+        "检测到新的云端密钥，已暂停自动和手动同步。本地保险库仍可打开。若非本人操作，请修改账号密码，并到用户管理后台更新密钥文件。修改网站密码不会作废已泄露的保险库密钥；请在个人中心单独检查并解绑异常设备。确认是本人操作后，再用新的密钥文件恢复同步。";
+    public const string UpgradeRequired =
+        "这台客户端不能覆盖新的密钥版本。请升级到 0.9.1 后再同步。本地保险库未改动，同步已暂停。";
+    public const string RotateNeedsCurrent =
+        "当前密钥无法解开云端保险库，不能换钥。解密失败不能当成空库。本地数据未改动。";
+    public const string AdoptRejected =
+        "这个密钥文件无法解开云端保险库。同步仍暂停，本地数据未改动。";
+}
+
+public sealed class KeyChangeResult
+{
+    public bool NeedsConfirmation { get; init; }
+    public int ConflictCount { get; init; }
+    public bool Committed { get; init; }
+    public long KeyVersion { get; init; }
+    public long VaultVersion { get; init; }
 }
