@@ -1100,9 +1100,10 @@ public partial class SettingsView : UserControl
         }
 
         SyncStatusText.Text = sync.StatusMessage ?? "";
-        SyncBoundPanel.IsVisible = sync.IsBound;
-        SyncBindPanel.IsVisible = !sync.IsBound;
-        if (sync.IsBound)
+        var showBind = !sync.IsBound || sync.RequiresRebind;
+        SyncBoundPanel.IsVisible = sync.IsBound && !sync.RequiresRebind;
+        SyncBindPanel.IsVisible = showBind;
+        if (sync.IsBound && !showBind)
         {
             SyncAccountText.Text = sync.Email ?? "";
             SyncMetaText.Text =
@@ -1110,6 +1111,12 @@ public partial class SettingsView : UserControl
                 + (string.IsNullOrEmpty(sync.BindingKeyFingerprint)
                     ? ""
                     : $" · 绑定密钥指纹 {sync.BindingKeyFingerprint}");
+            SyncAdoptButton.IsVisible = sync.CanAdoptKey;
+            SyncRotateButton.IsEnabled = !sync.SyncBlocked;
+        }
+        else if (showBind && string.IsNullOrWhiteSpace(SyncEmailBox.Text) && !string.IsNullOrWhiteSpace(sync.Email))
+        {
+            SyncEmailBox.Text = sync.Email;
         }
     }
 
@@ -1123,10 +1130,11 @@ public partial class SettingsView : UserControl
         try
         {
             await _sync.RequestBindCodeAsync(SyncEmailBox.Text ?? "");
+            ErrorBox.IsVisible = false;
         }
-        catch (Exception ex) when (ex is SyncApiException or ArgumentException or HttpRequestException or TaskCanceledException)
+        catch (Exception ex)
         {
-            ShowError(ex.Message);
+            ShowError(SyncFailureText(ex));
         }
     }
 
@@ -1162,6 +1170,12 @@ public partial class SettingsView : UserControl
             return;
         }
 
+        var button = sender as Button;
+        if (button is not null)
+        {
+            button.IsEnabled = false;
+        }
+
         try
         {
             await _sync.BindAsync(
@@ -1170,13 +1184,28 @@ public partial class SettingsView : UserControl
                 SyncBindingKeyBox.Text ?? "",
                 SyncCodeBox.Text ?? "");
             ClearSyncSecrets();
+            if (_sync.HasError)
+            {
+                ShowError(_sync.StatusMessage ?? SyncMessages.VaultPending);
+            }
+            else
+            {
+                ErrorBox.IsVisible = false;
+            }
+
             VaultChanged?.Invoke(this, EventArgs.Empty);
             RefreshSyncUi();
         }
-        catch (Exception ex) when (ex is SyncApiException or InvalidOperationException or InvalidDataException
-                                       or ArgumentException or HttpRequestException or TaskCanceledException)
+        catch (Exception ex)
         {
-            ShowError(ex.Message);
+            ShowError(SyncFailureText(ex));
+        }
+        finally
+        {
+            if (button is not null)
+            {
+                button.IsEnabled = true;
+            }
         }
     }
 
@@ -1193,9 +1222,104 @@ public partial class SettingsView : UserControl
             VaultChanged?.Invoke(this, EventArgs.Empty);
             RefreshSyncUi();
         }
-        catch (Exception ex) when (ex is SyncApiException or InvalidDataException or HttpRequestException)
+        catch (Exception ex)
         {
-            ShowError(ex.Message);
+            ShowError(SyncFailureText(ex));
+        }
+    }
+
+    private static string SyncFailureText(Exception ex) => ex switch
+    {
+        SyncApiException or ArgumentException or InvalidDataException or InvalidOperationException
+            or CredentialRejectedException => ex.Message,
+        _ => "云同步失败，请稍后重试。本地数据仍可使用。"
+    };
+
+    private async void OnSyncRotateKey(object? sender, RoutedEventArgs e)
+    {
+        if (_sync is null)
+        {
+            return;
+        }
+
+        var password = SyncRotatePasswordBox.Text ?? "";
+        if (password.Length == 0)
+        {
+            ShowError("换钥需要网站密码，只用来在本机包裹新的数据密钥，不会保存。");
+            return;
+        }
+
+        var path = await SafeStoragePickers.PickOpenFileAsync(Host, "选择新的加密密钥文件", [EncryptionKeyDialog.KeyFileType], _pauseWatcher);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            var text = await File.ReadAllTextAsync(path);
+            var preview = await _sync.RotateKeyAsync(text, password, confirmConflicts: false);
+            if (preview.NeedsConfirmation)
+            {
+                var agreed = await Dialogs.ConfirmAsync(Host, "确认合并后换钥",
+                    $"有 {preview.ConflictCount} 条本地和云端内容不同。确认后才合并并提交新密钥。取消则云端和本机都保持原样。",
+                    "确认合并并换钥");
+                if (!agreed)
+                {
+                    return;
+                }
+
+                await _sync.RotateKeyAsync(text, password, confirmConflicts: true);
+            }
+
+            SyncRotatePasswordBox.Text = "";
+            ErrorBox.IsVisible = false;
+            VaultChanged?.Invoke(this, EventArgs.Empty);
+            RefreshSyncUi();
+        }
+        catch (Exception ex)
+        {
+            ShowError(SyncFailureText(ex));
+        }
+    }
+
+    private async void OnSyncAdoptKey(object? sender, RoutedEventArgs e)
+    {
+        if (_sync is null)
+        {
+            return;
+        }
+
+        var path = await SafeStoragePickers.PickOpenFileAsync(Host, "选择新的加密密钥文件", [EncryptionKeyDialog.KeyFileType], _pauseWatcher);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            var text = await File.ReadAllTextAsync(path);
+            var preview = await _sync.AdoptKeyFileAsync(text, confirmConflicts: false);
+            if (preview.NeedsConfirmation)
+            {
+                var agreed = await Dialogs.ConfirmAsync(Host, "确认合并后恢复同步",
+                    $"有 {preview.ConflictCount} 条尚未同步的本地内容和云端不同。取消则继续暂停同步，本地库保持原样。",
+                    "确认合并并恢复");
+                if (!agreed)
+                {
+                    return;
+                }
+
+                await _sync.AdoptKeyFileAsync(text, confirmConflicts: true);
+            }
+
+            ErrorBox.IsVisible = false;
+            VaultChanged?.Invoke(this, EventArgs.Empty);
+            RefreshSyncUi();
+        }
+        catch (Exception ex)
+        {
+            ShowError(SyncFailureText(ex));
         }
     }
 

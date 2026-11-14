@@ -45,7 +45,10 @@ public static class SyncDefaults
                     return url;
                 }
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            catch (Exception ex) when (ex is SyncApiException
+            {
+                Kind: SyncFailureKind.Network or SyncFailureKind.Timeout or SyncFailureKind.Tls or SyncFailureKind.Cancelled
+            })
             {
                 last = ex;
             }

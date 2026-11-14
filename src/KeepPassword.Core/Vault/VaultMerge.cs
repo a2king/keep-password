@@ -73,6 +73,52 @@ public static class VaultMerge
         return new Result(map.Values.OrderBy(e => e.Id).ToList(), spaces, tags, skew, localWins, remoteWins, ties);
     }
 
+    /// <summary>同一条目两边内容不同。只返回编号，时间戳不同但内容相同不算冲突。</summary>
+    public static IReadOnlyList<Guid> ContentConflicts(IReadOnlyList<VaultEntry> local, IReadOnlyList<VaultEntry> remote)
+    {
+        var remoteById = remote.GroupBy(entry => entry.Id).ToDictionary(group => group.Key, group => group.First());
+        var conflicts = new List<Guid>();
+        foreach (var entry in local)
+        {
+            if (remoteById.TryGetValue(entry.Id, out var other) && !SameContent(entry, other))
+            {
+                conflicts.Add(entry.Id);
+            }
+        }
+
+        return conflicts;
+    }
+
+    private static bool SameContent(VaultEntry left, VaultEntry right)
+    {
+        if (left.IsDeleted || right.IsDeleted)
+        {
+            return left.IsDeleted == right.IsDeleted;
+        }
+
+        return left.Kind == right.Kind
+            && left.Favorite == right.Favorite
+            && left.Name == right.Name
+            && left.Url == right.Url
+            && left.Note == right.Note
+            && left.Space == right.Space
+            && left.SshKeyId == right.SshKeyId
+            && left.Tags.SequenceEqual(right.Tags)
+            && left.Fields.Count == right.Fields.Count
+            && left.Fields.All(pair => right.Fields.TryGetValue(pair.Key, out var value) && value == pair.Value)
+            && left.CustomFields.Count == right.CustomFields.Count
+            && left.CustomFields.Zip(right.CustomFields).All(pair => pair.First.Name == pair.Second.Name && pair.First.Value == pair.Second.Value)
+            && left.Accounts.Count == right.Accounts.Count
+            && left.Accounts.Zip(right.Accounts).All(pair =>
+                pair.First.Username == pair.Second.Username
+                && pair.First.Password == pair.Second.Password
+                && pair.First.Note == pair.Second.Note
+                && pair.First.TotpSecret == pair.Second.TotpSecret
+                && pair.First.Auth == pair.Second.Auth)
+            && left.Nodes.Count == right.Nodes.Count
+            && left.Nodes.Zip(right.Nodes).All(pair => pair.First.Host == pair.Second.Host && pair.First.Name == pair.Second.Name);
+    }
+
     private static VaultEntry Normalize(VaultEntry entry, DateTimeOffset fallback)
     {
         if (entry.UpdatedAt == default)

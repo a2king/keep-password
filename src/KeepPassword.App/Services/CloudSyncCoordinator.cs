@@ -14,9 +14,15 @@ public sealed class CloudSyncCoordinator : IDisposable
     private SyncSessionState? _state;
     private VaultSyncService? _service;
     private CancellationTokenSource? _loop;
-    private int _pushing;
+    private readonly SemaphoreSlim _io = new(1, 1);
+    private int _binding;
+    private int _pushQueued;
+    private bool _requiresRebind;
     private string? _lastStatus;
     private string? _lastError;
+
+    /// <summary>测试注入同步客户端。生产路径不设置。</summary>
+    internal Func<string, VaultSyncService>? ServiceFactory { get; set; }
 
     public event Action? Changed;
 
@@ -50,6 +56,21 @@ public sealed class CloudSyncCoordinator : IDisposable
         get { lock (_gate) { return _lastError is not null; } }
     }
 
+    public bool RequiresRebind
+    {
+        get { lock (_gate) { return _requiresRebind; } }
+    }
+
+    public bool SyncBlocked
+    {
+        get { lock (_gate) { return _state?.SyncBlocked == true; } }
+    }
+
+    public bool CanAdoptKey
+    {
+        get { lock (_gate) { return _state?.SyncBlocked == true && _state.SyncBlockReason != "upgrade"; } }
+    }
+
     public void Attach(VaultSession session)
     {
         Detach();
@@ -60,8 +81,16 @@ public sealed class CloudSyncCoordinator : IDisposable
             if (_state is not null)
             {
                 _service = new VaultSyncService(_state.BaseUrl);
-                _lastStatus = $"已连接云同步（{_state.Email}）";
-                StartLoopUnlocked();
+                if (_state.SyncBlocked)
+                {
+                    _lastError = BlockText(_state);
+                    _lastStatus = null;
+                }
+                else
+                {
+                    _lastStatus = $"已连接云同步（{_state.Email}）";
+                    StartLoopUnlocked();
+                }
             }
             else
             {
@@ -88,6 +117,7 @@ public sealed class CloudSyncCoordinator : IDisposable
             _service = null;
             _session = null;
             _state = null;
+            _requiresRebind = false;
             _lastStatus = null;
             _lastError = null;
         }
@@ -100,9 +130,15 @@ public sealed class CloudSyncCoordinator : IDisposable
 
     public async Task RequestBindCodeAsync(string email, CancellationToken ct = default)
     {
-        using var api = new SyncApiClient(await ResolveBaseUrlAsync(ct));
-        await api.RequestDeviceCodeAsync(email.Trim(), ct);
-        SetStatus("验证码已发送到邮箱（开发环境见服务器控制台）");
+        var trimmed = email.Trim();
+        if (trimmed.Length == 0 || !trimmed.Contains('@'))
+        {
+            throw new ArgumentException("请填写官网邮箱。");
+        }
+
+        using var service = OpenService(await ResolveBaseUrlAsync(ct));
+        await service.RequestBindCodeAsync(trimmed, ct);
+        SetStatus(SyncMessages.CodeAccepted);
     }
 
     public async Task BindAsync(
@@ -112,71 +148,83 @@ public sealed class CloudSyncCoordinator : IDisposable
         string code,
         CancellationToken ct = default)
     {
-        VaultSession session;
-        lock (_gate)
+        if (Interlocked.Exchange(ref _binding, 1) == 1)
         {
-            session = _session ?? throw new InvalidOperationException("请先解锁保险库。");
-            if (session.NeedsLocalKeyUpgrade)
-            {
-                throw new InvalidOperationException("请先升级到本地密钥格式，再开启云同步。");
-            }
+            throw new InvalidOperationException("正在绑定，请等待当前操作结束。");
         }
 
-        var dataKey = session.CopyDataKey();
+        VaultSyncService? service = null;
         try
         {
-            var service = new VaultSyncService(await ResolveBaseUrlAsync(ct));
-            var request = new DeviceBindRequest
-            {
-                Email = email.Trim(),
-                Password = password,
-                BindingKey = BindingKeyFile.Parse(bindingKey),
-                Code = code.Trim(),
-                DeviceName = Environment.MachineName,
-                Platform = OperatingSystem.IsWindows() ? "Windows"
-                    : OperatingSystem.IsMacOS() ? "macOS"
-                    : OperatingSystem.IsLinux() ? "Linux" : "Unknown",
-                ClientVersion = InstallConstants.Version
-            };
-            var state = await service.CompleteBindAsync(session.VaultPath, request, password, dataKey, ct);
-
-            if (state.VaultVersion == 0)
-            {
-                await service.PushAsync(session, state, dataKey, ct);
-            }
-            else
-            {
-                await service.PullMergeAndPushAsync(session, state, dataKey, ct);
-            }
-
+            VaultSession session;
             lock (_gate)
             {
-                _service?.Dispose();
-                _service = service;
-                _state = state;
-                _lastError = null;
-                _lastStatus = $"已绑定云同步（{state.Email}）";
-                StartLoopUnlocked();
+                session = _session ?? throw new InvalidOperationException("请先解锁保险库。");
+                if (session.NeedsLocalKeyUpgrade)
+                {
+                    throw new InvalidOperationException("请先升级到本地密钥格式，再开启云同步。");
+                }
+
+                if (_state is not null && !_requiresRebind)
+                {
+                    throw new InvalidOperationException("已经绑定。请先断开后再绑定，避免重复创建设备。");
+                }
             }
 
-            RaiseChanged();
+            await _io.WaitAsync(ct);
+            try
+            {
+                StopLoop();
+                service = OpenService(await ResolveBaseUrlAsync(ct));
+                var request = new DeviceBindRequest
+                {
+                    Email = email.Trim(),
+                    Password = password,
+                    BindingKey = BindingKeyFile.Parse(bindingKey),
+                    Code = code.Trim(),
+                    DeviceName = Environment.MachineName,
+                    Platform = OperatingSystem.IsWindows() ? "Windows"
+                        : OperatingSystem.IsMacOS() ? "macOS"
+                        : OperatingSystem.IsLinux() ? "Linux" : "Unknown",
+                    ClientVersion = InstallConstants.Version
+                };
+                var result = await service.CompleteBindAsync(session, request, password, ct);
+                CommitBind(session, service, result);
+                service = null;
+            }
+            finally
+            {
+                _io.Release();
+            }
+        }
+        catch
+        {
+            service?.Dispose();
+            throw;
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(dataKey);
+            Interlocked.Exchange(ref _binding, 0);
+            DrainPush();
         }
     }
 
     public async Task RefreshAsync(CancellationToken ct = default)
     {
+        if (!await _io.WaitAsync(0, ct))
+        {
+            return;
+        }
+
         VaultSession session;
         SyncSessionState state;
         VaultSyncService service;
         byte[] dataKey;
         lock (_gate)
         {
-            if (_session is null || _state is null || _service is null)
+            if (_session is null || _state is null || _service is null || _requiresRebind)
             {
+                _io.Release();
                 return;
             }
 
@@ -199,46 +247,54 @@ public sealed class CloudSyncCoordinator : IDisposable
 
             RaiseChanged();
         }
-        catch (Exception ex) when (ex is SyncApiException or CredentialRejectedException or InvalidDataException or IOException or OperationCanceledException)
+        catch (Exception ex)
         {
-            if (ex is not OperationCanceledException)
-            {
-                SetError(ex.Message);
-            }
+            NoteSyncFailure(ex, ct);
         }
         finally
         {
             CryptographicOperations.ZeroMemory(dataKey);
+            _io.Release();
+            DrainPush();
         }
     }
 
     public void NotifyLocalChanged()
     {
-        if (!IsBound)
+        if (!IsBound || RequiresRebind || SyncBlocked)
         {
             return;
         }
 
+        Interlocked.Exchange(ref _pushQueued, 1);
         _ = PushAsync();
     }
 
     public async Task PushAsync(CancellationToken ct = default)
     {
-        if (Interlocked.Exchange(ref _pushing, 1) == 1)
+        if (!await _io.WaitAsync(0, ct))
         {
             return;
         }
 
         try
         {
+            Interlocked.Exchange(ref _pushQueued, 0);
             VaultSession session;
             SyncSessionState state;
             VaultSyncService service;
             byte[] dataKey;
             lock (_gate)
             {
-                if (_session is null || _state is null || _service is null)
+                if (_session is null || _state is null || _service is null || _requiresRebind || _state.SyncBlocked)
                 {
+                    if (_state?.SyncBlocked == true)
+                    {
+                        _lastError = BlockText(_state);
+                        _lastStatus = null;
+                        RaiseChanged();
+                    }
+
                     return;
                 }
 
@@ -253,6 +309,11 @@ public sealed class CloudSyncCoordinator : IDisposable
                 await service.PushAsync(session, state, dataKey, ct);
                 lock (_gate)
                 {
+                    if (_requiresRebind)
+                    {
+                        return;
+                    }
+
                     _state = state;
                     _lastError = null;
                     _lastStatus = $"已上传到云端（版本 {state.VaultVersion}）";
@@ -260,9 +321,9 @@ public sealed class CloudSyncCoordinator : IDisposable
 
                 RaiseChanged();
             }
-            catch (Exception ex) when (ex is SyncApiException or CredentialRejectedException or InvalidDataException or IOException)
+            catch (Exception ex)
             {
-                SetError(ex.Message);
+                NoteSyncFailure(ex, ct);
             }
             finally
             {
@@ -271,7 +332,16 @@ public sealed class CloudSyncCoordinator : IDisposable
         }
         finally
         {
-            Interlocked.Exchange(ref _pushing, 0);
+            _io.Release();
+            DrainPush();
+        }
+    }
+
+    private void DrainPush()
+    {
+        if (Interlocked.Exchange(ref _pushQueued, 0) == 1)
+        {
+            _ = PushAsync();
         }
     }
 
@@ -326,11 +396,223 @@ public sealed class CloudSyncCoordinator : IDisposable
         RaiseChanged();
     }
 
+    private void CommitBind(VaultSession session, VaultSyncService service, BindResult result)
+    {
+        lock (_gate)
+        {
+            _service?.Dispose();
+            _service = service;
+            _state = result.State;
+            _requiresRebind = false;
+            result.State.Save(session.VaultPath);
+            if (result.VaultSynced)
+            {
+                _lastError = null;
+                _lastStatus = result.AdoptedCloudKey
+                    ? $"{SyncMessages.EnabledPrefix}（{result.State.Email}）。{SyncMessages.AdoptedHint}"
+                    : $"{SyncMessages.EnabledPrefix}（{result.State.Email}）";
+            }
+            else
+            {
+                _lastStatus = null;
+                _lastError = SyncMessages.VaultPending;
+            }
+
+            StartLoopUnlocked();
+        }
+
+        RaiseChanged();
+    }
+
+    private void NoteSyncFailure(Exception ex, CancellationToken ct)
+    {
+        if (ex is OperationCanceledException && ct.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (ex is SyncKeyChangedException changed)
+        {
+            MarkKeyBlocked(changed);
+            return;
+        }
+
+        if (ex is SyncApiException api)
+        {
+            if (api.Kind == SyncFailureKind.Cancelled)
+            {
+                return;
+            }
+
+            if (api.SessionInvalid)
+            {
+                MarkSessionExpired();
+                return;
+            }
+
+            if (SyncBlocked)
+            {
+                SetError(BlockText(CurrentState()));
+                return;
+            }
+
+            SetError(api.Message);
+            return;
+        }
+
+        if (ex is CredentialRejectedException or InvalidDataException or InvalidOperationException or ArgumentException)
+        {
+            SetError(ex.Message);
+            return;
+        }
+
+        SetError("云同步失败，请稍后重试。本地数据仍可使用。");
+    }
+
+    public async Task<KeyChangeResult> RotateKeyAsync(string keyFileText, string accountPassword, bool confirmConflicts, CancellationToken ct = default)
+    {
+        await _io.WaitAsync(ct);
+        try
+        {
+            var (session, state, service) = RequireBound();
+            var result = await service.RotateKeyAsync(session, state, keyFileText, accountPassword, confirmConflicts, ct);
+            NoteKeyResult(state, result, "已更换云端密钥");
+            return result;
+        }
+        finally
+        {
+            _io.Release();
+        }
+    }
+
+    public async Task<KeyChangeResult> AdoptKeyFileAsync(string keyFileText, bool confirmConflicts, CancellationToken ct = default)
+    {
+        await _io.WaitAsync(ct);
+        try
+        {
+            var (session, state, service) = RequireBound();
+            var result = await service.AdoptKeyFileAsync(session, state, keyFileText, confirmConflicts, ct);
+            NoteKeyResult(state, result, "已用新密钥恢复同步");
+            return result;
+        }
+        finally
+        {
+            _io.Release();
+        }
+    }
+
+    private (VaultSession Session, SyncSessionState State, VaultSyncService Service) RequireBound()
+    {
+        lock (_gate)
+        {
+            if (_session is null || _state is null || _service is null)
+            {
+                throw new InvalidOperationException("请先开启云同步。");
+            }
+
+            return (_session, _state, _service);
+        }
+    }
+
+    private void NoteKeyResult(SyncSessionState state, KeyChangeResult result, string success)
+    {
+        if (!result.Committed)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _state = state;
+            _lastError = null;
+            _lastStatus = $"{success}（密钥代 {state.KeyVersion}，保险库版本 {state.VaultVersion}）";
+            StartLoopUnlocked();
+        }
+
+        RaiseChanged();
+    }
+
+    private void MarkKeyBlocked(SyncKeyChangedException ex)
+    {
+        lock (_gate)
+        {
+            if (_state is not null)
+            {
+                _state.SyncBlocked = true;
+                _state.SyncBlockReason = ex.UpgradeRequired ? "upgrade" : "key";
+                if (_session is not null)
+                {
+                    _state.Save(_session.VaultPath);
+                }
+            }
+
+            StopLoopUnlocked();
+            _lastStatus = null;
+            _lastError = ex.Message;
+        }
+
+        RaiseChanged();
+    }
+
+    private SyncSessionState? CurrentState()
+    {
+        lock (_gate)
+        {
+            return _state;
+        }
+    }
+
+    private static string BlockText(SyncSessionState? state) =>
+        state?.SyncBlockReason == "upgrade" ? SyncMessages.UpgradeRequired : SyncMessages.KeyChanged;
+
+    private void MarkSessionExpired()
+    {
+        lock (_gate)
+        {
+            _requiresRebind = true;
+            StopLoopUnlocked();
+            _lastStatus = null;
+            _lastError = SyncMessages.SessionExpired;
+        }
+
+        RaiseChanged();
+    }
+
+    private VaultSyncService OpenService(string url) =>
+        ServiceFactory?.Invoke(url) ?? new VaultSyncService(url);
+
+    private void StopLoop()
+    {
+        lock (_gate)
+        {
+            StopLoopUnlocked();
+        }
+    }
+
+    private void StopLoopUnlocked()
+    {
+        var loop = _loop;
+        _loop = null;
+        try
+        {
+            loop?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        loop?.Dispose();
+    }
+
     private void StartLoopUnlocked()
     {
-        _loop?.Cancel();
-        _loop?.Dispose();
-        var minutes = Math.Clamp(_state?.PollMinutes ?? 5, 1, 120);
+        StopLoopUnlocked();
+        if (_requiresRebind || _state is null || _state.SyncBlocked)
+        {
+            return;
+        }
+
+        var minutes = Math.Clamp(_state.PollMinutes, 1, 120);
         var cts = new CancellationTokenSource();
         _loop = cts;
         _ = Task.Run(() => PollLoopAsync(minutes, cts.Token));
@@ -403,5 +685,9 @@ public sealed class CloudSyncCoordinator : IDisposable
         }
     }
 
-    public void Dispose() => Detach();
+    public void Dispose()
+    {
+        Detach();
+        _io.Dispose();
+    }
 }

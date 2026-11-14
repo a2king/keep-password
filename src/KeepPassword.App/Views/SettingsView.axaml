@@ -287,15 +287,20 @@
         <Border Classes="section">
           <StackPanel Spacing="8">
             <TextBlock Text="云同步" Classes="h2" Margin="0,0,0,0" />
-            <TextBlock Text="使用官网账号同步加密保险库。服务器无法解密内容；本地变更后自动上传，点刷新可立即拉取。"
+            <TextBlock Text="使用已在官网完成邮箱验证的账号同步加密保险库。请保管官网验证时下载的 .kpbind。服务器只保存密文，不能解密。这里的验证码是开启同步时单独发送的 8 位字母数字，不能用注册验证码或 6 位重置码。"
                        TextWrapping="Wrap" Classes="muted" />
             <TextBlock x:Name="SyncStatusText" Classes="muted" TextWrapping="Wrap" />
 
             <StackPanel x:Name="SyncBoundPanel" IsVisible="False" Spacing="8">
               <TextBlock x:Name="SyncAccountText" FontWeight="SemiBold" />
               <TextBlock x:Name="SyncMetaText" Classes="muted" TextWrapping="Wrap" />
+              <TextBlock Text="更换云端密钥会读取一份新的 .kpkey。它是数据密钥，不是 .kpbind，也不是网站密码。只有当前密钥能解开云端数据时才会合并并提交；解密失败不会被当成空库。"
+                         TextWrapping="Wrap" Classes="muted" />
+              <TextBox x:Name="SyncRotatePasswordBox" PasswordChar="•" Watermark="换钥时填写网站密码，只在本机包裹新密钥，不保存" />
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Classes="accent" Content="立即刷新" Click="OnSyncRefresh" />
+                <Button x:Name="SyncRotateButton" Classes="soft" Content="更换云端密钥…" Click="OnSyncRotateKey" />
+                <Button x:Name="SyncAdoptButton" Classes="soft" Content="用密钥文件恢复同步…" IsVisible="False" Click="OnSyncAdoptKey" />
                 <Button Classes="danger" Content="断开云同步" Click="OnSyncDisconnect" />
               </StackPanel>
             </StackPanel>
@@ -311,8 +316,10 @@
                 <Button Grid.Column="1" Classes="soft" Content="选择…" Click="OnPickBindingKey" />
               </Grid>
               <TextBlock Text="邮箱验证码" Classes="label" />
+              <TextBlock Text="8 位字母数字，15 分钟内有效。连续错误 5 次后失效。重新发送会使上一封失效。"
+                         TextWrapping="Wrap" Classes="muted" />
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <TextBox x:Name="SyncCodeBox" Watermark="6 位验证码" Classes="mono" />
+                <TextBox x:Name="SyncCodeBox" Watermark="8 位字母数字" Classes="mono" MaxLength="8" />
                 <Button Grid.Column="1" Classes="soft" Content="发送验证码" Click="OnSyncSendCode" />
               </Grid>
               <Button Classes="accent" Content="绑定并开启同步" HorizontalAlignment="Left" Margin="0,6,0,0" Click="OnSyncBind" />
