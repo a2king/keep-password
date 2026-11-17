@@ -4,6 +4,7 @@ using Avalonia.Data;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
@@ -322,6 +323,58 @@ public class DetailPanelInteractionTests
         await WaitUntil(fixture.Window, () => !save.IsEnabled);
         Assert.False(cancel.IsEnabled);
         Assert.False(save.IsEnabled);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(740)]
+    [InlineData(460)]
+    public async Task PasswordGenerator_StaysInsideTheWindow(double windowHeight)
+    {
+        using var fixture = new PanelFixture();
+        fixture.Window.Height = windowHeight;
+        fixture.Show();
+        await Task.Delay(40); fixture.Window.UpdateLayout();
+        var generate = fixture.Panel.GetVisualDescendants().OfType<Button>()
+            .First(button => ToolTip.GetTip(button) as string == "生成密码");
+        generate.BringIntoView();
+        await Task.Delay(40); fixture.Window.UpdateLayout();
+        var anchorBottom = generate.TranslatePoint(new Point(0, generate.Bounds.Height), fixture.Window)!.Value.Y;
+        generate.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        await WaitUntil(fixture.Window, () => fixture.Window.GetVisualDescendants().OfType<FlyoutPresenter>().Any(p => p.Bounds.Height > 0));
+        var presenter = fixture.Window.GetVisualDescendants().OfType<FlyoutPresenter>().Single();
+        // 弹层要求画在窗口覆盖层里，不是独立的小窗。测试平台本身没有原生弹窗（总是用覆盖层），
+        // 所以这里直接检查弹层的设置：桌面上普通 Flyout 的这个值是 false，会伸出窗口。
+        var popup = presenter.GetLogicalAncestors().OfType<Avalonia.Controls.Primitives.Popup>().Single();
+        Assert.True(popup.ShouldUseOverlayLayer);
+        Assert.Same(fixture.Window, TopLevel.GetTopLevel(presenter));
+        // 覆盖层弹层在下一轮布局才定位，等它离开初始的 (0,0)。
+        for (var i = 0; i < 20; i++) { await Task.Delay(20); fixture.Window.UpdateLayout(); }
+        var at = presenter.TranslatePoint(default, fixture.Window)!.Value;
+        var window = fixture.Window.Bounds;
+        Assert.True(at.Y >= -0.5 && at.Y + presenter.Bounds.Height <= window.Height + 0.5,
+            $"弹层 {at.Y:F0}..{at.Y + presenter.Bounds.Height:F0} 超出窗口高度 {window.Height:F0}");
+        Assert.True(at.X >= -0.5 && at.X + presenter.Bounds.Width <= window.Width + 0.5);
+        if (anchorBottom + presenter.Bounds.Height > window.Height)
+        {
+            // 下方放不下：翻到按钮上方。
+            Assert.True(at.Y + presenter.Bounds.Height <= anchorBottom, "下方空间不足时应翻到上方");
+        }
+        else
+        {
+            Assert.True(at.Y >= anchorBottom - 0.5, "空间足够时仍在按钮下方");
+        }
+
+        // 紧凑排版：强度在标题行，长度数值与滑块同一行。
+        var texts = presenter.GetVisualDescendants().OfType<TextBlock>().ToList();
+        var title = texts.Single(text => text.Text == "生成密码");
+        var strength = texts.Single(text => text.Text?.StartsWith("强度") == true);
+        Assert.Equal(title.TranslatePoint(new Point(0, title.Bounds.Height / 2), presenter)!.Value.Y,
+            strength.TranslatePoint(new Point(0, strength.Bounds.Height / 2), presenter)!.Value.Y, precision: 0);
+        var slider = presenter.GetVisualDescendants().OfType<Slider>().Single();
+        var value = texts.Single(text => text.Text == "16");
+        Assert.Equal(slider.TranslatePoint(new Point(0, slider.Bounds.Height / 2), presenter)!.Value.Y,
+            value.TranslatePoint(new Point(0, value.Bounds.Height / 2), presenter)!.Value.Y, precision: 0);
+        fixture.Panel.ResetTransientState();
     }
 
     [AvaloniaFact]

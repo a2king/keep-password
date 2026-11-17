@@ -615,7 +615,7 @@ public partial class DetailPanelView : UserControl
     // 生成器弹层里的字符类型开关：开/关文字相同，点文字也能切换，切换时宽度不变。尺寸与全局开关一致。
     private static ToggleSwitch OptionSwitch(string label, bool isChecked)
     {
-        var toggle = new ToggleSwitch { OnContent = label, OffContent = label, IsChecked = isChecked, Margin = new Thickness(0, 4) };
+        var toggle = new ToggleSwitch { OnContent = label, OffContent = label, IsChecked = isChecked, Margin = new Thickness(0, 3) };
         AutomationProperties.SetName(toggle, label);
         return toggle;
     }
@@ -632,15 +632,30 @@ public partial class DetailPanelView : UserControl
         var uppercase = OptionSwitch("大写字母", true);
         var digits = OptionSwitch("数字", true);
         var symbols = OptionSwitch("包含符号", false);
-        var strength = new TextBlock { FontSize = 12 };
+        var strength = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
         strength.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable("Detail.TextMuted"));
-        var body = new StackPanel { Spacing = 10, Width = 268 };
-        body.Children.Add(new TextBlock { Text = "生成密码", FontSize = 15, FontWeight = FontWeight.SemiBold });
+        // 紧凑排版：标题与强度同一行，「长度 + 滑块 + 数值」同一行，字符类型 2×2 开关。
+        var body = new StackPanel { Spacing = 8, Width = 268 };
+        var title = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        title.Children.Add(new TextBlock { Text = "生成密码", FontSize = 15, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        Grid.SetColumn(strength, 1);
+        title.Children.Add(strength);
+        body.Children.Add(title);
         body.Children.Add(result);
-        body.Children.Add(strength);
-        body.Children.Add(lengthLabel);
-        body.Children.Add(length);
-        var options = new UniformGrid { Columns = 2, Rows = 2, Margin = new Thickness(0, 2, 0, 4) };
+        var lengthRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
+        lengthRow.Children.Add(new TextBlock { Text = "长度", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+        length.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(length, 1);
+        lengthRow.Children.Add(length);
+        lengthLabel.MinWidth = 24;
+        lengthLabel.TextAlignment = TextAlignment.Right;
+        lengthLabel.VerticalAlignment = VerticalAlignment.Center;
+        lengthLabel.Margin = new Thickness(10, 0, 0, 0);
+        lengthLabel.Bind(TextBlock.FontFamilyProperty, this.GetResourceObservable("Detail.Font.Mono"));
+        Grid.SetColumn(lengthLabel, 2);
+        lengthRow.Children.Add(lengthLabel);
+        body.Children.Add(lengthRow);
+        var options = new UniformGrid { Columns = 2, Rows = 2 };
         options.Children.Add(lowercase);
         options.Children.Add(uppercase);
         options.Children.Add(digits);
@@ -654,11 +669,12 @@ public partial class DetailPanelView : UserControl
         buttons.Children.Add(regenerate);
         buttons.Children.Add(apply);
         body.Children.Add(buttons);
-        var flyout = new Flyout { Content = body, Placement = PlacementMode.BottomEdgeAlignedRight };
+        // 画在窗口内：密码栏靠近窗口底部时自动翻到上方，不会伸出应用窗口。
+        var flyout = new InWindowFlyout { Content = body, Placement = PlacementMode.BottomEdgeAlignedRight };
         _flyouts.Add(flyout);
         void Generate()
         {
-            lengthLabel.Text = $"长度  {(int)length.Value}";
+            lengthLabel.Text = $"{(int)length.Value}";
             var valid = lowercase.IsChecked == true || uppercase.IsChecked == true || digits.IsChecked == true || symbols.IsChecked == true;
             apply.IsEnabled = valid;
             regenerate.IsEnabled = valid;
