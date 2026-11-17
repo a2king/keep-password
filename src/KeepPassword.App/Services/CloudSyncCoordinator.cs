@@ -36,9 +36,16 @@ public sealed class CloudSyncCoordinator : IDisposable
         get { lock (_gate) { return _state?.Email; } }
     }
 
-    public string? BindingKeyFingerprint
+    /// <summary>云端密文所用加密密钥的编号（.kpkey 文件名中的那串）。未知时为空。</summary>
+    public string? CloudKeyId
     {
-        get { lock (_gate) { return _state?.BindingKeyFingerprint; } }
+        get { lock (_gate) { return _state?.CloudKeyId; } }
+    }
+
+    /// <summary>同步因云端使用另一把密钥而暂停，等待用户选择对应的 .kpkey。</summary>
+    public bool NeedsKeyFile
+    {
+        get { lock (_gate) { return _state?.SyncBlocked == true && _state.SyncBlockReason == SyncMessages.NeedsKeyReason; } }
     }
 
     public long VaultVersion
@@ -141,10 +148,10 @@ public sealed class CloudSyncCoordinator : IDisposable
         SetStatus(SyncMessages.CodeAccepted);
     }
 
+    /// <summary>用网站账号密码和邮箱验证码绑定本机。1.0.1 起不再需要 .kpbind。</summary>
     public async Task BindAsync(
         string email,
         string password,
-        string bindingKey,
         string code,
         CancellationToken ct = default)
     {
@@ -180,7 +187,6 @@ public sealed class CloudSyncCoordinator : IDisposable
                 {
                     Email = email.Trim(),
                     Password = password,
-                    BindingKey = BindingKeyFile.Parse(bindingKey),
                     Code = code.Trim(),
                     DeviceName = Environment.MachineName,
                     Platform = OperatingSystem.IsWindows() ? "Windows"
@@ -188,7 +194,7 @@ public sealed class CloudSyncCoordinator : IDisposable
                         : OperatingSystem.IsLinux() ? "Linux" : "Unknown",
                     ClientVersion = InstallConstants.Version
                 };
-                var result = await service.CompleteBindAsync(session, request, password, ct);
+                var result = await service.CompleteBindAsync(session, request, ct);
                 CommitBind(session, service, result);
                 service = null;
             }
@@ -405,12 +411,15 @@ public sealed class CloudSyncCoordinator : IDisposable
             _state = result.State;
             _requiresRebind = false;
             result.State.Save(session.VaultPath);
-            if (result.VaultSynced)
+            if (result.NeedsKeyFile)
+            {
+                _lastStatus = null;
+                _lastError = SyncMessages.NeedsCloudKey(result.State.CloudKeyId);
+            }
+            else if (result.VaultSynced)
             {
                 _lastError = null;
-                _lastStatus = result.AdoptedCloudKey
-                    ? $"{SyncMessages.EnabledPrefix}（{result.State.Email}）。{SyncMessages.AdoptedHint}"
-                    : $"{SyncMessages.EnabledPrefix}（{result.State.Email}）";
+                _lastStatus = $"{SyncMessages.EnabledPrefix}（{result.State.Email}）";
             }
             else
             {
@@ -469,13 +478,13 @@ public sealed class CloudSyncCoordinator : IDisposable
         SetError("云同步失败，请稍后重试。本地数据仍可使用。");
     }
 
-    public async Task<KeyChangeResult> RotateKeyAsync(string keyFileText, string accountPassword, bool confirmConflicts, CancellationToken ct = default)
+    public async Task<KeyChangeResult> RotateKeyAsync(string keyFileText, bool confirmConflicts, CancellationToken ct = default)
     {
         await _io.WaitAsync(ct);
         try
         {
             var (session, state, service) = RequireBound();
-            var result = await service.RotateKeyAsync(session, state, keyFileText, accountPassword, confirmConflicts, ct);
+            var result = await service.RotateKeyAsync(session, state, keyFileText, confirmConflicts, ct);
             NoteKeyResult(state, result, "已更换云端密钥");
             return result;
         }
@@ -491,8 +500,9 @@ public sealed class CloudSyncCoordinator : IDisposable
         try
         {
             var (session, state, service) = RequireBound();
+            var waitingForKey = state.SyncBlockReason == SyncMessages.NeedsKeyReason;
             var result = await service.AdoptKeyFileAsync(session, state, keyFileText, confirmConflicts, ct);
-            NoteKeyResult(state, result, "已用新密钥恢复同步");
+            NoteKeyResult(state, result, waitingForKey ? "已用密钥文件恢复同步。" + SyncMessages.AdoptedHint : "已用新密钥恢复同步");
             return result;
         }
         finally
@@ -525,7 +535,7 @@ public sealed class CloudSyncCoordinator : IDisposable
         {
             _state = state;
             _lastError = null;
-            _lastStatus = $"{success}（密钥代 {state.KeyVersion}，保险库版本 {state.VaultVersion}）";
+            _lastStatus = $"{success}（保险库版本 {state.VaultVersion}）";
             StartLoopUnlocked();
         }
 
@@ -538,8 +548,14 @@ public sealed class CloudSyncCoordinator : IDisposable
         {
             if (_state is not null)
             {
-                _state.SyncBlocked = true;
-                _state.SyncBlockReason = ex.UpgradeRequired ? "upgrade" : "key";
+                // 同步服务在抛出前已写好原因（例如等待密钥文件），这里不覆盖。
+                if (!_state.SyncBlocked)
+                {
+                    _state.SyncBlocked = true;
+                    _state.SyncBlockReason = VaultSyncService.BlockReason(ex, _state);
+                    _state.CloudKeyId = ex.CloudKeyId ?? _state.CloudKeyId;
+                }
+
                 if (_session is not null)
                 {
                     _state.Save(_session.VaultPath);
@@ -548,7 +564,7 @@ public sealed class CloudSyncCoordinator : IDisposable
 
             StopLoopUnlocked();
             _lastStatus = null;
-            _lastError = ex.Message;
+            _lastError = _state is null ? ex.Message : BlockText(_state);
         }
 
         RaiseChanged();
@@ -562,8 +578,12 @@ public sealed class CloudSyncCoordinator : IDisposable
         }
     }
 
-    private static string BlockText(SyncSessionState? state) =>
-        state?.SyncBlockReason == "upgrade" ? SyncMessages.UpgradeRequired : SyncMessages.KeyChanged;
+    private static string BlockText(SyncSessionState? state) => state?.SyncBlockReason switch
+    {
+        "upgrade" => SyncMessages.UpgradeRequired,
+        SyncMessages.NeedsKeyReason => SyncMessages.NeedsCloudKey(state.CloudKeyId),
+        _ => SyncMessages.KeyChanged
+    };
 
     private void MarkSessionExpired()
     {

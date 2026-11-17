@@ -65,6 +65,60 @@ internal static class EncryptionKeyDialog
         return saved && session.IsUnlocked;
     }
 
+    /// <summary>
+    /// 已解锁时重新导出 .kpkey：先验证短密钥（旧格式为主密码），再选择保存位置。密钥本身不显示在界面上。
+    /// 用于原来的密钥文件丢了、但这台电脑还能解锁的情况。
+    /// </summary>
+    public static async Task<bool> ExportAsync(Window owner, VaultSession session, Action<bool>? pauseWatcher = null,
+        Func<Task<string?>>? choosePath = null)
+    {
+        if (!session.IsUnlocked) return false;
+        var master = session.HasMasterPassword;
+        var window = CreateWindow("重新导出加密密钥");
+        var box = new TextBox { PasswordChar = '•', Watermark = master ? "输入主密码" : "输入本机短密钥" };
+        box.Classes.Add("mono");
+        PasswordReveal.SetIsEnabled(box, true);
+        var status = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        var ok = new Button { Content = "验证并选择保存位置…" };
+        ok.Classes.Add("accent");
+        var cancel = new Button { Content = "取消" };
+        cancel.Classes.Add("soft");
+        var saved = false;
+        var closed = false;
+        window.Closed += (_, _) => { closed = true; box.Text = ""; };
+        ok.Click += async (_, _) =>
+        {
+            ok.IsEnabled = false;
+            try
+            {
+                var credential = box.Text ?? "";
+                var key = await Task.Run(() => session.RevealEncryptionKey(credential));
+                box.Text = "";
+                var path = choosePath is not null ? await choosePath()
+                    : await SafeStoragePickers.PickSaveFileAsync(window, "保存加密密钥文件",
+                        $"KeepPassword-密钥-{session.EncryptionKeyId}.kpkey", [KeyFileType], pauseWatcher);
+                if (closed || string.IsNullOrWhiteSpace(path) || !session.IsUnlocked) return;
+                if (!path.EndsWith(".kpkey", StringComparison.OrdinalIgnoreCase)) path += ".kpkey";
+                session.SaveEncryptionKeyFile(path, key);
+                saved = true;
+                window.Close();
+            }
+            catch (Exception ex) when (ex is CredentialRejectedException or InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+            {
+                if (!closed) status.Text = ex.Message;
+            }
+            finally { if (!closed) ok.IsEnabled = true; }
+        };
+        cancel.Click += (_, _) => window.Close();
+        window.Content = Content("重新导出加密密钥",
+            (master ? "输入主密码" : "输入本机短密钥") + "确认是你本人后，选择位置保存一份 .kpkey。它与原来的密钥文件是同一把密钥，"
+            + $"文件名中的编号 {session.EncryptionKeyId} 不变。换电脑、恢复云同步和还原备份时都用它。",
+            box, status, Buttons(cancel, ok));
+        await ShowAsync(window, owner, session);
+        box.Text = "";
+        return saved && session.IsUnlocked;
+    }
+
     public static async Task<string?> AskAsync(Window owner, string title, VaultSession? session = null,
         Action<bool>? pauseWatcher = null, bool verifyCurrent = true)
     {

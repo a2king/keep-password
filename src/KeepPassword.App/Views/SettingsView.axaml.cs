@@ -1067,15 +1067,26 @@ public partial class SettingsView : UserControl
             ? "尚未升级。请先更换一次主密码，生成并永久保存独立加密密钥。"
             : session.NeedsKeyFileSave ? "密钥文件尚未保存，请选择文件夹完成保存。"
             : localKey
-                ? "密钥文件已保存。换电脑、忘记短密钥、还原备份和明文导出时，请提供你永久保管的密钥。"
-                : "密钥文件已保存。还原备份、明文导出和重置主密码时，请提供你永久保管的密钥。";
+                ? $"密钥文件已保存（编号 {session.EncryptionKeyId}）。换电脑、忘记短密钥、还原备份和明文导出时，请提供你永久保管的密钥。文件丢了可以在这里重新导出。"
+                : $"密钥文件已保存（编号 {session.EncryptionKeyId}）。还原备份、明文导出和重置主密码时，请提供你永久保管的密钥。";
         SavePendingKeyButton.IsVisible = session.NeedsKeyFileSave;
+        ExportKeyButton.IsVisible = session.UsesIndependentKey && !session.NeedsKeyFileSave;
         UpgradeLocalKeyButton.IsVisible = session.NeedsLocalKeyUpgrade && !session.NeedsKeyFileSave;
     }
 
     private async void OnSavePendingKey(object? sender, RoutedEventArgs e)
     {
         if (_session is { IsUnlocked: true } session) await SavePendingKeyAsync(session);
+    }
+
+    private async void OnExportKey(object? sender, RoutedEventArgs e)
+    {
+        if (_session is not { IsUnlocked: true } session) return;
+        if (await EncryptionKeyDialog.ExportAsync(Host, session, _pauseWatcher) && _session == session)
+        {
+            UpdateEncryptionKeyStatus();
+            EncryptionKeyStatus.Text = $"已重新导出加密密钥文件（编号 {session.EncryptionKeyId}）。请永久保管，并与保险库备份分开存放。";
+        }
     }
 
     private async Task SavePendingKeyAsync(VaultSession session)
@@ -1110,9 +1121,9 @@ public partial class SettingsView : UserControl
             SyncAccountText.Text = sync.Email ?? "";
             SyncMetaText.Text =
                 $"云端版本 {sync.VaultVersion}"
-                + (string.IsNullOrEmpty(sync.BindingKeyFingerprint)
+                + (string.IsNullOrEmpty(sync.CloudKeyId)
                     ? ""
-                    : $" · 绑定密钥指纹 {sync.BindingKeyFingerprint}");
+                    : $" · 加密密钥编号 {sync.CloudKeyId}（换电脑时带上文件名含此编号的 .kpkey）");
             SyncAdoptButton.IsVisible = sync.CanAdoptKey;
             SyncRotateButton.IsEnabled = !sync.SyncBlocked;
         }
@@ -1145,25 +1156,6 @@ public partial class SettingsView : UserControl
         }
     }
 
-    private async void OnPickBindingKey(object? sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var path = await SafeStoragePickers.PickOpenFileAsync(Host, "选择绑定密钥文件",
-            [
-                new FilePickerFileType("Keep Password 绑定密钥") { Patterns = ["*.kpbind"] }
-            ], _pauseWatcher);
-            if (!string.IsNullOrWhiteSpace(path))
-            {
-                SyncBindingKeyBox.Text = File.ReadAllText(path);
-            }
-        }
-        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
-        {
-            ShowSyncError(ex.Message);
-        }
-    }
-
     private async void OnSyncBind(object? sender, RoutedEventArgs e)
     {
         if (_sync is null || _session is null)
@@ -1188,7 +1180,6 @@ public partial class SettingsView : UserControl
             await _sync.BindAsync(
                 SyncEmailBox.Text ?? "",
                 SyncPasswordBox.Text ?? "",
-                SyncBindingKeyBox.Text ?? "",
                 SyncCodeBox.Text ?? "");
             ClearSyncSecrets();
             if (_sync.HasError)
@@ -1249,13 +1240,6 @@ public partial class SettingsView : UserControl
             return;
         }
 
-        var password = SyncRotatePasswordBox.Text ?? "";
-        if (password.Length == 0)
-        {
-            ShowSyncError("换钥需要网站密码，只用来在本机包裹新的数据密钥，不会保存。");
-            return;
-        }
-
         var path = await SafeStoragePickers.PickOpenFileAsync(Host, "选择新的加密密钥文件", [EncryptionKeyDialog.KeyFileType], _pauseWatcher);
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -1265,7 +1249,7 @@ public partial class SettingsView : UserControl
         try
         {
             var text = await File.ReadAllTextAsync(path);
-            var preview = await _sync.RotateKeyAsync(text, password, confirmConflicts: false);
+            var preview = await _sync.RotateKeyAsync(text, confirmConflicts: false);
             if (preview.NeedsConfirmation)
             {
                 var agreed = await Dialogs.ConfirmAsync(Host, "确认合并后换钥",
@@ -1276,10 +1260,9 @@ public partial class SettingsView : UserControl
                     return;
                 }
 
-                await _sync.RotateKeyAsync(text, password, confirmConflicts: true);
+                await _sync.RotateKeyAsync(text, confirmConflicts: true);
             }
 
-            SyncRotatePasswordBox.Text = "";
             SyncErrorBox.IsVisible = false;
             VaultChanged?.Invoke(this, EventArgs.Empty);
             RefreshSyncUi();
@@ -1297,7 +1280,8 @@ public partial class SettingsView : UserControl
             return;
         }
 
-        var path = await SafeStoragePickers.PickOpenFileAsync(Host, "选择新的加密密钥文件", [EncryptionKeyDialog.KeyFileType], _pauseWatcher);
+        var title = string.IsNullOrEmpty(_sync.CloudKeyId) ? "选择云端使用的加密密钥文件" : $"选择编号 {_sync.CloudKeyId} 的加密密钥文件";
+        var path = await SafeStoragePickers.PickOpenFileAsync(Host, title, [EncryptionKeyDialog.KeyFileType], _pauseWatcher);
         if (string.IsNullOrWhiteSpace(path))
         {
             return;
@@ -1349,7 +1333,6 @@ public partial class SettingsView : UserControl
     private void ClearSyncSecrets()
     {
         SyncPasswordBox.Text = "";
-        SyncBindingKeyBox.Text = "";
         SyncCodeBox.Text = "";
     }
 

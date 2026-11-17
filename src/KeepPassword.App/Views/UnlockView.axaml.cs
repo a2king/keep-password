@@ -257,6 +257,21 @@ public partial class UnlockView : UserControl
         _ = Motion.EnterAsync(UnlockForm, 4);
     }
 
+    private void OnCreateWithExistingKey(object? sender, RoutedEventArgs e)
+    {
+        View?.UseExistingKeyForCreate();
+        RecoveryKeyBox.Focus();
+        _ = Motion.EnterAsync(UnlockForm, 4);
+    }
+
+    private void OnCreateWithNewKey(object? sender, RoutedEventArgs e)
+    {
+        View?.UseNewKeyForCreate();
+        RecoveryKeyBox.Text = "";
+        ShortBox.Focus();
+        _ = Motion.EnterAsync(UnlockForm, 4);
+    }
+
     private void OnBeginRecovery(object? sender, RoutedEventArgs e)
     {
         View?.BeginRecovery();

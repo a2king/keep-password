@@ -23,6 +23,7 @@ public sealed class UnlockViewModel : ViewModelBase
     private bool _useMaster;
     private bool _useEncryptionKey;
     private bool _isLocalKeyVault;
+    private bool _createWithKey;
     private string _answer1 = "";
     private string _answer2 = "";
     private string _answer3 = "";
@@ -60,7 +61,9 @@ public sealed class UnlockViewModel : ViewModelBase
         {
             if (IsCreate)
             {
-                return "设置短密钥后，将生成一把独立的加密密钥。请按提示永久保存密钥文件；本机之后用短密钥解锁，换电脑或忘记短密钥时用密钥文件。";
+                return _createWithKey
+                    ? "选择你保存的加密密钥文件（.kpkey），再设置本机短密钥。新保险库沿用这把密钥，开启云同步后会直接下载并合并云端数据。"
+                    : "设置短密钥后，将生成一把独立的加密密钥。请按提示永久保存密钥文件；本机之后用短密钥解锁。换电脑时请选择「使用已有加密密钥」。";
             }
 
             if (IsRecovering)
@@ -129,6 +132,9 @@ public sealed class UnlockViewModel : ViewModelBase
     public bool ShowHint => IsCreate || IsRecovering || ShowPairingShort || ShowKeyUnlock;
 
     public bool ShowCreateShort => IsCreate;
+    public bool CreateWithExistingKey => IsCreate && _createWithKey;
+    public bool ShowUseExistingKey => IsCreate && !_createWithKey;
+    public bool ShowUseNewKey => IsCreate && _createWithKey;
 
     public bool ShowCreateConfirmShort => IsCreate;
 
@@ -170,7 +176,7 @@ public sealed class UnlockViewModel : ViewModelBase
     public string SubmitText => IsRecovering
         ? (_isLocalKeyVault ? "重置短密钥并解锁" : "重置并解锁")
         : IsCreate
-            ? "创建并解锁"
+            ? (_createWithKey ? "导入密钥并创建" : "创建并解锁")
             : ShowKeyUnlock
                 ? "导入密钥并解锁"
                 : "解锁";
@@ -178,7 +184,7 @@ public sealed class UnlockViewModel : ViewModelBase
     public string RecoveryWarning => RecoveryRisk.Warning;
 
     public bool SupportsKeyRecovery { get; private set; }
-    public bool ShowKeyRecovery => (IsRecovering && SupportsKeyRecovery) || ShowKeyUnlock;
+    public bool ShowKeyRecovery => (IsRecovering && SupportsKeyRecovery) || ShowKeyUnlock || CreateWithExistingKey;
     public bool ShowLegacyRecovery => IsRecovering && !SupportsKeyRecovery && !_isLocalKeyVault;
     public string EncryptionKey { get; set; } = "";
 
@@ -313,6 +319,23 @@ public sealed class UnlockViewModel : ViewModelBase
         NotifyMode();
     }
 
+    /// <summary>换电脑：用已保存的 .kpkey 创建本机保险库，不生成新密钥。</summary>
+    public void UseExistingKeyForCreate()
+    {
+        if (!IsCreate) return;
+        _createWithKey = true;
+        Error = "";
+        NotifyMode();
+    }
+
+    public void UseNewKeyForCreate()
+    {
+        _createWithKey = false;
+        EncryptionKey = "";
+        Error = "";
+        NotifyMode();
+    }
+
     public void UseShortKey()
     {
         _useMaster = false;
@@ -354,7 +377,7 @@ public sealed class UnlockViewModel : ViewModelBase
             return false;
         }
 
-        if ((ShowKeyUnlock || (IsRecovering && (_isLocalKeyVault || SupportsKeyRecovery))) && string.IsNullOrEmpty(EncryptionKey))
+        if ((ShowKeyUnlock || CreateWithExistingKey || (IsRecovering && (_isLocalKeyVault || SupportsKeyRecovery))) && string.IsNullOrEmpty(EncryptionKey))
         {
             Error = "请选择或粘贴加密密钥。";
             return false;
@@ -370,6 +393,7 @@ public sealed class UnlockViewModel : ViewModelBase
         var answers = new[] { Answer1, Answer2, Answer3 };
         var useShort = ShowShortUnlock;
         var useKey = ShowKeyUnlock || (IsRecovering && _isLocalKeyVault);
+        var createWithKey = CreateWithExistingKey;
         var encryptionKey = EncryptionKey;
         if ((IsCreate || ShowKeyUnlock) && string.IsNullOrEmpty(shortKey))
         {
@@ -395,7 +419,7 @@ public sealed class UnlockViewModel : ViewModelBase
 
                 if (IsCreate)
                 {
-                    return _store.CreateLocalSession(_path, shortKey);
+                    return _store.CreateLocalSession(_path, shortKey, encryptionKey: createWithKey ? encryptionKey : null);
                 }
 
                 if (useKey)
@@ -529,6 +553,9 @@ public sealed class UnlockViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowLegacyRecovery));
         OnPropertyChanged(nameof(ShowCreateShort));
         OnPropertyChanged(nameof(ShowCreateConfirmShort));
+        OnPropertyChanged(nameof(CreateWithExistingKey));
+        OnPropertyChanged(nameof(ShowUseExistingKey));
+        OnPropertyChanged(nameof(ShowUseNewKey));
         OnPropertyChanged(nameof(SubmitText));
         OnPropertyChanged(nameof(Initial));
     }

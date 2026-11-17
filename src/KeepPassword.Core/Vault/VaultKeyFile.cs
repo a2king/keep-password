@@ -9,6 +9,20 @@ public static class VaultKeyFile
 {
     internal static string Encode(byte[] key) => "KP2-" + Convert.ToBase64String(key);
 
+    /// <summary>
+    /// 密钥编号：SHA-256 的前 12 位十六进制，就是 .kpkey 文件名里的那串编号。
+    /// 只用于让用户认出该选哪一份密钥文件，也会上报给同步服务器做核对；不能用来解密。
+    /// </summary>
+    public static string Id(byte[] key) => Convert.ToHexString(SHA256.HashData(key))[..12];
+
+    /// <summary>读取密钥文本并返回编号，不暴露密钥本身。格式不对时抛出 <see cref="CredentialRejectedException"/>。</summary>
+    public static string IdOf(string keyText)
+    {
+        var key = Parse(keyText);
+        try { return Id(key); }
+        finally { CryptographicOperations.ZeroMemory(key); }
+    }
+
     public static string Read(string path)
     {
         if (new FileInfo(path).Length > 4096)

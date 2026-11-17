@@ -46,7 +46,7 @@ public sealed partial class VaultSession
 
     public string EncryptionKeyId
     {
-        get { lock (_gate) { EnsureUnlocked(); return Convert.ToHexString(SHA256.HashData(_dataKey))[..12]; } }
+        get { lock (_gate) { EnsureUnlocked(); return VaultKeyFile.Id(_dataKey); } }
     }
 
     /// <summary>返回数据密钥副本，调用方负责清零。仅用于同步包裹/解密云端文件。</summary>
@@ -69,6 +69,31 @@ public sealed partial class VaultSession
                 if (!NeedsKeyFileSave) throw new InvalidOperationException("密钥已保存，请使用你保管的密钥文件。");
                 return VaultKeyFile.Encode(_dataKey);
             }
+        }
+    }
+
+    /// <summary>
+    /// 重新导出加密密钥：先验证本机短密钥（本地密钥保险库）或主密码（旧格式），再返回完整密钥文本。
+    /// 用于丢了 .kpkey 但这台电脑还能解锁的情况。返回的是长期有效的明文密钥，调用方应立即写入文件并丢弃。
+    /// </summary>
+    public string RevealEncryptionKey(string credential)
+    {
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            if (_formatVersion < VaultStore.IndependentKeyVersion)
+                throw new InvalidOperationException("请先在设置中更换一次主密码，升级保险库并保存独立加密密钥。");
+            if (_passwordWrap is null)
+            {
+                if (!VerifyShortKey(credential)) throw new CredentialRejectedException("短密钥不正确。");
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(credential)) throw new CredentialRejectedException("主密码不正确。");
+                VerifyMasterPassword(credential);
+            }
+
+            return VaultKeyFile.Encode(_dataKey);
         }
     }
 
