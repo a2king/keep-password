@@ -424,6 +424,10 @@ public class CloudSyncContractTests
             new HttpRequestException("tls secret", new System.Security.Authentication.AuthenticationException("tls secret")),
             SyncFailureKind.Tls,
             "安全连接失败");
+        await AssertTransport(
+            new HttpRequestException(HttpRequestError.NameResolutionError, "dns secret"),
+            SyncFailureKind.Network,
+            "域名 sync.test 解析失败");
 
         var html = new Script();
         html.On = (_, _) => new HttpResponseMessage(HttpStatusCode.InternalServerError)
@@ -757,6 +761,7 @@ public class CloudSyncContractTests
         var error = await Assert.ThrowsAsync<SyncApiException>(() => api.PingAsync());
         Assert.Equal(kind, error.Kind);
         Assert.Contains(snippet, error.Message);
+        Assert.Contains("sync.test", error.Message);
         Assert.DoesNotContain("secret", error.Message);
     }
 
