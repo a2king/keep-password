@@ -612,11 +612,10 @@ public partial class DetailPanelView : UserControl
         return combo;
     }
 
-    // 生成器弹层里的字符类型开关：开/关文字相同，点文字也能切换，切换时宽度不变。
+    // 生成器弹层里的字符类型开关：开/关文字相同，点文字也能切换，切换时宽度不变。尺寸与全局开关一致。
     private static ToggleSwitch OptionSwitch(string label, bool isChecked)
     {
         var toggle = new ToggleSwitch { OnContent = label, OffContent = label, IsChecked = isChecked, Margin = new Thickness(0, 4) };
-        toggle.Classes.Add("compact");
         AutomationProperties.SetName(toggle, label);
         return toggle;
     }

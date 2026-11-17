@@ -14,6 +14,30 @@ namespace KeepPassword.App.Tests;
 public class LiquidGlassInteractionTests
 {
     [AvaloniaFact]
+    public async Task Segmented_SelectingDoesNotScrollTheOuterPage()
+    {
+        var segments = new SegmentedControl { ItemsSource = new[] { "密码", "SSH 密钥" } };
+        var page = new StackPanel { Children = { new Border { Height = 900 }, segments, new Border { Height = 300 } } };
+        var scroller = new ScrollViewer { Content = page };
+        var window = new Window { Width = 400, Height = 300, Content = scroller };
+        try
+        {
+            window.Show();
+            await Frames(window, 60);
+            Assert.Equal(0, scroller.Offset.Y);
+            segments.SelectedIndex = 1;
+            await Frames(window, 60);
+            segments.SelectedIndex = 0;
+            await Frames(window, 60);
+            Assert.Equal(0, scroller.Offset.Y);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Segmented_ThumbSlidesToSelectionAndFollowsResize()
     {
         var segments = new SegmentedControl { ItemsSource = new[] { "随机字符", "容易记住", "PIN" }, Margin = new Thickness(24) };
@@ -98,10 +122,17 @@ public class LiquidGlassInteractionTests
             Press(window, PhysicalKey.Space);
             Assert.True(toggle.IsChecked);
             await Frames(window, 30);
-            // 开/关文字叠放，切换不改变控件宽度；滑块 12px 位移落在轨道内。
+            // 开/关文字叠放，切换不改变控件宽度；滑块 10px 位移落在轨道内。
             Assert.Equal(width, toggle.Bounds.Width);
             var thumb = toggle.GetVisualDescendants().OfType<Panel>().Single(p => p.Name == "PART_Thumb");
-            Assert.Equal(12, thumb.RenderTransform!.Value.M31, precision: 1);
+            var travel = thumb.RenderTransform!.Value.M31;
+            Assert.Equal(10, travel, precision: 1);
+            // 全局唯一尺寸：轨道 40×22、滑块 26×18、四周留 2px；开启后滑块离右边同样 2px。
+            var track = toggle.GetVisualDescendants().OfType<Panel>().Single(p => p.Name == "PART_Switch");
+            Assert.Equal(new Size(40, 22), track.Bounds.Size);
+            Assert.Equal(new Rect(2, 2, 26, 18), thumb.Bounds);
+            Assert.Equal(2, track.Bounds.Width - (thumb.Bounds.Right + travel), precision: 1);
+            Assert.Equal(22, toggle.Bounds.Height, precision: 1);
             // 未设置 OnContent/OffContent 时不显示 Fluent 默认的英文 On/Off。
             Assert.DoesNotContain(plain.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text is ("On" or "Off"));
 
