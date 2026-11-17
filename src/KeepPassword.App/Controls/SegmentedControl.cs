@@ -30,6 +30,10 @@ public class SegmentedControl : ListBox
     {
         // 分段切换总有一项被选中；点击已选项不会取消选择。
         SelectionMode = SelectionMode.Single | SelectionMode.AlwaysSelected;
+        // 所有选项始终可见（模板里没有滚动区），不需要"滚动到选中项"。ListBox 默认会在设置选中项时
+        // 发出 BringIntoView，内部无处可滚时请求会冒泡到外层页面的 ScrollViewer，把整页滚走
+        // （例如打开集群服务时认证方式一绑定，详情就往下跳约 350px）。
+        AutoScrollToSelectedItem = false;
         // ListBoxItem 会把指针按下标记为已处理，这里用 handledEventsToo 仍能拿到按压态。
         AddHandler(PointerPressedEvent, OnAnyPointerPressed, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, true);
         AddHandler(PointerReleasedEvent, OnAnyPointerReleased, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, true);

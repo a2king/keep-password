@@ -326,6 +326,25 @@ public class DetailDrawerTests
         Point ScrollerPosition, Rect ScrollerBounds, double TitleHeight,
         Point AccountPosition, Rect AccountBounds, Point? NodePosition, Rect? NodeBounds);
 
+    [AvaloniaFact]
+    public async Task OpeningClusterEntry_StartsAtTheTopOfTheEditor()
+    {
+        using var fixture = await DrawerFixture.CreateAsync(customizeEntries: (first, second) =>
+        {
+            first.Kind = second.Kind = VaultItemKind.Cluster;
+            first.Nodes = [new ClusterNode { Name = "graphd-1", Host = "192.0.2.10", Port = "9669" }];
+            second.Nodes = [new ClusterNode { Name = "graphd-2", Host = "192.0.2.11", Port = "9669" }];
+        });
+        foreach (var entry in new[] { fixture.First, fixture.Second })
+        {
+            fixture.ClickEntry(entry.Id);
+            await fixture.WaitUntilAsync(() => fixture.IsOpen);
+            await fixture.ObserveFramesAsync(TimeSpan.FromMilliseconds(400));
+            Assert.True(fixture.Scroller.Extent.Height > fixture.Scroller.Viewport.Height, "需要内容足够长才能复现下滚");
+            Assert.Equal(0, fixture.Scroller.Offset.Y);
+        }
+    }
+
     [AvaloniaTheory]
     [InlineData(VaultItemKind.SshKey)]
     [InlineData(VaultItemKind.ApiCredential)]
