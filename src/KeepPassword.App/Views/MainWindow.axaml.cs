@@ -58,6 +58,9 @@ public partial class MainWindow : Window
         ModernDetail.ScanRequested += field => OnScanTotpField(new Button { Tag = field }, new RoutedEventArgs());
         ModernDetail.RemoveAccountRequested += account => OnRemoveAccount(new Button { Tag = account }, new RoutedEventArgs());
         ModernDetail.RemoveCustomFieldRequested += field => OnRemoveCustomField(new Button { Tag = field }, new RoutedEventArgs());
+        LegacyFooter.SaveRequested += () => OnSave(this, new RoutedEventArgs());
+        LegacyFooter.DeleteRequested += () => OnDelete(this, new RoutedEventArgs());
+        LegacyFooter.CancelRequested += OnLegacyCancel;
         UnlockRoot.Unlocked += session => Unlocked?.Invoke(session);
         SettingsRoot.VaultChanged += (_, _) => View?.Reload();
         SettingsRoot.LockRequested += (_, _) => LockRequested?.Invoke(this, EventArgs.Empty);
@@ -874,6 +877,43 @@ public partial class MainWindow : Window
         {
             if (!ModernDetail.IsVisible) _ = Motion.FadeAsync(DetailStatus);
         }
+
+        if (e.PropertyName is nameof(MainViewModel.IsDirty) or nameof(MainViewModel.IsNewItem) or nameof(MainViewModel.HasDetail))
+        {
+            UpdateLegacyFooter();
+        }
+    }
+
+    /// <summary>旧编辑器的底栏与新版详情同一套规则：没有修改时撤销、保存置灰；新建时显示「取消 / 创建条目」，删除置灰。</summary>
+    private void UpdateLegacyFooter()
+    {
+        var view = View;
+        var open = view is { HasDetail: true };
+        var isNew = open && view!.IsNewItem;
+        var changed = open && (isNew || view!.IsDirty);
+        LegacyFooter.IsNew = isNew;
+        LegacyFooter.IsShown = changed;
+        // 旧编辑器没有行内校验提示，保存按钮随修改可用，点了再弹出具体原因。
+        LegacyFooter.CanSave = changed;
+        LegacyFooter.CanDelete = open && !isNew;
+    }
+
+    private async void OnLegacyCancel()
+    {
+        if (View is not { HasDetail: true } view)
+        {
+            return;
+        }
+
+        if (view.IsNewItem)
+        {
+            await CloseDetailAsync();
+            return;
+        }
+
+        view.Load(view.DetailId);
+        SynchronizeDetailView();
+        view.Status = "已撤销修改";
     }
 
     private int BeginDetailChange()
@@ -901,6 +941,7 @@ public partial class MainWindow : Window
         if (modern) ModernDetail.Refresh(resetState: reset);
         _presentedDetailId = view?.DetailId;
         UpdateLegacyTotpSubscription();
+        UpdateLegacyFooter();
     }
 
     private void UpdateLegacyTotpSubscription()

@@ -326,6 +326,74 @@ public class DetailDrawerTests
         Point ScrollerPosition, Rect ScrollerBounds, double TitleHeight,
         Point AccountPosition, Rect AccountBounds, Point? NodePosition, Rect? NodeBounds);
 
+    [AvaloniaTheory]
+    [InlineData(VaultItemKind.SshKey)]
+    [InlineData(VaultItemKind.ApiCredential)]
+    [InlineData(VaultItemKind.Cluster)]
+    public async Task LegacyEditor_UsesTheSameFooter_UndoAndSaveGreyUntilEdited(VaultItemKind kind)
+    {
+        using var fixture = await DrawerFixture.CreateAsync(customizeEntries: (first, second) =>
+        {
+            first.Kind = second.Kind = kind;
+            if (kind == VaultItemKind.Cluster)
+            {
+                first.Nodes = [new ClusterNode { Name = "Test node", Host = "192.0.2.10", Port = "22" }];
+                second.Nodes = [new ClusterNode { Name = "Test node", Host = "192.0.2.11", Port = "22" }];
+            }
+            else
+            {
+                // SSH 密钥和 API 凭据没有账号列表，只有各自的必填字段。
+                first.Accounts = [];
+                second.Accounts = [];
+                var key = kind == VaultItemKind.SshKey ? FieldKeys.PrivateKey : FieldKeys.ApiKey;
+                first.Fields[key] = "test-only-secret-1";
+                second.Fields[key] = "test-only-secret-2";
+            }
+        });
+        Assert.Null(fixture.Modern);
+        fixture.ClickEntry(fixture.First.Id);
+        await fixture.WaitUntilAsync(() => fixture.IsOpen);
+        var bar = fixture.Window.FindControl<KeepPassword.App.Controls.Details.SaveBar>("LegacyFooter")!;
+        Assert.True(bar.IsEffectivelyVisible);
+        var buttons = bar.GetVisualDescendants().OfType<Button>().ToDictionary(button => button.Name!);
+        Assert.True(buttons["PART_Delete"].IsEnabled);
+        Assert.False(buttons["PART_Cancel"].IsEnabled);
+        Assert.False(buttons["PART_SaveButton"].IsEnabled);
+        SaveBarLayout.AssertDeleteLeftUndoSaveRight(bar);
+        // 与新版详情的底栏在面板里的位置、尺寸一致。
+        var panelBar = bar.TranslatePoint(default, fixture.Panel)!.Value;
+        var border = fixture.Panel.BorderThickness.Left;
+        Assert.Equal(border, panelBar.X, precision: 1);
+        Assert.Equal(fixture.Panel.Bounds.Width - border, bar.Bounds.Width, precision: 1);
+        Assert.Equal(64, bar.Bounds.Height, precision: 1);
+        Assert.Equal(fixture.Panel.Bounds.Height, panelBar.Y + bar.Bounds.Height, precision: 1);
+        // 不再保留旧的「删除」「保存修改」按钮：这两个文字只出现在底栏里。
+        var outside = fixture.Panel.GetVisualDescendants().OfType<TextBlock>().Where(text => !text.GetVisualAncestors().Contains(bar));
+        Assert.DoesNotContain(outside, text => text.Text is "删除" or "保存修改" or "删除条目" or "撤销修改");
+
+        var view = fixture.Window.View!;
+        view.Name = "Edited name";
+        fixture.Window.UpdateLayout();
+        Assert.True(buttons["PART_Cancel"].IsEnabled);
+        Assert.True(buttons["PART_SaveButton"].IsEnabled);
+
+        buttons["PART_Cancel"].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        fixture.Window.UpdateLayout();
+        Assert.Equal(fixture.First.Name, view.Name);
+        Assert.False(view.IsDirty);
+        Assert.False(buttons["PART_Cancel"].IsEnabled);
+        Assert.False(buttons["PART_SaveButton"].IsEnabled);
+        Assert.True(view.HasDetail);
+
+        view.Name = "Saved name";
+        fixture.Window.UpdateLayout();
+        buttons["PART_SaveButton"].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        await fixture.WaitUntilAsync(() => !buttons["PART_SaveButton"].IsEnabled);
+        Assert.Equal("Saved name", view.Name);
+        Assert.False(view.IsDirty);
+        Assert.False(buttons["PART_Cancel"].IsEnabled);
+    }
+
     private sealed class DrawerFixture : IDisposable
     {
         private readonly string _directory;

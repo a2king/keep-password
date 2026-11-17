@@ -290,23 +290,26 @@ public class DetailPanelInteractionTests
     }
 
     [AvaloniaFact]
-    public async Task SaveBar_IsAlwaysPresentGreyWhenCleanAndEnabledWhenDirty_CancelLeftSaveRight()
+    public async Task SaveBar_IsAlwaysPresentGreyWhenCleanAndEnabledWhenDirty_DeleteLeftUndoAndSaveRight()
     {
         using var fixture = new PanelFixture();
         fixture.Show();
         await Task.Delay(40); fixture.Window.UpdateLayout();
+        var delete = fixture.Panel.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "PART_Delete");
         var cancel = fixture.Panel.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "PART_Cancel");
         var save = fixture.Panel.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "PART_SaveButton");
-        // 没有修改：保存栏常驻可见，两个按钮灰色禁用，也没有提示文字。
-        Assert.True(cancel.IsVisible && save.IsVisible);
+        // 没有修改：保存栏常驻可见，撤销和保存灰色禁用，删除可用，也没有提示文字。
+        Assert.True(delete.IsVisible && cancel.IsVisible && save.IsVisible);
+        Assert.True(delete.IsEnabled);
         Assert.False(cancel.IsEnabled);
         Assert.False(save.IsEnabled);
         var bar = fixture.Panel.GetVisualDescendants().OfType<SaveBar>().Single();
         Assert.DoesNotContain(bar.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "有未保存的修改");
-        // 撤销靠左、保存靠右。
-        Assert.True(cancel.TranslatePoint(default, bar)!.Value.X < save.TranslatePoint(default, bar)!.Value.X);
-        Assert.True(cancel.TranslatePoint(default, bar)!.Value.X < bar.Bounds.Width / 2);
-        Assert.True(save.TranslatePoint(default, bar)!.Value.X + save.Bounds.Width > bar.Bounds.Width / 2);
+        SaveBarLayout.AssertDeleteLeftUndoSaveRight(bar);
+        var deletes = 0;
+        fixture.Panel.DeleteRequested += () => deletes++;
+        delete.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(1, deletes);
         // 有修改后两个按钮恢复可用；撤销回原值后再次变灰。
         var row = UsernameRow(fixture.Panel);
         row.BeginEdit();
@@ -319,6 +322,22 @@ public class DetailPanelInteractionTests
         await WaitUntil(fixture.Window, () => !save.IsEnabled);
         Assert.False(cancel.IsEnabled);
         Assert.False(save.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public async Task SaveBar_NewItem_DeleteIsGreyAndUndoSaveBecomeCancelCreate()
+    {
+        using var fixture = new PanelFixture();
+        fixture.Show();
+        await Task.Delay(40); fixture.Window.UpdateLayout();
+        var bar = fixture.Panel.GetVisualDescendants().OfType<SaveBar>().Single();
+        bar.IsNew = true;
+        bar.CanDelete = false;
+        fixture.Window.UpdateLayout();
+        var buttons = bar.GetVisualDescendants().OfType<Button>().ToDictionary(button => button.Name!);
+        Assert.False(buttons["PART_Delete"].IsEnabled);
+        Assert.Equal("取消", buttons["PART_Cancel"].Content);
+        Assert.Equal("创建条目", buttons["PART_SaveButton"].Content);
     }
 
     [AvaloniaTheory]

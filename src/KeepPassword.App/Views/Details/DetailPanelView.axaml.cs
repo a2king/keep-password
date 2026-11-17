@@ -75,6 +75,7 @@ public partial class DetailPanelView : UserControl
         HeaderControl.DeleteRequested += () => DeleteRequested?.Invoke();
         Footer.SaveRequested += RequestSave;
         Footer.CancelRequested += CancelChanges;
+        Footer.DeleteRequested += () => DeleteRequested?.Invoke();
         AccountsSection.AccountSelected += account => _presentation?.SelectAccount(account);
         AccountsSection.AddRequested += () =>
         {
@@ -145,6 +146,7 @@ public partial class DetailPanelView : UserControl
             QuickActions.SetActions([]);
             Footer.IsShown = false;
             Footer.CanSave = false;
+            Footer.CanDelete = false;
             _detailId = Guid.Empty;
             return;
         }
@@ -469,6 +471,7 @@ public partial class DetailPanelView : UserControl
         Footer.IsNew = source.IsNewItem;
         Footer.IsShown = source.IsNewItem || presentation.IsDirty;
         Footer.CanSave = Footer.IsShown && presentation.CanSave;
+        Footer.CanDelete = source.HasDetail && !source.IsNewItem;
         if (HeaderControl.ValidationMessage.Length > 0 && !string.IsNullOrWhiteSpace(source.Name)) HeaderControl.ValidationMessage = "";
     }
 

@@ -29,7 +29,7 @@
 | `src/KeepPassword.App/Controls/Details/SegmentedControl.cs` | 基于原生选择控件的账号/认证切换、方向键与焦点环 |
 | `src/KeepPassword.App/Controls/Details/DetailHeader.cs` | 固定头部、直接编辑标题、类型/空间副标题、收藏/菜单/关闭 |
 | `src/KeepPassword.App/Controls/Details/QuickActionBar.cs` | 当前账号的可用快捷操作；隐藏空值项，其余均分 |
-| `src/KeepPassword.App/Controls/Details/SaveBar.cs` | 已有条目的脏状态保存条、新建条目的固定创建/取消条 |
+| `src/KeepPassword.App/Controls/Details/SaveBar.cs` | 详情底栏，所有条目类型（含旧编辑器）共用：删除条目在最左，撤销修改、保存修改相邻（间隔 5px）靠右；没有修改时撤销和保存置灰，新建时显示「取消 / 创建条目」且删除置灰 |
 | `src/KeepPassword.App/Controls/Details/ToastHost.cs` | 面板顶部居中提示，1.8 秒自动消失；重复操作替换旧提示 |
 | `src/KeepPassword.App/Controls/Details/AccountSection.cs` | 仅展示当前账号，账号说明→用户名→账号 N 的页签标题回退，增删确认 |
 | `src/KeepPassword.App/Views/Details/DetailPanelView.axaml` 与 `.axaml.cs` | 固定头部、滚动内容、Toast 与底部保存条的统一宿主；键盘/滚动协调 |
