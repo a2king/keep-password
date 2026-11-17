@@ -320,10 +320,14 @@
                          TextWrapping="Wrap" Classes="muted" />
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <TextBox x:Name="SyncCodeBox" Watermark="8 位字母数字" Classes="mono" MaxLength="8" />
-                <Button Grid.Column="1" Classes="soft" Content="发送验证码" Click="OnSyncSendCode" />
+                <Button x:Name="SyncSendCodeButton" Grid.Column="1" Classes="soft" Content="发送验证码" Click="OnSyncSendCode" />
               </Grid>
               <Button Classes="accent" Content="绑定并开启同步" HorizontalAlignment="Left" Margin="0,6,0,0" Click="OnSyncBind" />
             </StackPanel>
+
+            <Border Background="{DynamicResource Kp.DangerSoft}" BorderBrush="{DynamicResource Kp.Danger}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,4,0,0" IsVisible="False" x:Name="SyncErrorBox" views:Motion.RevealOnShow="True">
+              <TextBlock x:Name="SyncErrorText" Foreground="{DynamicResource Kp.Danger}" TextWrapping="Wrap" />
+            </Border>
           </StackPanel>
         </Border>
 

@@ -89,6 +89,7 @@ public partial class SettingsView : UserControl
         UpdateUndoImport();
         KeyStatus.Text = "";
         ErrorBox.IsVisible = false;
+        SyncErrorBox.IsVisible = false;
         UpdateThemeButtons(ThemeManager.CurrentTheme);
         UpdateMotionButtons();
         UpdateStartupSwitches();
@@ -216,6 +217,7 @@ public partial class SettingsView : UserControl
         CsvStatus.Text = "";
         KeyStatus.Text = "";
         ErrorBox.IsVisible = false;
+        SyncErrorBox.IsVisible = false;
         UpdateUndoImport();
     }
 
@@ -1127,14 +1129,19 @@ public partial class SettingsView : UserControl
             return;
         }
 
+        SyncSendCodeButton.IsEnabled = false;
         try
         {
             await _sync.RequestBindCodeAsync(SyncEmailBox.Text ?? "");
-            ErrorBox.IsVisible = false;
+            SyncErrorBox.IsVisible = false;
         }
         catch (Exception ex)
         {
-            ShowError(SyncFailureText(ex));
+            ShowSyncError(SyncFailureText(ex));
+        }
+        finally
+        {
+            SyncSendCodeButton.IsEnabled = true;
         }
     }
 
@@ -1153,7 +1160,7 @@ public partial class SettingsView : UserControl
         }
         catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
         {
-            ShowError(ex.Message);
+            ShowSyncError(ex.Message);
         }
     }
 
@@ -1166,7 +1173,7 @@ public partial class SettingsView : UserControl
 
         if (_session.NeedsLocalKeyUpgrade)
         {
-            ShowError("请先升级到本地密钥格式，再开启云同步。");
+            ShowSyncError("请先升级到本地密钥格式，再开启云同步。");
             return;
         }
 
@@ -1186,11 +1193,11 @@ public partial class SettingsView : UserControl
             ClearSyncSecrets();
             if (_sync.HasError)
             {
-                ShowError(_sync.StatusMessage ?? SyncMessages.VaultPending);
+                ShowSyncError(_sync.StatusMessage ?? SyncMessages.VaultPending);
             }
             else
             {
-                ErrorBox.IsVisible = false;
+                SyncErrorBox.IsVisible = false;
             }
 
             VaultChanged?.Invoke(this, EventArgs.Empty);
@@ -1198,7 +1205,7 @@ public partial class SettingsView : UserControl
         }
         catch (Exception ex)
         {
-            ShowError(SyncFailureText(ex));
+            ShowSyncError(SyncFailureText(ex));
         }
         finally
         {
@@ -1224,7 +1231,7 @@ public partial class SettingsView : UserControl
         }
         catch (Exception ex)
         {
-            ShowError(SyncFailureText(ex));
+            ShowSyncError(SyncFailureText(ex));
         }
     }
 
@@ -1245,7 +1252,7 @@ public partial class SettingsView : UserControl
         var password = SyncRotatePasswordBox.Text ?? "";
         if (password.Length == 0)
         {
-            ShowError("换钥需要网站密码，只用来在本机包裹新的数据密钥，不会保存。");
+            ShowSyncError("换钥需要网站密码，只用来在本机包裹新的数据密钥，不会保存。");
             return;
         }
 
@@ -1273,13 +1280,13 @@ public partial class SettingsView : UserControl
             }
 
             SyncRotatePasswordBox.Text = "";
-            ErrorBox.IsVisible = false;
+            SyncErrorBox.IsVisible = false;
             VaultChanged?.Invoke(this, EventArgs.Empty);
             RefreshSyncUi();
         }
         catch (Exception ex)
         {
-            ShowError(SyncFailureText(ex));
+            ShowSyncError(SyncFailureText(ex));
         }
     }
 
@@ -1313,13 +1320,13 @@ public partial class SettingsView : UserControl
                 await _sync.AdoptKeyFileAsync(text, confirmConflicts: true);
             }
 
-            ErrorBox.IsVisible = false;
+            SyncErrorBox.IsVisible = false;
             VaultChanged?.Invoke(this, EventArgs.Empty);
             RefreshSyncUi();
         }
         catch (Exception ex)
         {
-            ShowError(SyncFailureText(ex));
+            ShowSyncError(SyncFailureText(ex));
         }
     }
 
@@ -1350,5 +1357,12 @@ public partial class SettingsView : UserControl
     {
         ErrorText.Text = message;
         ErrorBox.IsVisible = true;
+    }
+
+    /// <summary>云同步卡片自己的错误提示，不借用「修改短密钥」卡片的错误框。</summary>
+    private void ShowSyncError(string message)
+    {
+        SyncErrorText.Text = message;
+        SyncErrorBox.IsVisible = true;
     }
 }

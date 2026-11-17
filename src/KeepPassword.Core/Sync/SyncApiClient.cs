@@ -135,6 +135,7 @@ public sealed class SyncApiClient : IDisposable
 
     private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
+        var host = _http.BaseAddress?.Host ?? "";
         try
         {
             return await _http.SendAsync(request, ct);
@@ -145,15 +146,19 @@ public sealed class SyncApiClient : IDisposable
         }
         catch (OperationCanceledException)
         {
-            throw new SyncApiException(SyncFailureKind.Timeout, "连接超时，请稍后重试。");
+            throw new SyncApiException(SyncFailureKind.Timeout, $"连接超时（{host}），请稍后重试。");
         }
         catch (HttpRequestException ex) when (IsTls(ex))
         {
-            throw new SyncApiException(SyncFailureKind.Tls, "安全连接失败，请检查网络或系统时间后重试。");
+            throw new SyncApiException(SyncFailureKind.Tls, $"安全连接失败（{host}），请检查网络、代理或系统时间后重试。");
+        }
+        catch (HttpRequestException ex) when (ex.HttpRequestError == HttpRequestError.NameResolutionError)
+        {
+            throw new SyncApiException(SyncFailureKind.Network, $"无法连接同步服务器：域名 {host} 解析失败，请检查网络或 DNS 后重试。");
         }
         catch (HttpRequestException)
         {
-            throw new SyncApiException(SyncFailureKind.Network, "无法连接同步服务器，请检查网络后重试。");
+            throw new SyncApiException(SyncFailureKind.Network, $"无法连接同步服务器（{host}），请检查网络后重试。");
         }
     }
 
