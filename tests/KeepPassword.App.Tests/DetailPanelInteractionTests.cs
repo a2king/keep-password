@@ -364,6 +364,16 @@ public class DetailPanelInteractionTests
             Assert.True(at.Y >= anchorBottom - 0.5, "空间足够时仍在按钮下方");
         }
 
+        // 外观与详情卡片一致：同底色、同描边、14 圆角，带弹出阴影；不是 Fluent 默认的灰底。
+        Assert.Contains(InWindowFlyout.PresenterClass, presenter.Classes);
+        var card = fixture.Panel.GetVisualDescendants().OfType<DetailGroup>().First().GetVisualDescendants().OfType<Border>().First();
+        uint Color(IBrush? brush) => Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color.ToUInt32();
+        Assert.Equal(Color(card.Background), Color(presenter.Background));
+        Assert.Equal(Color(card.BorderBrush), Color(presenter.BorderBrush));
+        Assert.Equal(new CornerRadius(14), presenter.CornerRadius);
+        var surface = presenter.GetVisualDescendants().OfType<Border>().Single(border => border.Name == "LayoutRoot");
+        Assert.NotEqual(0, surface.BoxShadow.Count);
+
         // 紧凑排版：强度在标题行，长度数值与滑块同一行。
         var texts = presenter.GetVisualDescendants().OfType<TextBlock>().ToList();
         var title = texts.Single(text => text.Text == "生成密码");

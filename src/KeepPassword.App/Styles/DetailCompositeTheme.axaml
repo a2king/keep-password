@@ -168,6 +168,40 @@
     <Setter Property="Background" Value="{DynamicResource Detail.SaveDisabledBackground}" /><Setter Property="BorderBrush" Value="{DynamicResource Detail.SaveDisabledBorder}" />
     <Setter Property="Foreground" Value="{DynamicResource Detail.SaveDisabledText}" />
   </Style>
+  <!--
+    详情里的弹层（生成密码等，InWindowFlyout）：与详情卡片同一套外观——卡片白底（深色 #1B1E26）、
+    1px 卡片描边、14 圆角，再加详情弹出阴影。替换 Fluent 默认的灰底 #F2F2F2 + 5 圆角。
+  -->
+  <Style Selector="FlyoutPresenter.detail-popover">
+    <Setter Property="Background" Value="{DynamicResource Detail.GroupBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Detail.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Padding" Value="16,14" />
+    <Setter Property="Foreground" Value="{DynamicResource Detail.Text}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Detail.Font.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+  <Style Selector="FlyoutPresenter.detail-popover /template/ Border#LayoutRoot">
+    <Setter Property="BoxShadow" Value="{DynamicResource Detail.PopupShadow}" />
+  </Style>
+  <!-- 弹层内的输入框与详情字段一致：中性灰描边、7 圆角，聚焦时不出现蓝色粗框。 -->
+  <Style Selector="FlyoutPresenter.detail-popover TextBox, FlyoutPresenter.detail-popover TextBox:focus, FlyoutPresenter.detail-popover TextBox:pointerover">
+    <Setter Property="Background" Value="{DynamicResource Detail.Background}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Detail.InputBorder}" />
+    <Setter Property="Foreground" Value="{DynamicResource Detail.Text}" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="MinHeight" Value="36" />
+    <Setter Property="Padding" Value="10,7" />
+  </Style>
+  <Style Selector="FlyoutPresenter.detail-popover TextBox /template/ Border#PART_BorderElement,
+                   FlyoutPresenter.detail-popover TextBox:focus /template/ Border#PART_BorderElement,
+                   FlyoutPresenter.detail-popover TextBox:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Detail.Background}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Detail.InputBorder}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
   <Style Selector="Button.detail-icon">
     <Setter Property="Width" Value="32" /><Setter Property="Height" Value="32" />
     <Setter Property="Padding" Value="0" /><Setter Property="CornerRadius" Value="8" />
