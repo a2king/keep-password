@@ -353,6 +353,24 @@ public class DetailDrawerTests
         Assert.Null(fixture.Modern);
         fixture.ClickEntry(fixture.First.Id);
         await fixture.WaitUntilAsync(() => fixture.IsOpen);
+
+        // 头部与新版详情同一个控件、同样位置：类型图标 + 名称 + 类型标签，右上只有收藏和关闭。
+        var header = fixture.LegacyHeader;
+        Assert.True(header.IsEffectivelyVisible);
+        Assert.Equal(fixture.First.Name, header.Title);
+        Assert.Equal(VaultItemKinds.DisplayName(kind), header.KindLabel);
+        Assert.Same(DetailHeaderContent.Icon(kind), header.KindIcon);
+        var headerAt = header.TranslatePoint(default, fixture.Panel)!.Value;
+        Assert.Equal(32, headerAt.Y, precision: 1);
+        Assert.Equal(104, header.Bounds.Height, precision: 1);
+        Assert.Equal(["PART_CloseButton", "PART_Favorite", "PART_TitleButton"],
+            header.GetVisualDescendants().OfType<Button>().Select(button => button.Name!).Order().ToArray());
+        Assert.DoesNotContain(fixture.Panel.GetVisualDescendants().OfType<Border>(), border => border.Classes.Contains("count-badge"));
+        header.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "PART_Favorite")
+            .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        await fixture.WaitUntilAsync(() => header.IsFavorite);
+        Assert.True(fixture.Window.View!.Favorite);
+
         var bar = fixture.Window.FindControl<KeepPassword.App.Controls.Details.SaveBar>("LegacyFooter")!;
         Assert.True(bar.IsEffectivelyVisible);
         var buttons = bar.GetVisualDescendants().OfType<Button>().ToDictionary(button => button.Name!);
@@ -447,7 +465,7 @@ public class DetailDrawerTests
                 ? Window.FindControl<DetailPanelView>("ModernDetail") : null;
             Content = (Control?)Modern ?? Window.FindControl<Grid>("DetailContent")!;
             Scroller = Modern?.Scroller ?? Window.FindControl<ScrollViewer>("DetailScroller")!;
-            Title = Window.FindControl<TextBlock>("DetailTitle")!;
+            LegacyHeader = Window.FindControl<KeepPassword.App.Controls.Details.DetailHeader>("LegacyHeader")!;
             List = Window.FindControl<ScrollViewer>("AccountScroller")!;
             ListPane = Window.FindControl<Grid>("ItemsListPane")!;
             TagFilters = Window.FindControl<ItemsControl>("TagFiltersList")!;
@@ -460,8 +478,8 @@ public class DetailDrawerTests
         public DetailPanelView? Modern { get; }
         public Control Content { get; }
         public ScrollViewer Scroller { get; }
-        public TextBlock Title { get; }
-        public string? DisplayedTitle => Modern?.Header.Title ?? Title.Text;
+        public KeepPassword.App.Controls.Details.DetailHeader LegacyHeader { get; }
+        public string? DisplayedTitle => Modern?.Header.Title ?? LegacyHeader.Title;
         public ScrollViewer List { get; }
         public Grid ListPane { get; }
         public ItemsControl TagFilters { get; }
@@ -501,9 +519,9 @@ public class DetailDrawerTests
 
         public void ClickClose()
         {
-            var button = Modern is not null
-                ? Modern.Header.GetVisualDescendants().OfType<Button>().Single(control => control.Name is "PART_Close" or "PART_CloseButton")
-                : Panel.GetVisualDescendants().OfType<Button>().Single(control => control.Content is string text && text == "关闭");
+            // 两种编辑器共用同一个头部控件，关闭按钮相同。
+            var header = Modern?.Header ?? LegacyHeader;
+            var button = header.GetVisualDescendants().OfType<Button>().Single(control => control.Name == "PART_CloseButton");
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         }
 
@@ -554,7 +572,7 @@ public class DetailDrawerTests
             var account = Assert.Single(editorCards.Where(card => card.DataContext is AccountEditorView));
             var node = editorCards.SingleOrDefault(card => card.DataContext is NodeEditorView);
             return new EditorFrame(
-                Assert.IsType<Point>(Scroller.TranslatePoint(new Point(), Window)), Scroller.Bounds, Title.Bounds.Height,
+                Assert.IsType<Point>(Scroller.TranslatePoint(new Point(), Window)), Scroller.Bounds, LegacyHeader.Bounds.Height,
                 Assert.IsType<Point>(account.TranslatePoint(new Point(), Window)), account.Bounds,
                 node?.TranslatePoint(new Point(), Window), node?.Bounds);
         }

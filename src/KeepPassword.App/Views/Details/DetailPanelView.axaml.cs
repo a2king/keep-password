@@ -52,7 +52,6 @@ public partial class DetailPanelView : UserControl
     private readonly List<Flyout> _flyouts = [];
     private Window? _window;
     private Guid _detailId;
-    private VaultItemKind? _iconKind;
     private bool _refreshQueued;
     private bool _refreshing;
 
@@ -72,7 +71,6 @@ public partial class DetailPanelView : UserControl
         InitializeComponent();
         HeaderControl.CloseRequested += () => CloseRequested?.Invoke();
         HeaderControl.FavoriteRequested += () => FavoriteRequested?.Invoke();
-        HeaderControl.DeleteRequested += () => DeleteRequested?.Invoke();
         Footer.SaveRequested += RequestSave;
         Footer.CancelRequested += CancelChanges;
         Footer.DeleteRequested += () => DeleteRequested?.Invoke();
@@ -176,18 +174,7 @@ public partial class DetailPanelView : UserControl
                 NoteEditor.IsEditing = source.IsNewItem;
                 HeaderControl.ValidationMessage = "";
             }
-            HeaderControl.KindLabel = source.KindName;
-            HeaderControl.IsFavorite = source.Favorite;
-            if (_iconKind != source.Kind) HeaderControl.KindIcon = Geometry.Parse(source.Kind switch
-            {
-                VaultItemKind.Server => "M3,4 L21,4 L21,20 L3,20 Z M7,9 L10,12 L7,15 M13,15 L17,15",
-                VaultItemKind.Database => "M3,6 C3,2 21,2 21,6 C21,10 3,10 3,6 M3,6 L3,18 C3,22 21,22 21,18 L21,6 M3,12 C3,16 21,16 21,12",
-                _ => "M10,14 C4,18 0,11 4,7 C8,3 15,7 11,13 L20,22 M15,17 L18,14 M18,20 L21,17"
-            });
-            _iconKind = source.Kind;
-            var subtitle = new[] { source.SpaceChoices.FirstOrDefault(choice => choice.IsSelected)?.Name,
-                source.SelectedProtocol?.Name ?? source.SelectedDriver?.Name }.Where(text => !string.IsNullOrWhiteSpace(text));
-            HeaderControl.Subtitle = string.Join(" · ", subtitle);
+            DetailHeaderContent.Apply(HeaderControl, source);
             SpaceEditor.Items = source.SpaceChoices;
             TagsEditor.Items = source.TagChoices;
             AccountsSection.CanAdd = source.CanAddAccount;
@@ -237,7 +224,6 @@ public partial class DetailPanelView : UserControl
     public void ResetTransientState()
     {
         HeaderControl.EndEdit();
-        HeaderControl.CloseMenu();
         AccountsSection.CloseMenu();
         HeaderControl.ValidationMessage = "";
         foreach (var row in AllRows()) ResetRow(row);

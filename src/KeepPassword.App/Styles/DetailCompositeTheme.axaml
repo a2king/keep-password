@@ -25,13 +25,14 @@
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
     <ControlTheme x:Key="{x:Type d:DetailHeader}" TargetType="d:DetailHeader">
-      <!-- 头部固定高度，长标题只省略，不挤压内容或改变详情滚动位置。 -->
+      <!-- 头部固定高度，长标题只省略，不挤压内容或改变详情滚动位置。所有条目类型共用。
+           删除条目在底栏最左侧，头部不再有「…」菜单。 -->
       <Setter Property="Height" Value="104" />
       <Setter Property="Template">
         <ControlTemplate>
           <Border Background="{DynamicResource Detail.Background}" BorderBrush="{DynamicResource Detail.Divider}"
                   BorderThickness="0,0,0,1" Padding="20,10,16,8">
-            <Grid ColumnDefinitions="52,12,*,32,32,32" RowDefinitions="38,24,18">
+            <Grid ColumnDefinitions="52,12,*,32,32" RowDefinitions="38,24,18">
               <Border Grid.RowSpan="2" Background="{DynamicResource Detail.AccentSoft}" Width="52" Height="52"
                       CornerRadius="14" VerticalAlignment="Center">
                 <Path Data="{TemplateBinding KindIcon}" Width="25" Height="25" Stretch="Uniform"
@@ -50,20 +51,17 @@
               <Button x:Name="PART_Favorite" Grid.Column="3" Classes="detail-icon" ToolTip.Tip="切换收藏">
                 <Path Data="{DynamicResource Detail.Icon.Star}" Width="16" Height="16" Stretch="None" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.4" StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent" />
               </Button>
-              <Button x:Name="PART_More" Grid.Column="4" Classes="detail-icon" ToolTip.Tip="更多操作">
-                <Path Data="{DynamicResource Detail.Icon.More}" Width="16" Height="16" Stretch="None" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentPresenter}}" StrokeThickness="2.2" StrokeLineCap="Round" Fill="Transparent" />
-              </Button>
-              <Button x:Name="PART_CloseButton" Grid.Column="5" Classes="detail-icon" ToolTip.Tip="关闭详情 (Esc)">
+              <Button x:Name="PART_CloseButton" Grid.Column="4" Classes="detail-icon" ToolTip.Tip="关闭详情 (Esc)">
                 <Path Data="{DynamicResource Detail.Icon.Close}" Width="16" Height="16" Stretch="None" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentPresenter}}" StrokeThickness="1.4" StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent" />
               </Button>
-              <Grid Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="4" ColumnDefinitions="Auto,8,*" Margin="4,0,0,0">
+              <Grid Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="3" ColumnDefinitions="Auto,8,*" Margin="4,0,0,0">
                 <Border CornerRadius="5" Background="{DynamicResource Detail.Hover}" Padding="6,2" VerticalAlignment="Center">
                   <TextBlock Text="{TemplateBinding KindLabel}" FontSize="11" Foreground="{DynamicResource Detail.TextMuted}" />
                 </Border>
                 <TextBlock Grid.Column="2" Text="{TemplateBinding Subtitle}" FontSize="12"
                            Foreground="{DynamicResource Detail.TextMuted}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
               </Grid>
-              <TextBlock Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="4" Text="{TemplateBinding ValidationMessage}"
+              <TextBlock Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="3" Text="{TemplateBinding ValidationMessage}"
                          FontSize="11" Foreground="{DynamicResource Detail.Danger}" TextTrimming="CharacterEllipsis" Margin="4,0,0,0" />
             </Grid>
           </Border>

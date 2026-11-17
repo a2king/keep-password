@@ -325,6 +325,18 @@ public class DetailPanelInteractionTests
     }
 
     [AvaloniaFact]
+    public async Task Header_HasOnlyFavoriteAndClose_DeleteLivesInTheFooter()
+    {
+        using var fixture = new PanelFixture();
+        fixture.Show();
+        await Task.Delay(40); fixture.Window.UpdateLayout();
+        var header = fixture.Panel.Header;
+        Assert.Equal(["PART_CloseButton", "PART_Favorite", "PART_TitleButton"],
+            header.GetVisualDescendants().OfType<Button>().Select(button => button.Name!).Order().ToArray());
+        Assert.Null(header.GetVisualDescendants().OfType<Button>().FirstOrDefault(button => button.Flyout is not null));
+    }
+
+    [AvaloniaFact]
     public async Task SaveBar_NewItem_DeleteIsGreyAndUndoSaveBecomeCancelCreate()
     {
         using var fixture = new PanelFixture();

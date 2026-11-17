@@ -17,7 +17,6 @@ public sealed class DetailHeader : TemplatedControl
     public static readonly StyledProperty<bool> IsEditingProperty = AvaloniaProperty.Register<DetailHeader, bool>(nameof(IsEditing));
     public static readonly StyledProperty<string> ValidationMessageProperty = AvaloniaProperty.Register<DetailHeader, string>(nameof(ValidationMessage), "");
     private TextBox? _editor;
-    private MenuFlyout? _menu;
     private string _beforeEdit = "";
     public string Title { get => GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
     public string Subtitle { get => GetValue(SubtitleProperty); set => SetValue(SubtitleProperty, value); }
@@ -28,7 +27,6 @@ public sealed class DetailHeader : TemplatedControl
     public string ValidationMessage { get => GetValue(ValidationMessageProperty); set => SetValue(ValidationMessageProperty, value); }
     public event Action? CloseRequested;
     public event Action? FavoriteRequested;
-    public event Action? DeleteRequested;
     public TextBox? TitleEditor => _editor;
 
     protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
@@ -38,14 +36,6 @@ public sealed class DetailHeader : TemplatedControl
         if (e.NameScope.Find<Button>("PART_TitleButton") is { } title) title.Click += (_, _) => BeginEdit();
         if (e.NameScope.Find<Button>("PART_CloseButton") is { } close) close.Click += (_, _) => CloseRequested?.Invoke();
         if (e.NameScope.Find<Button>("PART_Favorite") is { } favorite) favorite.Click += (_, _) => FavoriteRequested?.Invoke();
-        if (e.NameScope.Find<Button>("PART_More") is { } more)
-        {
-            var delete = new MenuItem { Header = "删除条目…" };
-            delete.Click += (_, _) => DeleteRequested?.Invoke();
-            _menu?.Hide();
-            _menu = new MenuFlyout { Items = { delete } };
-            more.Flyout = _menu;
-        }
         if (_editor is not null)
         {
             _editor.KeyDown += (_, args) =>
@@ -90,6 +80,4 @@ public sealed class DetailHeader : TemplatedControl
         IsEditing = false;
         _beforeEdit = "";
     }
-
-    public void CloseMenu() => _menu?.Hide();
 }
