@@ -25,13 +25,14 @@
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
     <ControlTheme x:Key="{x:Type d:DetailHeader}" TargetType="d:DetailHeader">
-      <!-- 头部固定高度，长标题只省略，不挤压内容或改变详情滚动位置。 -->
+      <!-- 头部固定高度，长标题只省略，不挤压内容或改变详情滚动位置。所有条目类型共用。
+           删除条目在底栏最左侧，头部不再有「…」菜单。 -->
       <Setter Property="Height" Value="104" />
       <Setter Property="Template">
         <ControlTemplate>
           <Border Background="{DynamicResource Detail.Background}" BorderBrush="{DynamicResource Detail.Divider}"
                   BorderThickness="0,0,0,1" Padding="20,10,16,8">
-            <Grid ColumnDefinitions="52,12,*,32,32,32" RowDefinitions="38,24,18">
+            <Grid ColumnDefinitions="52,12,*,32,32" RowDefinitions="38,24,18">
               <Border Grid.RowSpan="2" Background="{DynamicResource Detail.AccentSoft}" Width="52" Height="52"
                       CornerRadius="14" VerticalAlignment="Center">
                 <Path Data="{TemplateBinding KindIcon}" Width="25" Height="25" Stretch="Uniform"
@@ -50,20 +51,17 @@
               <Button x:Name="PART_Favorite" Grid.Column="3" Classes="detail-icon" ToolTip.Tip="切换收藏">
                 <Path Data="{DynamicResource Detail.Icon.Star}" Width="16" Height="16" Stretch="None" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.4" StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent" />
               </Button>
-              <Button x:Name="PART_More" Grid.Column="4" Classes="detail-icon" ToolTip.Tip="更多操作">
-                <Path Data="{DynamicResource Detail.Icon.More}" Width="16" Height="16" Stretch="None" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentPresenter}}" StrokeThickness="2.2" StrokeLineCap="Round" Fill="Transparent" />
-              </Button>
-              <Button x:Name="PART_CloseButton" Grid.Column="5" Classes="detail-icon" ToolTip.Tip="关闭详情 (Esc)">
+              <Button x:Name="PART_CloseButton" Grid.Column="4" Classes="detail-icon" ToolTip.Tip="关闭详情 (Esc)">
                 <Path Data="{DynamicResource Detail.Icon.Close}" Width="16" Height="16" Stretch="None" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ContentPresenter}}" StrokeThickness="1.4" StrokeLineCap="Round" StrokeJoin="Round" Fill="Transparent" />
               </Button>
-              <Grid Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="4" ColumnDefinitions="Auto,8,*" Margin="4,0,0,0">
+              <Grid Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="3" ColumnDefinitions="Auto,8,*" Margin="4,0,0,0">
                 <Border CornerRadius="5" Background="{DynamicResource Detail.Hover}" Padding="6,2" VerticalAlignment="Center">
                   <TextBlock Text="{TemplateBinding KindLabel}" FontSize="11" Foreground="{DynamicResource Detail.TextMuted}" />
                 </Border>
                 <TextBlock Grid.Column="2" Text="{TemplateBinding Subtitle}" FontSize="12"
                            Foreground="{DynamicResource Detail.TextMuted}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
               </Grid>
-              <TextBlock Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="4" Text="{TemplateBinding ValidationMessage}"
+              <TextBlock Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="3" Text="{TemplateBinding ValidationMessage}"
                          FontSize="11" Foreground="{DynamicResource Detail.Danger}" TextTrimming="CharacterEllipsis" Margin="4,0,0,0" />
             </Grid>
           </Border>
@@ -86,16 +84,19 @@
     </ControlTheme>
 
     <ControlTheme x:Key="{x:Type d:SaveBar}" TargetType="d:SaveBar">
-      <!-- 常驻底栏：撤销在左、保存在右；没有修改时两个按钮都是灰色禁用，不再有提示文字。 -->
+      <!-- 常驻底栏，所有条目类型共用：删除条目在最左；撤销修改、保存修改相邻（间隔 5px）靠右。
+           没有修改时撤销和保存都是灰色禁用，不再有提示文字。 -->
       <Setter Property="Height" Value="64" />
       <Setter Property="Template">
         <ControlTemplate>
           <Border Background="{DynamicResource Detail.SaveBackground}" BorderBrush="{DynamicResource Detail.SaveBorder}"
                   BorderThickness="1" CornerRadius="16" Margin="16,6,16,12" Padding="12,0" BoxShadow="{DynamicResource Detail.PopupShadow}">
-            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-              <Button x:Name="PART_Cancel" Grid.Column="0" Classes="detail-save-cancel" MinWidth="96"
+            <Grid ColumnDefinitions="Auto,*,Auto,5,Auto" VerticalAlignment="Center">
+              <Button x:Name="PART_Delete" Grid.Column="0" Classes="detail-save-danger" MinWidth="96"
+                      Content="删除条目" IsEnabled="{TemplateBinding CanDelete}" />
+              <Button x:Name="PART_Cancel" Grid.Column="2" Classes="detail-save-cancel" MinWidth="96"
                       Content="{TemplateBinding CancelLabel}" IsEnabled="{TemplateBinding IsShown}" />
-              <Button x:Name="PART_SaveButton" Grid.Column="2" Classes="detail-save-primary" MinWidth="96"
+              <Button x:Name="PART_SaveButton" Grid.Column="4" Classes="detail-save-primary" MinWidth="96"
                       Content="{TemplateBinding SaveLabel}" IsEnabled="{TemplateBinding CanSave}" />
             </Grid>
           </Border>
@@ -141,18 +142,66 @@
   </Style>
   <Style Selector="d|FieldRow.detail-endpoint-port /template/ Border#PART_Divider"><Setter Property="IsVisible" Value="False" /></Style>
 
-  <!-- 保存栏两个按钮与全局文字按钮一致：蓝底白字 + 1px 描边。 -->
-  <Style Selector="Button.detail-save-cancel, Button.detail-save-primary">
+  <!-- 底栏三个按钮同尺寸，文字水平、垂直都居中。撤销和保存与全局文字按钮一致：蓝底白字 + 1px 描边；删除为红底白字。 -->
+  <Style Selector="Button.detail-save-danger, Button.detail-save-cancel, Button.detail-save-primary">
     <Setter Property="Padding" Value="12,4" /><Setter Property="CornerRadius" Value="8" />
     <Setter Property="FontSize" Value="12" /><Setter Property="MinHeight" Value="30" /><Setter Property="FontWeight" Value="SemiBold" />
-    <Setter Property="Background" Value="{DynamicResource Kp.Button.Primary}" /><Setter Property="Foreground" Value="White" />
-    <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.PrimaryBorder}" /><Setter Property="BorderThickness" Value="1" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" /><Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Foreground" Value="White" /><Setter Property="BorderThickness" Value="1" />
   </Style>
-  <!-- 禁用态：灰底灰字，和可用的蓝底白字一眼能分开。 -->
-  <Style Selector="Button.detail-save-cancel:disabled /template/ ContentPresenter, Button.detail-save-primary:disabled /template/ ContentPresenter">
+  <Style Selector="Button.detail-save-cancel, Button.detail-save-primary">
+    <Setter Property="Background" Value="{DynamicResource Kp.Button.Primary}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.PrimaryBorder}" />
+  </Style>
+  <Style Selector="Button.detail-save-danger">
+    <Setter Property="Background" Value="{DynamicResource Kp.Button.Danger}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Kp.Button.DangerBorder}" />
+  </Style>
+  <!-- 底栏也用在旧编辑器里（不在 DetailPanelView 内），这里单独把悬停/按下钉回按钮自身颜色，两边表现一致。 -->
+  <Style Selector="d|SaveBar Button:pointerover /template/ ContentPresenter, d|SaveBar Button:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{Binding $parent[Button].Background}" />
+    <Setter Property="BorderBrush" Value="{Binding $parent[Button].BorderBrush}" />
+    <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+  </Style>
+  <!-- 禁用态：灰底灰字，和可用的蓝底（红底）白字一眼能分开。 -->
+  <Style Selector="Button.detail-save-danger:disabled /template/ ContentPresenter, Button.detail-save-cancel:disabled /template/ ContentPresenter, Button.detail-save-primary:disabled /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Detail.SaveDisabledBackground}" /><Setter Property="BorderBrush" Value="{DynamicResource Detail.SaveDisabledBorder}" />
     <Setter Property="Foreground" Value="{DynamicResource Detail.SaveDisabledText}" />
   </Style>
+  <!--
+    详情里的弹层（生成密码等，InWindowFlyout）：与详情卡片同一套外观——卡片白底（深色 #1B1E26）、
+    1px 卡片描边、14 圆角，再加详情弹出阴影。替换 Fluent 默认的灰底 #F2F2F2 + 5 圆角。
+  -->
+  <Style Selector="FlyoutPresenter.detail-popover">
+    <Setter Property="Background" Value="{DynamicResource Detail.GroupBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Detail.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Padding" Value="16,14" />
+    <Setter Property="Foreground" Value="{DynamicResource Detail.Text}" />
+    <Setter Property="FontFamily" Value="{DynamicResource Detail.Font.Ui}" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+  <Style Selector="FlyoutPresenter.detail-popover /template/ Border#LayoutRoot">
+    <Setter Property="BoxShadow" Value="{DynamicResource Detail.PopupShadow}" />
+  </Style>
+  <!-- 弹层内的输入框与详情字段一致：中性灰描边、7 圆角，聚焦时不出现蓝色粗框。 -->
+  <Style Selector="FlyoutPresenter.detail-popover TextBox, FlyoutPresenter.detail-popover TextBox:focus, FlyoutPresenter.detail-popover TextBox:pointerover">
+    <Setter Property="Background" Value="{DynamicResource Detail.Background}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Detail.InputBorder}" />
+    <Setter Property="Foreground" Value="{DynamicResource Detail.Text}" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="MinHeight" Value="36" />
+    <Setter Property="Padding" Value="10,7" />
+  </Style>
+  <Style Selector="FlyoutPresenter.detail-popover TextBox /template/ Border#PART_BorderElement,
+                   FlyoutPresenter.detail-popover TextBox:focus /template/ Border#PART_BorderElement,
+                   FlyoutPresenter.detail-popover TextBox:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource Detail.Background}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Detail.InputBorder}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
   <Style Selector="Button.detail-icon">
     <Setter Property="Width" Value="32" /><Setter Property="Height" Value="32" />
     <Setter Property="Padding" Value="0" /><Setter Property="CornerRadius" Value="8" />

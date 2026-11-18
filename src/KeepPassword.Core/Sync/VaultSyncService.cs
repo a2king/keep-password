@@ -23,17 +23,19 @@ public sealed class VaultSyncService : IDisposable
     public async Task RequestBindCodeAsync(string email, CancellationToken ct = default) =>
         await _api.RequestDeviceCodeAsync(email, ct);
 
+    /// <summary>
+    /// 绑定本机。只用网站账号密码和邮箱验证码换设备令牌；加密只用本机已有的数据密钥。
+    /// 本机密钥解不开云端数据时，设备保持绑定、同步暂停，等用户选择对应的 .kpkey（见 <see cref="BindResult.NeedsKeyFile"/>）。
+    /// </summary>
     public async Task<BindResult> CompleteBindAsync(
         VaultSession session,
         DeviceBindRequest request,
-        string accountPassword,
-        CancellationToken ct = default,
-        KdfProfile? wrapProfile = null)
+        CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct);
         try
         {
-            return await CompleteBindCoreAsync(session, request, accountPassword, wrapProfile, ct);
+            return await CompleteBindCoreAsync(session, request, ct);
         }
         finally
         {
@@ -66,48 +68,44 @@ public sealed class VaultSyncService : IDisposable
     private async Task<BindResult> CompleteBindCoreAsync(
         VaultSession session,
         DeviceBindRequest request,
-        string accountPassword,
-        KdfProfile? wrapProfile,
         CancellationToken ct)
     {
         request.Code = DeviceBindCode.Normalize(request.Code);
         var localKey = session.CopyDataKey();
         DeviceBindResponse? bound = null;
-        KeyPlan? plan = null;
         var persistBefore = _persistState;
         _persistState = false;
         try
         {
             bound = await _api.BindDeviceAsync(request, ct);
-            plan = await PrepareKeyAsync(bound, accountPassword, localKey, wrapProfile, ct);
             var state = new SyncSessionState
             {
                 Email = request.Email,
                 DeviceToken = bound.DeviceToken,
                 DeviceId = bound.DeviceId,
                 VaultVersion = bound.VaultVersion,
-                BindingKeyFingerprint = bound.BindingKeyFingerprint,
+                KeyVersion = bound.KeyVersion,
+                CloudKeyId = bound.VaultKeyId,
                 BaseUrl = _baseUrl
             };
 
-            state.KeyVersion = bound.KeyVersion;
+            var plan = await PlanBindAsync(bound, localKey, ct);
+            if (plan.NeedsKeyFile)
+            {
+                return NeedsKeyFile(state);
+            }
+
             try
             {
-                if (plan.AdoptKey is not null)
-                {
-                    await UploadAdoptedAsync(session, state, plan, ct);
-                    return new BindResult(state, vaultSynced: true, adoptedCloudKey: true);
-                }
-
                 if (plan.Claim)
                 {
                     try
                     {
-                        return await ClaimAsync(session, state, bound, accountPassword, localKey, plan, wrapProfile, ct);
+                        return await ClaimAsync(session, state, localKey, plan, ct);
                     }
                     catch (SyncApiException ex) when (ex is SyncConflictException or SyncKeyChangedException)
                     {
-                        return await AdoptAfterLostClaimAsync(session, state, bound, accountPassword, localKey, wrapProfile, ct);
+                        return await AfterLostClaimAsync(session, state, localKey, ct);
                     }
                 }
 
@@ -120,11 +118,11 @@ public sealed class VaultSyncService : IDisposable
                     await PullMergeCoreAsync(session, state, localKey, conflictDepth: 0, ct);
                 }
 
-                return new BindResult(state, vaultSynced: true, adoptedCloudKey: false);
+                return new BindResult(state, vaultSynced: true);
             }
-            catch (Exception ex) when (plan.AdoptKey is null && ex is not SyncKeyChangedException && CanKeepDevice(ex))
+            catch (Exception ex) when (ex is not SyncKeyChangedException && CanKeepDevice(ex))
             {
-                return new BindResult(state, vaultSynced: false, adoptedCloudKey: false);
+                return new BindResult(state, vaultSynced: false);
             }
         }
         catch
@@ -140,112 +138,67 @@ public sealed class VaultSyncService : IDisposable
         {
             _persistState = persistBefore;
             CryptographicOperations.ZeroMemory(localKey);
-            if (plan?.AdoptKey is not null)
-            {
-                CryptographicOperations.ZeroMemory(plan.AdoptKey);
-            }
         }
     }
 
-    private async Task<KeyPlan> PrepareKeyAsync(
-        DeviceBindResponse bound,
-        string accountPassword,
-        byte[] localKey,
-        KdfProfile? wrapProfile,
-        CancellationToken ct)
+    /// <summary>
+    /// 决定绑定后怎么处理本地与云端数据。只用本机密钥尝试解密：不需要网站密码，也不从服务器取任何密钥。
+    /// </summary>
+    private async Task<BindPlan> PlanBindAsync(DeviceBindResponse bound, byte[] localKey, CancellationToken ct)
     {
-        if (bound.HasWrappedKey)
+        if (bound.VaultVersion <= 0 && !bound.HasVault)
         {
-            var blob = await _api.DownloadWrappedKeyAsync(bound.DeviceToken, ct);
-            if (blob is null || blob.Length == 0)
-            {
-                throw new SyncApiException(SyncFailureKind.Validation, "服务器标记已有密钥包，但没有返回内容。已停止，本地数据未改动。");
-            }
-
-            byte[] remote;
-            try
-            {
-                remote = AccountKeyWrap.Unwrap(accountPassword, blob, wrapProfile);
-            }
-            catch (CredentialRejectedException)
-            {
-                throw new SyncApiException(SyncFailureKind.Validation, "官网密码无法解开云端密钥包，已停止绑定。本地保险库未改动。");
-            }
-
-            if (remote.Length == localKey.Length && CryptographicOperations.FixedTimeEquals(remote, localKey))
-            {
-                CryptographicOperations.ZeroMemory(remote);
-                return new KeyPlan { KeyVersion = bound.KeyVersion };
-            }
-
-            if (bound.VaultVersion > 0)
-            {
-                var download = await _api.DownloadVaultAsync(bound.DeviceToken, ct);
-                if (download.Data is null || download.Data.Length == 0)
-                {
-                    CryptographicOperations.ZeroMemory(remote);
-                    throw new SyncApiException(SyncFailureKind.Validation, "云端保险库为空，但版本号不为 0。已停止，本地数据未改动。");
-                }
-
-                try
-                {
-                    _ = VaultStore.ReadEntriesWithDataKey(download.Data, remote);
-                }
-                catch (Exception ex) when (ex is CredentialRejectedException or InvalidDataException)
-                {
-                    CryptographicOperations.ZeroMemory(remote);
-                    throw new SyncApiException(SyncFailureKind.Validation, "云端密钥包与云端保险库不匹配，已停止。本地数据未改动。");
-                }
-
-                return new KeyPlan
-                {
-                    AdoptKey = remote,
-                    RemoteVault = download.Data,
-                    RemoteVersion = download.VaultVersion,
-                    KeyVersion = bound.KeyVersion
-                };
-            }
-
-            return new KeyPlan { AdoptKey = remote, RemoteVersion = 0, KeyVersion = bound.KeyVersion };
+            // 云端为空：还没建立密钥代就首次建立，否则直接上传。
+            return new BindPlan { Claim = bound.KeyVersion == 0, RemoteVersion = bound.VaultVersion };
         }
 
-        if (bound.VaultVersion > 0 || bound.HasVault)
+        if (!string.IsNullOrEmpty(bound.VaultKeyId))
         {
-            var download = await _api.DownloadVaultAsync(bound.DeviceToken, ct);
-            if (download.Data is null || download.Data.Length == 0)
+            if (!string.Equals(bound.VaultKeyId, VaultKeyFile.Id(localKey), StringComparison.OrdinalIgnoreCase))
             {
-                throw new SyncApiException(SyncFailureKind.Validation, "云端记录了保险库，但没有数据。已停止上传，避免覆盖。本地数据未改动。");
+                return new BindPlan { NeedsKeyFile = true };
             }
 
-            try
+            if (bound.KeyVersion > 0)
             {
-                _ = VaultStore.ReadEntriesWithDataKey(download.Data, localKey);
+                // 编号一致：直接合并。合并时仍会用本机密钥解密核对。
+                return new BindPlan { RemoteVersion = bound.VaultVersion };
             }
-            catch (Exception ex) when (ex is CredentialRejectedException or InvalidDataException)
-            {
-                throw new SyncApiException(SyncFailureKind.Validation, "云端已有保险库，但本机密钥无法解密。已停止上传，避免覆盖。请导入原来的加密密钥后再绑定。本地数据未改动。");
-            }
-
-            return new KeyPlan
-            {
-                Claim = true,
-                RemoteVault = download.Data,
-                RemoteVersion = download.VaultVersion,
-                KeyVersion = bound.KeyVersion
-            };
         }
 
-        return new KeyPlan { Claim = true, RemoteVersion = bound.VaultVersion, KeyVersion = bound.KeyVersion };
+        var download = await _api.DownloadVaultAsync(bound.DeviceToken, ct);
+        if (download.Data is null || download.Data.Length == 0)
+        {
+            throw new SyncApiException(SyncFailureKind.Validation, "云端记录了保险库，但没有数据。已停止上传，避免覆盖。本地数据未改动。");
+        }
+
+        try
+        {
+            _ = VaultStore.ReadEntriesWithDataKey(download.Data, localKey);
+        }
+        catch (Exception ex) when (ex is CredentialRejectedException or InvalidDataException)
+        {
+            // 解密失败绝不能当成空库上传覆盖。保留设备，等用户选对密钥文件。
+            return new BindPlan { NeedsKeyFile = true };
+        }
+
+        return bound.KeyVersion == 0
+            ? new BindPlan { Claim = true, RemoteVault = download.Data, RemoteVersion = download.VaultVersion }
+            : new BindPlan { RemoteVersion = download.VaultVersion };
+    }
+
+    private static BindResult NeedsKeyFile(SyncSessionState state)
+    {
+        state.SyncBlocked = true;
+        state.SyncBlockReason = SyncMessages.NeedsKeyReason;
+        return new BindResult(state, vaultSynced: false, needsKeyFile: true);
     }
 
     private async Task<BindResult> ClaimAsync(
         VaultSession session,
         SyncSessionState state,
-        DeviceBindResponse bound,
-        string accountPassword,
         byte[] localKey,
-        KeyPlan plan,
-        KdfProfile? wrapProfile,
+        BindPlan plan,
         CancellationToken ct)
     {
         byte[] image;
@@ -261,10 +214,10 @@ public sealed class VaultSyncService : IDisposable
             image = await File.ReadAllBytesAsync(session.VaultPath, ct);
         }
 
-        var wrapped = AccountKeyWrap.Wrap(accountPassword, localKey, wrapProfile);
         try
         {
-            var committed = await CommitRetryAsync(bound.DeviceToken, "establish", plan.KeyVersion, plan.RemoteVersion, image, wrapped, ct);
+            var keyId = VaultKeyFile.Id(localKey);
+            var committed = await CommitRetryAsync(state.DeviceToken, "establish", state.KeyVersion, plan.RemoteVersion, keyId, image, ct);
             if (merged is not null)
             {
                 session.ReplaceAllRecords(merged.Entries, merged.Spaces, merged.Tags);
@@ -273,52 +226,49 @@ public sealed class VaultSyncService : IDisposable
 
             state.KeyVersion = committed.KeyVersion;
             state.VaultVersion = committed.VaultVersion;
-            return new BindResult(state, vaultSynced: true, adoptedCloudKey: false);
+            state.CloudKeyId = keyId;
+            return new BindResult(state, vaultSynced: true);
         }
         finally
         {
             CryptographicOperations.ZeroMemory(image);
-            CryptographicOperations.ZeroMemory(wrapped);
         }
     }
 
-    private async Task<BindResult> AdoptAfterLostClaimAsync(
+    /// <summary>另一台设备抢先建立了云端保险库：按它的结果重新判断，本机密钥对得上就合并，否则等用户选密钥文件。</summary>
+    private async Task<BindResult> AfterLostClaimAsync(
         VaultSession session,
         SyncSessionState state,
-        DeviceBindResponse bound,
-        string accountPassword,
         byte[] localKey,
-        KdfProfile? wrapProfile,
         CancellationToken ct)
     {
-        var status = await _api.GetStatusAsync(bound.DeviceToken, ct);
-        if (!status.HasWrappedKey)
+        var status = await _api.GetStatusAsync(state.DeviceToken, ct);
+        if (status.KeyVersion <= 0)
         {
             throw new SyncApiException(SyncFailureKind.Conflict, "云端密钥状态冲突，已停止。本地数据未改动。", 409);
         }
 
+        state.KeyVersion = status.KeyVersion;
+        state.VaultVersion = status.VaultVersion;
+        state.CloudKeyId = status.VaultKeyId;
         var follow = new DeviceBindResponse
         {
-            DeviceToken = bound.DeviceToken,
-            DeviceId = bound.DeviceId,
+            DeviceToken = state.DeviceToken,
+            DeviceId = state.DeviceId,
             VaultVersion = status.VaultVersion,
-            BindingKeyFingerprint = status.BindingKeyFingerprint ?? bound.BindingKeyFingerprint,
+            VaultKeyId = status.VaultKeyId,
             HasVault = status.VaultVersion > 0,
-            HasWrappedKey = true,
             KeyVersion = status.KeyVersion,
             ServerTime = status.ServerTime
         };
-        var plan = await PrepareKeyAsync(follow, accountPassword, localKey, wrapProfile, ct);
-        state.VaultVersion = status.VaultVersion;
-        state.KeyVersion = status.KeyVersion;
-        if (plan.AdoptKey is not null)
+        var plan = await PlanBindAsync(follow, localKey, ct);
+        if (plan.NeedsKeyFile)
         {
-            await UploadAdoptedAsync(session, state, plan, ct);
-            return new BindResult(state, vaultSynced: true, adoptedCloudKey: true);
+            return NeedsKeyFile(state);
         }
 
         await PullMergeCoreAsync(session, state, localKey, conflictDepth: 0, ct);
-        return new BindResult(state, vaultSynced: true, adoptedCloudKey: false);
+        return new BindResult(state, vaultSynced: true);
     }
 
     private async Task<SyncCommitResponse> CommitRetryAsync(
@@ -326,41 +276,17 @@ public sealed class VaultSyncService : IDisposable
         string purpose,
         long expectedKeyVersion,
         long expectedVaultVersion,
+        string keyId,
         byte[] vault,
-        byte[]? wrapped,
         CancellationToken ct)
     {
         try
         {
-            return await _api.CommitAsync(deviceToken, purpose, expectedKeyVersion, expectedVaultVersion, vault, wrapped, ct);
+            return await _api.CommitAsync(deviceToken, purpose, expectedKeyVersion, expectedVaultVersion, keyId, vault, ct);
         }
         catch (SyncApiException ex) when (ex.Kind is SyncFailureKind.Network or SyncFailureKind.Timeout or SyncFailureKind.Server)
         {
-            return await _api.CommitAsync(deviceToken, purpose, expectedKeyVersion, expectedVaultVersion, vault, wrapped, ct);
-        }
-    }
-
-    private async Task UploadAdoptedAsync(VaultSession session, SyncSessionState state, KeyPlan plan, CancellationToken ct)
-    {
-        var remoteKey = plan.AdoptKey ?? throw new InvalidOperationException("缺少云端数据密钥。");
-        IReadOnlyList<VaultEntry> remoteEntries = [];
-        if (plan.RemoteVault is { Length: > 0 })
-        {
-            remoteEntries = VaultStore.ReadEntriesWithDataKey(plan.RemoteVault, remoteKey);
-        }
-
-        var merged = VaultMerge.Merge(session.AllRecords, remoteEntries, session.Spaces, session.Tags);
-        var image = session.EncryptSnapshot(remoteKey, merged.Entries, merged.Spaces, merged.Tags);
-        try
-        {
-            var uploaded = await _api.UploadVaultAsync(state.DeviceToken, plan.RemoteVersion, state.KeyVersion, image, ct);
-            session.ReplaceWithDataKey(remoteKey, merged.Entries, merged.Spaces, merged.Tags);
-            state.VaultVersion = uploaded.VaultVersion;
-            Remember(state, session.VaultPath);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(image);
+            return await _api.CommitAsync(deviceToken, purpose, expectedKeyVersion, expectedVaultVersion, keyId, vault, ct);
         }
     }
 
@@ -377,17 +303,23 @@ public sealed class VaultSyncService : IDisposable
     private async Task RefreshCoreAsync(VaultSession session, SyncSessionState state, byte[] dataKey, CancellationToken ct)
     {
         var status = await _api.GetStatusAsync(state.DeviceToken, ct);
-        if (status.KeyVersion != state.KeyVersion || state.SyncBlocked)
+        if (status.KeyVersion != state.KeyVersion)
         {
-            var upgrade = status.KeyVersion == state.KeyVersion && state.SyncBlockReason == "upgrade";
-            Block(state, upgrade ? "upgrade" : "key", session.VaultPath);
-            throw new SyncKeyChangedException(status.KeyVersion, upgrade);
+            state.CloudKeyId = status.VaultKeyId;
+            Block(state, "key", session.VaultPath);
+            throw new SyncKeyChangedException(status.KeyVersion, upgradeRequired: false, status.VaultKeyId);
         }
 
-        if (!string.IsNullOrEmpty(status.BindingKeyFingerprint)
-            && !string.Equals(status.BindingKeyFingerprint, state.BindingKeyFingerprint, StringComparison.Ordinal))
+        if (state.SyncBlocked)
         {
-            state.BindingKeyFingerprint = status.BindingKeyFingerprint;
+            // 已暂停（等待密钥文件或需要升级）：保持原因不变，不上传。
+            throw new SyncKeyChangedException(state.KeyVersion, state.SyncBlockReason == "upgrade", state.CloudKeyId);
+        }
+
+        if (!string.IsNullOrEmpty(status.VaultKeyId)
+            && !string.Equals(status.VaultKeyId, state.CloudKeyId, StringComparison.OrdinalIgnoreCase))
+        {
+            state.CloudKeyId = status.VaultKeyId;
             Remember(state, session.VaultPath);
         }
 
@@ -450,15 +382,18 @@ public sealed class VaultSyncService : IDisposable
         int conflictDepth,
         CancellationToken ct)
     {
+        var keyId = VaultKeyFile.Id(dataKey);
         try
         {
-            var uploaded = await _api.UploadVaultAsync(state.DeviceToken, state.VaultVersion, state.KeyVersion, bytes, ct);
+            var uploaded = await _api.UploadVaultAsync(state.DeviceToken, state.VaultVersion, state.KeyVersion, keyId, bytes, ct);
             state.VaultVersion = uploaded.VaultVersion;
+            state.CloudKeyId = keyId;
             Remember(state, session.VaultPath);
         }
         catch (SyncKeyChangedException ex)
         {
-            Block(state, ex.UpgradeRequired ? "upgrade" : "key", session.VaultPath);
+            state.CloudKeyId = ex.CloudKeyId ?? state.CloudKeyId;
+            Block(state, BlockReason(ex, state), session.VaultPath);
             throw;
         }
         catch (SyncConflictException) when (conflictDepth < 1)
@@ -490,6 +425,15 @@ public sealed class VaultSyncService : IDisposable
         }
     }
 
+    /// <summary>
+    /// 服务器拒绝上传时的暂停原因。同一密钥代但编号不同，说明本机用的是另一把密钥，等用户选密钥文件；
+    /// 密钥代变了，说明有设备换了钥。
+    /// </summary>
+    public static string BlockReason(SyncKeyChangedException ex, SyncSessionState state) =>
+        ex.UpgradeRequired ? "upgrade"
+        : ex.CloudKeyId is not null && ex.KeyVersion == state.KeyVersion ? SyncMessages.NeedsKeyReason
+        : "key";
+
     private static bool CanKeepDevice(Exception ex) => ex switch
     {
         SyncApiException api => !api.SessionInvalid && api.Kind is SyncFailureKind.Network
@@ -508,15 +452,14 @@ public sealed class VaultSyncService : IDisposable
         _gate.Dispose();
     }
 
+    /// <summary>用一份新的 .kpkey 给云端换钥。只上传用新密钥加密的密文和新密钥编号。</summary>
     public Task<KeyChangeResult> RotateKeyAsync(
         VaultSession session,
         SyncSessionState state,
         string keyFileText,
-        string accountPassword,
         bool confirmConflicts,
-        CancellationToken ct = default,
-        KdfProfile? wrapProfile = null) =>
-        ExclusiveResult(ct, () => RotateCoreAsync(session, state, keyFileText, accountPassword, confirmConflicts, wrapProfile, ct));
+        CancellationToken ct = default) =>
+        ExclusiveResult(ct, () => RotateCoreAsync(session, state, keyFileText, confirmConflicts, ct));
 
     public Task<KeyChangeResult> AdoptKeyFileAsync(
         VaultSession session,
@@ -543,9 +486,7 @@ public sealed class VaultSyncService : IDisposable
         VaultSession session,
         SyncSessionState state,
         string keyFileText,
-        string accountPassword,
         bool confirmConflicts,
-        KdfProfile? wrapProfile,
         CancellationToken ct)
     {
         if (state.SyncBlocked && state.SyncBlockReason == "upgrade")
@@ -589,12 +530,12 @@ public sealed class VaultSyncService : IDisposable
             }
 
             var image = session.EncryptSnapshot(nextKey, merged.Entries, merged.Spaces, merged.Tags);
-            var wrapped = AccountKeyWrap.Wrap(accountPassword, nextKey, wrapProfile);
+            var nextId = VaultKeyFile.Id(nextKey);
             try
             {
                 var committed = await CommitRetryAsync(
                     state.DeviceToken, "rotate", state.KeyVersion, download.VaultVersion > 0 ? download.VaultVersion : state.VaultVersion,
-                    image, wrapped, ct);
+                    nextId, image, ct);
                 try
                 {
                     session.ReplaceWithDataKey(nextKey, merged.Entries, merged.Spaces, merged.Tags);
@@ -607,6 +548,7 @@ public sealed class VaultSyncService : IDisposable
 
                 state.KeyVersion = committed.KeyVersion;
                 state.VaultVersion = committed.VaultVersion;
+                state.CloudKeyId = nextId;
                 state.SyncBlocked = false;
                 state.SyncBlockReason = null;
                 Remember(state, session.VaultPath);
@@ -621,7 +563,6 @@ public sealed class VaultSyncService : IDisposable
             finally
             {
                 CryptographicOperations.ZeroMemory(image);
-                CryptographicOperations.ZeroMemory(wrapped);
             }
         }
         finally
@@ -639,8 +580,14 @@ public sealed class VaultSyncService : IDisposable
         CancellationToken ct)
     {
         var nextKey = VaultKeyFile.Parse(keyFileText);
+        var nextId = VaultKeyFile.Id(nextKey);
         try
         {
+            if (!string.IsNullOrEmpty(state.CloudKeyId) && !string.Equals(state.CloudKeyId, nextId, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new SyncApiException(SyncFailureKind.Validation, SyncMessages.WrongKeyFile(nextId, state.CloudKeyId));
+            }
+
             var download = await _api.DownloadVaultAsync(state.DeviceToken, ct);
             if (download.VaultVersion <= 0 || download.Data is null || download.Data.Length == 0)
             {
@@ -654,7 +601,7 @@ public sealed class VaultSyncService : IDisposable
             }
             catch (Exception ex) when (ex is CredentialRejectedException or InvalidDataException)
             {
-                throw new SyncApiException(SyncFailureKind.Validation, SyncMessages.AdoptRejected);
+                throw new SyncApiException(SyncFailureKind.Validation, SyncMessages.WrongKeyFile(nextId, state.CloudKeyId));
             }
 
             var merged = VaultMerge.Merge(session.AllRecords, remoteEntries, session.Spaces, session.Tags);
@@ -668,6 +615,7 @@ public sealed class VaultSyncService : IDisposable
             session.ReplaceWithDataKey(nextKey, merged.Entries, merged.Spaces, merged.Tags);
             state.KeyVersion = status.KeyVersion;
             state.VaultVersion = download.VaultVersion;
+            state.CloudKeyId = nextId;
             state.SyncBlocked = false;
             state.SyncBlockReason = null;
             Remember(state, session.VaultPath);
@@ -701,12 +649,15 @@ public sealed class VaultSyncService : IDisposable
         Remember(state, vaultPath);
     }
 
-    private sealed class KeyPlan
+    private sealed class BindPlan
     {
-        public byte[]? AdoptKey { get; init; }
+        /// <summary>本机密钥解不开云端数据，需要用户选择对应的 .kpkey。</summary>
+        public bool NeedsKeyFile { get; init; }
+
+        /// <summary>云端还没有密钥代：由本机建立（establish）。</summary>
+        public bool Claim { get; init; }
+
         public byte[]? RemoteVault { get; init; }
         public long RemoteVersion { get; init; }
-        public long KeyVersion { get; init; }
-        public bool Claim { get; init; }
     }
 }

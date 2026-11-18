@@ -47,7 +47,11 @@ public sealed partial class VaultStore
     }
 
     /// <summary>创建 v3 本地密钥保险库：仅短密钥 + 独立 .kpkey，无主密码保护层。</summary>
-    public VaultSession CreateLocalSession(string path, string shortKey, string account = "")
+    /// <param name="encryptionKey">
+    /// 换电脑时传入已保存的 .kpkey 内容：新保险库沿用这把数据密钥，不生成新密钥，也不再提示保存密钥文件。
+    /// 绑定云同步后可直接解开云端数据。为空时生成新的随机密钥。
+    /// </param>
+    public VaultSession CreateLocalSession(string path, string shortKey, string account = "", string? encryptionKey = null)
     {
         if (string.IsNullOrEmpty(shortKey))
         {
@@ -65,8 +69,10 @@ public sealed partial class VaultStore
             throw new ArgumentException("账号过长。", nameof(account));
         }
 
+        var existingKey = !string.IsNullOrWhiteSpace(encryptionKey);
+        // 先解析密钥：格式不对时什么都不写。
+        var dataKey = existingKey ? VaultKeyFile.Parse(encryptionKey!) : RandomNumberGenerator.GetBytes(Argon2Id.HashLength);
         var kdf = new KdfMaterial(Profile, RandomNumberGenerator.GetBytes(Argon2Id.SaltLength));
-        var dataKey = RandomNumberGenerator.GetBytes(Argon2Id.HashLength);
         var entries = new List<VaultEntry>();
         byte[]? wrapKey = null;
         var handedOff = false;
@@ -75,7 +81,7 @@ public sealed partial class VaultStore
             var shortKeyMaterial = HashShortKey(shortKey, Profile);
             var (wrap, key) = CreateShortWrap(shortKey, Profile, dataKey);
             wrapKey = key;
-            WriteFile(path, trimmed, kdf, shortKeyMaterial, dataKey, entries, formatVersion: FormatVersion);
+            WriteFile(path, trimmed, kdf, shortKeyMaterial, dataKey, entries, keyFileSaved: existingKey, formatVersion: FormatVersion);
             try
             {
                 WriteQuickUnlock(path, kdf.Salt, wrap);
@@ -89,7 +95,7 @@ public sealed partial class VaultStore
 
             handedOff = true;
             return new VaultSession(path, trimmed, kdf, shortKeyMaterial, dataKey, entries, null, null, wrap, wrapKey,
-                formatVersion: FormatVersion);
+                keyFileSaved: existingKey, formatVersion: FormatVersion);
         }
         finally
         {

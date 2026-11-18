@@ -4,6 +4,7 @@
         xmlns:views="using:KeepPassword.App.Views"
         xmlns:c="using:KeepPassword.App.Controls"
         xmlns:details="using:KeepPassword.App.Views.Details"
+        xmlns:dc="using:KeepPassword.App.Controls.Details"
         xmlns:vault="using:KeepPassword.Core.Vault"
         x:Class="KeepPassword.App.Views.MainWindow"
         Title="Keep Password"
@@ -337,21 +338,11 @@
           <Panel>
           <details:DetailPanelView x:Name="ModernDetail" IsVisible="False" Margin="0,32,0,0" />
           <!-- 其他类型继续使用原编辑器，避免本轮三种详情重构丢失现有字段。 -->
-          <Grid x:Name="DetailContent" RowDefinitions="Auto,*,Auto" Margin="28,44,28,18">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,12">
-              <Border Classes="count-badge" VerticalAlignment="Center">
-                <TextBlock Text="{Binding KindName}" />
-              </Border>
-              <TextBlock x:Name="DetailTitle" Grid.Column="1" Text="{Binding Name}" Classes="h1" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" Margin="10,0,8,0" VerticalAlignment="Center" />
-              <Button Grid.Column="2" Classes="icon" Width="32" Height="32" ToolTip.Tip="{Binding FavoriteText}" VerticalAlignment="Top" Click="OnToggleFavorite">
-                <Panel>
-                  <PathIcon Data="{StaticResource Icon.StarOutline}" Width="19" Height="19" IsVisible="{Binding !Favorite}" />
-                  <PathIcon Data="{StaticResource Icon.Star}" Width="19" Height="19" Foreground="{DynamicResource Kp.Star}" IsVisible="{Binding Favorite}" />
-                </Panel>
-              </Button>
-              <Button Grid.Column="3" Classes="ghost" Content="关闭" VerticalAlignment="Top" Click="OnCloseDetail" />
-            </Grid>
-            <Panel Grid.Row="1">
+          <!-- 头部（DetailHeader）和底栏（SaveBar）与新版详情共用同一套控件、同样的位置和底色，
+               所有条目类型的头部、底部完全一致；中间仍是原来的字段卡片。 -->
+          <Grid x:Name="DetailContent" RowDefinitions="Auto,*,Auto,64" Margin="0,32,0,0" Background="{DynamicResource Detail.Background}">
+            <dc:DetailHeader x:Name="LegacyHeader" Title="{Binding Name, Mode=TwoWay}" />
+            <Panel Grid.Row="1" Margin="28,12,28,0">
               <ScrollViewer x:Name="DetailScroller" Margin="0,0,-20,0">
                 <StackPanel Spacing="2" Margin="0,0,20,0">
                   <Border Classes="field">
@@ -573,23 +564,9 @@
               </ScrollViewer>
             </Panel>
 
-            <DockPanel Grid.Row="2" Margin="0,14,0,0">
-              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10" IsVisible="{Binding HasDetail}">
-                <Button Classes="danger" Click="OnDelete">
-                  <StackPanel Orientation="Horizontal" Spacing="6">
-                    <PathIcon Data="{StaticResource Icon.Trash}" Width="14" Height="14" />
-                    <TextBlock Text="删除" VerticalAlignment="Center" />
-                  </StackPanel>
-                </Button>
-                <Button Classes="accent" Click="OnSave" Padding="20,9">
-                  <StackPanel Orientation="Horizontal" Spacing="6">
-                    <PathIcon Data="{StaticResource Icon.Check}" Width="14" Height="14" />
-                    <TextBlock Text="保存修改" VerticalAlignment="Center" />
-                  </StackPanel>
-                </Button>
-              </StackPanel>
-              <TextBlock x:Name="DetailStatus" Text="{Binding Status}" VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" Margin="0,0,12,0" />
-            </DockPanel>
+            <TextBlock x:Name="DetailStatus" Grid.Row="2" Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" Margin="28,10,28,0"
+                       IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <dc:SaveBar x:Name="LegacyFooter" Grid.Row="3" />
           </Grid>
           </Panel>
         </Border>

@@ -131,6 +131,101 @@ public class EncryptionKeyFlowTests
     }
 
     [AvaloniaFact]
+    public async Task NewComputer_CreateWithExistingKey_ReusesKeyAndSkipsSavePrompt()
+    {
+        using var fixture = new Fixture();
+        var key = fixture.Session.PendingEncryptionKey;
+        var keyId = fixture.Session.EncryptionKeyId;
+        var newPath = Path.Combine(fixture.Directory, "laptop.kpvault");
+        var view = new UnlockViewModel(fixture.Store, newPath);
+        Assert.True(view.ShowUseExistingKey);
+        Assert.False(view.ShowKeyRecovery);
+
+        view.UseExistingKeyForCreate();
+        Assert.True(view.CreateWithExistingKey);
+        Assert.True(view.ShowKeyRecovery);
+        Assert.True(view.ShowCreateShort);
+        Assert.Equal("导入密钥并创建", view.SubmitText);
+
+        view.ShortKey = view.ConfirmShort = "laptop";
+        Assert.False(await view.SubmitAsync());
+        Assert.Contains("加密密钥", view.Error);
+        Assert.False(File.Exists(newPath));
+
+        view.ShortKey = view.ConfirmShort = "laptop";
+        view.EncryptionKey = "KPB-this-is-the-old-binding-file";
+        Assert.False(await view.SubmitAsync());
+        Assert.False(File.Exists(newPath));
+
+        view.ShortKey = view.ConfirmShort = "laptop";
+        view.EncryptionKey = key;
+        Assert.True(await view.SubmitAsync());
+        Assert.Equal(keyId, view.Session!.EncryptionKeyId);
+        Assert.False(view.Session.NeedsKeyFileSave);
+        Assert.Equal("", view.EncryptionKey);
+        view.Session.Dispose();
+        using var reopened = fixture.Store.UnlockWithShortKey(newPath, "laptop");
+        Assert.Equal(keyId, reopened.EncryptionKeyId);
+    }
+
+    [AvaloniaFact]
+    public async Task CreateWithExistingKey_CanSwitchBackToANewKey()
+    {
+        using var fixture = new Fixture();
+        var newPath = Path.Combine(fixture.Directory, "fresh.kpvault");
+        var view = new UnlockViewModel(fixture.Store, newPath);
+        view.UseExistingKeyForCreate();
+        view.EncryptionKey = fixture.Session.PendingEncryptionKey;
+        view.UseNewKeyForCreate();
+        Assert.False(view.ShowKeyRecovery);
+        Assert.Equal("", view.EncryptionKey);
+        view.ShortKey = view.ConfirmShort = "fresh";
+        Assert.True(await view.SubmitAsync());
+        Assert.True(view.Session!.NeedsKeyFileSave);
+        Assert.NotEqual(fixture.Session.EncryptionKeyId, view.Session.EncryptionKeyId);
+        view.Session.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task ReExportKey_RejectsWrongShortKey_ThenSavesTheSameKey()
+    {
+        using var fixture = new Fixture();
+        var localPath = Path.Combine(fixture.Directory, "local.kpvault");
+        using var session = fixture.Store.CreateLocalSession(localPath, "local-short");
+        var key = session.PendingEncryptionKey;
+        session.SaveEncryptionKeyFile(Path.Combine(fixture.Directory, "original.kpkey"), key);
+        var target = Path.Combine(fixture.Directory, "again", "copy");
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        var completion = EncryptionKeyDialog.ExportAsync(fixture.Owner, session, choosePath: () => Task.FromResult<string?>(target));
+        var dialog = Assert.Single(fixture.Owner.OwnedWindows);
+        var box = Assert.Single(dialog.GetVisualDescendants().OfType<TextBox>());
+        Assert.DoesNotContain(dialog.GetVisualDescendants().OfType<TextBlock>(), block => block.Text?.Contains("KP2-") == true);
+        var ok = FindButton(dialog, "验证并选择保存位置…");
+
+        box.Text = "wrong-short";
+        Click(ok);
+        await WaitUntil(() => dialog.GetVisualDescendants().OfType<TextBlock>().Any(block => block.Text == "短密钥不正确。"));
+        Assert.False(completion.IsCompleted);
+        Assert.False(File.Exists(target + ".kpkey"));
+
+        box.Text = "local-short";
+        Click(ok);
+        Assert.True(await completion.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal(key, VaultKeyFile.Read(target + ".kpkey"));
+        Assert.Equal("", box.Text);
+    }
+
+    private static async Task WaitUntil(Func<bool> condition)
+    {
+        for (var i = 0; i < 500 && !condition(); i++)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(condition());
+    }
+
+    [AvaloniaFact]
     public async Task InvalidVaultFormat_ShowsAnErrorWithoutOpeningASession()
     {
         using var fixture = new Fixture();

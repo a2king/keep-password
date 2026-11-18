@@ -40,7 +40,7 @@ public class CloudSyncContractTests
     }
 
     [Fact]
-    public async Task Bind_EmptyCloud_UploadsWrapThenVault_AndDoesNotSaveSyncFile()
+    public async Task Bind_EmptyCloud_EstablishesWithKeyIdOnly_AndDoesNotSaveSyncFile()
     {
         using var session = Local("only-local");
         var handler = new Script();
@@ -48,7 +48,7 @@ public class CloudSyncContractTests
         {
             if (method == "POST" && path.EndsWith("/api/sync/device/bind"))
             {
-                return Json(200, BindBody(vaultVersion: 0, hasWrappedKey: false));
+                return Json(200, BindBody(vaultVersion: 0));
             }
 
             if (method == "PUT" && path.EndsWith("/api/sync/commit"))
@@ -60,181 +60,250 @@ public class CloudSyncContractTests
         };
 
         using var service = Service(handler);
-        var result = await service.CompleteBindAsync(session, Request(), Password, wrapProfile: KdfProfile.Fast);
+        var result = await service.CompleteBindAsync(session, Request());
         Assert.True(result.VaultSynced);
-        Assert.False(result.AdoptedCloudKey);
+        Assert.False(result.NeedsKeyFile);
         Assert.Equal(1, result.State.VaultVersion);
         Assert.Equal(1, result.State.KeyVersion);
+        Assert.Equal(session.EncryptionKeyId, result.State.CloudKeyId);
         Assert.False(File.Exists(session.VaultPath + ".sync"));
         Assert.Equal(
             ["POST /api/sync/device/bind", "PUT /api/sync/commit"],
             handler.Calls.Select(call => call.Method + " " + call.Path).ToArray());
+        Assert.DoesNotContain("bindingKey", handler.Calls[0].Body);
+        Assert.Contains("\"clientVersion\":\"1.0.1\"", handler.Calls[0].Body);
         Assert.Contains("\"purpose\":\"establish\"", handler.Calls[1].Body);
+        Assert.Equal(session.EncryptionKeyId, ReadField(handler.Calls[1].Body, "keyId"));
+        Assert.DoesNotContain("wrappedKey", handler.Calls[1].Body);
+        Assert.DoesNotContain(handler.Calls, call => call.Path.Contains("wrapped-key"));
         AssertNoSecrets(handler, session);
     }
 
     [Fact]
-    public async Task Bind_ExistingWrapSameKey_DoesNotOverwriteWrap()
+    public async Task Bind_CloudWithSameKey_MergesWithoutAskingForKeyFile()
     {
-        using var session = Local("only-local");
+        var path = TestVault.NewPath();
+        using var session = TestVault.CreateLocalUnlocked(path);
+        session.Upsert(Entry("only-local"));
+        session.Save();
         var key = session.CopyDataKey();
-        var wrap = AccountKeyWrap.Wrap(Password, key, KdfProfile.Fast);
-        var vault = await File.ReadAllBytesAsync(session.VaultPath);
+        var remoteVault = session.EncryptSnapshot(key, [Entry("only-remote")], session.Spaces, session.Tags);
+        byte[]? uploaded = null;
         var handler = new Script();
-        handler.On = (method, path) =>
+        handler.On = (method, pathName) =>
         {
-            if (method == "POST" && path.EndsWith("/device/bind"))
+            if (method == "POST" && pathName.EndsWith("/device/bind")) return Json(200, BindBody(4, vaultKeyId: session.EncryptionKeyId));
+            if (method == "GET" && pathName.EndsWith("/vault")) return Json(200, Vault(4, remoteVault));
+            if (method == "PUT" && pathName.EndsWith("/vault"))
             {
-                return Json(200, BindBody(1, true));
+                uploaded = Convert.FromBase64String(ReadField(handler.Calls[^1].Body, "dataBase64"));
+                return Json(200, """{"ok":true,"vaultVersion":5}""");
             }
 
-            if (method == "GET" && path.EndsWith("/wrapped-key"))
-            {
-                return Json(200, Wrapped(wrap));
-            }
-
-            if (method == "GET" && path.EndsWith("/vault"))
-            {
-                return Json(200, Vault(1, vault));
-            }
-
-            if (method == "PUT" && path.EndsWith("/vault"))
-            {
-                return Json(200, """{"ok":true,"vaultVersion":2}""");
-            }
-
-            return Json(500, """{"error":"不应覆盖密钥包"}""");
+            return Json(500, """{"error":"意外"}""");
         };
 
         using var service = Service(handler);
-        var result = await service.CompleteBindAsync(session, Request(), Password, wrapProfile: KdfProfile.Fast);
+        var result = await service.CompleteBindAsync(session, Request());
         Assert.True(result.VaultSynced);
-        Assert.False(result.AdoptedCloudKey);
-        Assert.DoesNotContain(handler.Calls, call => call.Method == "PUT" && call.Path.Contains("wrapped-key"));
-        Assert.Contains(handler.Calls, call => call.Method == "GET" && call.Path.Contains("wrapped-key"));
+        Assert.False(result.NeedsKeyFile);
+        Assert.Equal(5, result.State.VaultVersion);
+        Assert.Equal(session.EncryptionKeyId, ReadField(handler.Calls[^1].Body, "keyId"));
+        Assert.Equal(["only-local", "only-remote"], VaultStore.ReadEntriesWithDataKey(uploaded!, key).Select(entry => entry.Name).OrderBy(name => name).ToArray());
+        Assert.Equal(["only-local", "only-remote"], session.Entries.Select(entry => entry.Name).OrderBy(name => name).ToArray());
         CryptographicOperations.ZeroMemory(key);
-        CryptographicOperations.ZeroMemory(wrap);
     }
 
-    [Fact]
-    public async Task Bind_ExistingWrapDifferentKey_MergesWithoutOverwritingWrapOrDroppingLocal()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Bind_CloudWithOtherKey_KeepsDevicePaused_ThenKeyFileMergesBoth(bool serverKnowsKeyId)
     {
         var path = TestVault.NewPath();
-        string shortKey = "short-key";
-        byte[] oldKey;
+        const string shortKey = "short-key";
+        byte[] cloudKey;
+        string cloudId;
+        byte[] cloudVault;
+        var cloudPath = TestVault.NewPath();
+        using (var cloud = TestVault.CreateLocalUnlocked(cloudPath))
+        {
+            cloud.Upsert(Entry("only-remote"));
+            cloud.Save();
+            cloudKey = cloud.CopyDataKey();
+            cloudId = cloud.EncryptionKeyId;
+            cloudVault = await File.ReadAllBytesAsync(cloudPath);
+        }
+
         using (var session = TestVault.CreateLocalUnlocked(path, shortKey))
         {
             session.Upsert(Entry("only-local"));
             session.Save();
-            oldKey = session.CopyDataKey();
-            var remotePath = TestVault.NewPath();
-            byte[] remoteKey;
-            byte[] remoteVault;
-            using (var remote = TestVault.CreateLocalUnlocked(remotePath))
-            {
-                remote.Upsert(Entry("only-remote"));
-                remote.Save();
-                remoteKey = remote.CopyDataKey();
-                remoteVault = await File.ReadAllBytesAsync(remotePath);
-            }
-
-            var wrap = AccountKeyWrap.Wrap(Password, remoteKey, KdfProfile.Fast);
+            var before = await File.ReadAllBytesAsync(path);
             byte[]? uploaded = null;
             var handler = new Script();
             handler.On = (method, pathName) =>
             {
                 if (method == "POST" && pathName.EndsWith("/device/bind"))
-                {
-                    return Json(200, BindBody(4, true));
-                }
-
-                if (method == "GET" && pathName.EndsWith("/wrapped-key"))
-                {
-                    return Json(200, Wrapped(wrap));
-                }
-
-                if (method == "GET" && pathName.EndsWith("/vault"))
-                {
-                    return Json(200, Vault(4, remoteVault));
-                }
-
+                    return Json(200, BindBody(4, keyVersion: 1, vaultKeyId: serverKnowsKeyId ? cloudId : null));
+                if (method == "GET" && pathName.EndsWith("/vault")) return Json(200, Vault(4, cloudVault));
+                if (method == "GET" && pathName.EndsWith("/status")) return Json(200, $$"""{"vaultVersion":4,"keyVersion":1,"vaultKeyId":"{{cloudId}}"}""");
                 if (method == "PUT" && pathName.EndsWith("/vault"))
                 {
                     uploaded = Convert.FromBase64String(ReadField(handler.Calls[^1].Body, "dataBase64"));
                     return Json(200, """{"ok":true,"vaultVersion":5}""");
                 }
 
-                return Json(500, """{"error":"不应覆盖密钥包"}""");
+                return Json(500, """{"error":"不应请求"}""");
             };
 
             using var service = Service(handler);
-            var result = await service.CompleteBindAsync(session, Request(), Password, wrapProfile: KdfProfile.Fast);
-            Assert.True(result.AdoptedCloudKey);
-            Assert.True(result.VaultSynced);
-            Assert.False(File.Exists(path + ".sync"));
-            Assert.DoesNotContain(handler.Calls, call => call.Method == "PUT" && call.Path.Contains("wrapped-key"));
-            Assert.NotNull(uploaded);
-            var names = VaultStore.ReadEntriesWithDataKey(uploaded!, remoteKey).Select(entry => entry.Name).OrderBy(name => name).ToArray();
-            Assert.Equal(["only-local", "only-remote"], names);
-            Assert.Throws<CredentialRejectedException>(() => VaultStore.ReadEntriesWithDataKey(uploaded!, oldKey));
+            var result = await service.CompleteBindAsync(session, Request());
+            Assert.True(result.NeedsKeyFile);
+            Assert.False(result.VaultSynced);
+            Assert.True(result.State.SyncBlocked);
+            Assert.Equal(SyncMessages.NeedsKeyReason, result.State.SyncBlockReason);
+            Assert.DoesNotContain(handler.Calls, call => call.Method == "PUT");
+            Assert.DoesNotContain(handler.Calls, call => call.Path.Contains("unbind-self"));
+            Assert.Equal(before, await File.ReadAllBytesAsync(path));
+            Assert.Equal(serverKnowsKeyId, handler.Calls.All(call => !(call.Method == "GET" && call.Path.EndsWith("/vault"))));
+            if (serverKnowsKeyId)
+            {
+                Assert.Equal(cloudId, result.State.CloudKeyId);
+                Assert.Contains(cloudId, SyncMessages.NeedsCloudKey(result.State.CloudKeyId));
+            }
+
+            var state = result.State;
+            var wrongKey = VaultKeyFile.Encode(RandomNumberGenerator.GetBytes(32));
+            var wrong = await Assert.ThrowsAsync<SyncApiException>(() => service.AdoptKeyFileAsync(session, state, wrongKey, confirmConflicts: true));
+            if (serverKnowsKeyId)
+            {
+                Assert.Contains(cloudId, wrong.Message);
+            }
+
+            Assert.True(state.SyncBlocked);
+            Assert.Equal(before, await File.ReadAllBytesAsync(path));
+
+            var adopted = await service.AdoptKeyFileAsync(session, state, VaultKeyFile.Encode(cloudKey), confirmConflicts: true);
+            Assert.True(adopted.Committed);
+            Assert.False(state.SyncBlocked);
+            Assert.Equal(cloudId, state.CloudKeyId);
+            Assert.Equal(cloudId, session.EncryptionKeyId);
+            Assert.Equal(cloudId, ReadField(handler.Calls[^1].Body, "keyId"));
+            Assert.Equal(["only-local", "only-remote"], VaultStore.ReadEntriesWithDataKey(uploaded!, cloudKey).Select(entry => entry.Name).OrderBy(name => name).ToArray());
             AssertNoSecrets(handler, session);
-            CryptographicOperations.ZeroMemory(remoteKey);
-            CryptographicOperations.ZeroMemory(wrap);
         }
 
-        using var unlocked = TestVault.Store().UnlockWithShortKey(path, shortKey);
-        Assert.Equal(["only-local", "only-remote"], unlocked.Entries.Select(entry => entry.Name).OrderBy(name => name).ToArray());
-        CryptographicOperations.ZeroMemory(oldKey);
+        using var reopened = TestVault.Store().UnlockWithShortKey(path, shortKey);
+        Assert.Equal(cloudId, reopened.EncryptionKeyId);
+        Assert.Equal(["only-local", "only-remote"], reopened.Entries.Select(entry => entry.Name).OrderBy(name => name).ToArray());
+        CryptographicOperations.ZeroMemory(cloudKey);
     }
 
     [Fact]
-    public async Task Bind_VaultWithoutWrap_RefusesWhenLocalKeyDoesNotFit()
+    public async Task NewComputer_CreatedFromKeyFile_BindsAndDownloadsWithoutAnyExtraFile()
     {
-        using var session = Local("only-local");
-        var before = await File.ReadAllBytesAsync(session.VaultPath);
-        var remotePath = TestVault.NewPath();
-        byte[] remoteVault;
-        using (var remote = TestVault.CreateLocalUnlocked(remotePath))
-        {
-            remote.Upsert(Entry("cloud"));
-            remote.Save();
-            remoteVault = await File.ReadAllBytesAsync(remotePath);
-        }
-
+        // 第一台电脑：本地已有数据，云端为空，绑定后上传。
+        var firstPath = TestVault.NewPath();
+        byte[]? cloudVault = null;
+        string? cloudKeyId = null;
+        long cloudVersion = 0;
         var handler = new Script();
         handler.On = (method, path) =>
         {
             if (method == "POST" && path.EndsWith("/device/bind"))
+                return Json(200, BindBody(cloudVersion, keyVersion: cloudVersion > 0 ? 1 : 0, vaultKeyId: cloudKeyId));
+            if (method == "PUT" && path.EndsWith("/commit"))
             {
-                return Json(200, BindBody(3, false, hasVault: true));
+                cloudVault = Convert.FromBase64String(ReadField(handler.Calls[^1].Body, "dataBase64"));
+                cloudKeyId = ReadField(handler.Calls[^1].Body, "keyId");
+                cloudVersion = 1;
+                return Json(200, """{"ok":true,"keyVersion":1,"vaultVersion":1}""");
             }
 
-            if (method == "GET" && path.EndsWith("/vault"))
+            if (method == "GET" && path.EndsWith("/vault")) return Json(200, Vault(cloudVersion, cloudVault!));
+            if (method == "PUT" && path.EndsWith("/vault"))
             {
-                return Json(200, Vault(3, remoteVault));
+                cloudVault = Convert.FromBase64String(ReadField(handler.Calls[^1].Body, "dataBase64"));
+                Assert.Equal(cloudKeyId, ReadField(handler.Calls[^1].Body, "keyId"));
+                cloudVersion++;
+                return Json(200, $$"""{"ok":true,"vaultVersion":{{cloudVersion}}}""");
             }
 
-            if (method == "POST" && path.EndsWith("/unbind-self"))
-            {
-                return Json(200, """{"ok":true}""");
-            }
+            return Json(500, """{"error":"意外"}""");
+        };
 
-            return Json(500, """{"error":"不应上传"}""");
+        string keyText;
+        using (var first = TestVault.CreateLocalUnlocked(firstPath))
+        {
+            first.Upsert(Entry("github"));
+            first.Save();
+            keyText = VaultKeyFile.Read(firstPath + ".kpkey");
+            using var service = Service(handler);
+            Assert.True((await service.CompleteBindAsync(first, Request())).VaultSynced);
+        }
+
+        // 第二台电脑：用 .kpkey 创建保险库，再绑定。不需要 .kpbind，也不需要再选密钥文件。
+        var secondPath = TestVault.NewPath();
+        using var second = TestVault.Store().CreateLocalSession(secondPath, "laptop-short", encryptionKey: keyText);
+        using (var service = Service(handler))
+        {
+            var result = await service.CompleteBindAsync(second, Request());
+            Assert.True(result.VaultSynced);
+            Assert.False(result.NeedsKeyFile);
+        }
+
+        Assert.Equal("github", Assert.Single(second.Entries).Name);
+        Assert.DoesNotContain(handler.Calls, call => call.Path.Contains("wrapped-key") || call.Body.Contains("bindingKey"));
+    }
+
+    [Fact]
+    public async Task Bind_LegacyCloudWithoutKeyGeneration_ClaimsAndMergesWithLocalKey()
+    {
+        using var session = Local("only-local");
+        var key = session.CopyDataKey();
+        var remoteVault = session.EncryptSnapshot(key, [Entry("from-0.8")], session.Spaces, session.Tags);
+        var handler = new Script();
+        handler.On = (method, path) =>
+        {
+            if (method == "POST" && path.EndsWith("/device/bind")) return Json(200, BindBody(3, keyVersion: 0));
+            if (method == "GET" && path.EndsWith("/vault")) return Json(200, Vault(3, remoteVault));
+            if (method == "PUT" && path.EndsWith("/commit")) return Json(200, """{"ok":true,"keyVersion":1,"vaultVersion":4}""");
+            return Json(500, """{"error":"意外"}""");
         };
 
         using var service = Service(handler);
-        var error = await Assert.ThrowsAsync<SyncApiException>(() =>
-            service.CompleteBindAsync(session, Request(), Password, wrapProfile: KdfProfile.Fast));
-        Assert.Contains("无法解密", error.Message);
-        Assert.DoesNotContain(handler.Calls, call => call.Method == "PUT");
-        Assert.Contains(handler.Calls, call => call.Path.Contains("unbind-self"));
-        Assert.False(File.Exists(session.VaultPath + ".sync"));
-        Assert.Equal(before, await File.ReadAllBytesAsync(session.VaultPath));
-        Assert.Equal("only-local", Assert.Single(session.Entries).Name);
+        var result = await service.CompleteBindAsync(session, Request());
+        Assert.True(result.VaultSynced);
+        var commit = handler.Calls.Single(call => call.Path.EndsWith("/commit"));
+        Assert.Equal("establish", ReadField(commit.Body, "purpose"));
+        Assert.Equal(session.EncryptionKeyId, ReadField(commit.Body, "keyId"));
+        Assert.Equal(["from-0.8", "only-local"], session.Entries.Select(entry => entry.Name).OrderBy(name => name).ToArray());
+        CryptographicOperations.ZeroMemory(key);
     }
 
     [Fact]
-    public async Task Bind_WrapUploadFailure_UnbindsAndDoesNotSave()
+    public async Task Bind_LostEstablishRace_ToOtherKey_PausesForKeyFile()
+    {
+        using var session = Local("only-local");
+        var handler = new Script();
+        handler.On = (method, path) =>
+        {
+            if (method == "POST" && path.EndsWith("/device/bind")) return Json(200, BindBody(0));
+            if (method == "PUT" && path.EndsWith("/commit")) return Json(409, """{"error":"密钥版本已变化，已拒绝写入。","conflict":true,"keyChanged":true,"keyVersion":1,"vaultVersion":1,"vaultKeyId":"0123456789AB"}""");
+            if (method == "GET" && path.EndsWith("/status")) return Json(200, """{"vaultVersion":1,"keyVersion":1,"vaultKeyId":"0123456789AB"}""");
+            return Json(500, """{"error":"不应请求"}""");
+        };
+
+        using var service = Service(handler);
+        var result = await service.CompleteBindAsync(session, Request());
+        Assert.True(result.NeedsKeyFile);
+        Assert.Equal("0123456789AB", result.State.CloudKeyId);
+        Assert.Equal(1, result.State.KeyVersion);
+        Assert.DoesNotContain(handler.Calls, call => call.Path.Contains("unbind-self"));
+    }
+
+    [Fact]
+    public async Task Bind_EstablishRejected_UnbindsAndDoesNotSave()
     {
         using var session = Local("only-local");
         var handler = new Script();
@@ -242,12 +311,12 @@ public class CloudSyncContractTests
         {
             if (method == "POST" && path.EndsWith("/device/bind"))
             {
-                return Json(200, BindBody(0, false));
+                return Json(200, BindBody(0));
             }
 
             if (method == "PUT" && path.EndsWith("/commit"))
             {
-                return Json(400, """{"error":"密钥包无效"}""");
+                return Json(400, """{"error":"保险库数据无效"}""");
             }
 
             if (method == "POST" && path.EndsWith("/unbind-self"))
@@ -259,10 +328,9 @@ public class CloudSyncContractTests
         };
 
         using var service = Service(handler);
-        var error = await Assert.ThrowsAsync<SyncApiException>(() =>
-            service.CompleteBindAsync(session, Request(), Password, wrapProfile: KdfProfile.Fast));
+        var error = await Assert.ThrowsAsync<SyncApiException>(() => service.CompleteBindAsync(session, Request()));
         Assert.Equal(400, error.StatusCode);
-        Assert.Contains("密钥包无效", error.Message);
+        Assert.Contains("保险库数据无效", error.Message);
         Assert.DoesNotContain("SMTP_PASSWORD", error.Message);
         Assert.Contains(handler.Calls, call => call.Path.Contains("unbind-self"));
         Assert.False(File.Exists(session.VaultPath + ".sync"));
@@ -277,7 +345,7 @@ public class CloudSyncContractTests
         {
             if (method == "POST" && path.EndsWith("/device/bind"))
             {
-                return Json(200, BindBody(0, false));
+                return Json(200, BindBody(0));
             }
 
             if (method == "PUT" && path.EndsWith("/commit"))
@@ -292,49 +360,24 @@ public class CloudSyncContractTests
         };
 
         using var service = Service(handler);
-        var result = await service.CompleteBindAsync(session, Request(), Password, wrapProfile: KdfProfile.Fast);
+        var result = await service.CompleteBindAsync(session, Request());
         Assert.False(result.VaultSynced);
+        Assert.False(result.NeedsKeyFile);
         Assert.False(File.Exists(session.VaultPath + ".sync"));
         Assert.DoesNotContain(handler.Calls, call => call.Path.Contains("unbind-self"));
         Assert.Equal("only-local", Assert.Single(session.Entries).Name);
     }
 
     [Fact]
-    public async Task Bind_WrongPasswordCannotUnwrap_StopsBeforeVaultWrite()
+    public async Task Bind_OldServerOrOldClientMessage_IsShownAsIs()
     {
-        using var session = Local("only-local");
-        var other = RandomNumberGenerator.GetBytes(32);
-        var wrap = AccountKeyWrap.Wrap("other-password-12", other, KdfProfile.Fast);
         var handler = new Script();
-        handler.On = (method, path) =>
-        {
-            if (method == "POST" && path.EndsWith("/device/bind"))
-            {
-                return Json(200, BindBody(2, true));
-            }
-
-            if (method == "GET" && path.EndsWith("/wrapped-key"))
-            {
-                return Json(200, Wrapped(wrap));
-            }
-
-            if (method == "POST" && path.EndsWith("/unbind-self"))
-            {
-                return Json(200, """{"ok":true}""");
-            }
-
-            return Json(500, """{"error":"不应继续"}""");
-        };
-
-        using var service = Service(handler);
-        var error = await Assert.ThrowsAsync<SyncApiException>(() =>
-            service.CompleteBindAsync(session, Request(), Password, wrapProfile: KdfProfile.Fast));
-        Assert.Contains("无法解开", error.Message);
-        Assert.DoesNotContain(Password, error.Message);
-        Assert.DoesNotContain(handler.Calls, call => call.Method == "PUT");
-        Assert.False(File.Exists(session.VaultPath + ".sync"));
-        CryptographicOperations.ZeroMemory(other);
-        CryptographicOperations.ZeroMemory(wrap);
+        handler.On = (_, _) => Json(400, """{"error":"请把客户端升级到 1.0.1 或更高版本后再开启云同步。","upgradeRequired":true}""");
+        using var api = new SyncApiClient("http://sync.test", handler);
+        var error = await Assert.ThrowsAsync<SyncApiException>(() => api.BindDeviceAsync(Request()));
+        Assert.Equal(400, error.StatusCode);
+        Assert.IsNotType<SyncKeyChangedException>(error);
+        Assert.Contains("1.0.1", error.Message);
     }
 
     [Fact]
@@ -385,7 +428,6 @@ public class CloudSyncContractTests
     [Theory]
     [InlineData("账号不可用")]
     [InlineData("邮箱或密码不正确")]
-    [InlineData("绑定密钥不正确或已失效")]
     public async Task Bind401_PreservesDistinctMessages(string message)
     {
         var handler = new Script();
@@ -540,17 +582,54 @@ public class CloudSyncContractTests
         var before = await File.ReadAllBytesAsync(session.VaultPath);
         var handler = new Script();
         handler.On = (_, path) => path.EndsWith("/status")
-            ? Json(200, """{"vaultVersion":4,"keyVersion":2,"hasWrappedKey":true,"serverTime":"2026-11-11T00:00:00Z"}""")
+            ? Json(200, """{"vaultVersion":4,"keyVersion":2,"vaultKeyId":"0123456789AB","serverTime":"2026-11-11T00:00:00Z"}""")
             : Json(500, """{"error":"不应继续"}""");
         var state = new SyncSessionState { DeviceToken = Token, VaultVersion = 1, KeyVersion = 1, BaseUrl = "http://sync.test" };
         using var service = Service(handler);
         var error = await Assert.ThrowsAsync<SyncKeyChangedException>(() => service.RefreshAsync(session, state, session.CopyDataKey()));
-        Assert.Contains("若非本人操作，请修改账号密码，并到用户管理后台更新密钥文件", error.Message);
+        Assert.Contains("若非本人操作，请修改网站密码", error.Message);
+        Assert.Contains("用新的密钥文件恢复同步", error.Message);
         Assert.DoesNotContain(Password, error.Message);
         Assert.True(state.SyncBlocked);
         Assert.Equal("key", state.SyncBlockReason);
+        Assert.Equal("0123456789AB", state.CloudKeyId);
         Assert.DoesNotContain(handler.Calls, call => call.Method == "PUT");
         Assert.Equal(before, await File.ReadAllBytesAsync(session.VaultPath));
+    }
+
+    [Fact]
+    public async Task Refresh_WhileWaitingForKeyFile_KeepsReasonAndDoesNotUpload()
+    {
+        using var session = Local("only-local");
+        var handler = new Script();
+        handler.On = (_, path) => path.EndsWith("/status")
+            ? Json(200, """{"vaultVersion":4,"keyVersion":1,"vaultKeyId":"0123456789AB"}""")
+            : Json(500, """{"error":"不应继续"}""");
+        var state = BoundState();
+        state.SyncBlocked = true;
+        state.SyncBlockReason = SyncMessages.NeedsKeyReason;
+        state.CloudKeyId = "0123456789AB";
+        using var service = Service(handler);
+        await Assert.ThrowsAsync<SyncKeyChangedException>(() => service.RefreshAsync(session, state, session.CopyDataKey()));
+        Assert.Equal(SyncMessages.NeedsKeyReason, state.SyncBlockReason);
+        Assert.DoesNotContain(handler.Calls, call => call.Method == "PUT");
+    }
+
+    [Fact]
+    public async Task Push_SendsKeyId_AndServerKeyMismatchPausesForKeyFile()
+    {
+        using var session = Local("only-local");
+        var handler = new Script();
+        handler.On = (method, path) => method == "PUT" && path.EndsWith("/vault")
+            ? Json(409, """{"error":"这台设备使用的加密密钥与云端不同，已拒绝写入。","keyChanged":true,"conflict":true,"keyVersion":1,"vaultVersion":1,"vaultKeyId":"0123456789AB"}""")
+            : Json(500, """{"error":"意外"}""");
+        var state = BoundState();
+        using var service = Service(handler);
+        await Assert.ThrowsAsync<SyncKeyChangedException>(() => service.PushAsync(session, state, session.CopyDataKey()));
+        Assert.Equal(session.EncryptionKeyId, ReadField(handler.Calls.Single().Body, "keyId"));
+        Assert.True(state.SyncBlocked);
+        Assert.Equal(SyncMessages.NeedsKeyReason, state.SyncBlockReason);
+        Assert.Equal("0123456789AB", state.CloudKeyId);
     }
 
     [Fact]
@@ -585,7 +664,7 @@ public class CloudSyncContractTests
         var state = BoundState();
         using var service = Service(handler);
         var error = await Assert.ThrowsAsync<SyncApiException>(() => service.RotateKeyAsync(
-            session, state, VaultKeyFile.Encode(RandomNumberGenerator.GetBytes(32)), Password, confirmConflicts: true, wrapProfile: KdfProfile.Fast));
+            session, state, VaultKeyFile.Encode(RandomNumberGenerator.GetBytes(32)), confirmConflicts: true));
         Assert.Contains("不能当成空库", error.Message);
         Assert.DoesNotContain(handler.Calls, call => call.Method == "PUT");
         Assert.Equal(before, await File.ReadAllBytesAsync(session.VaultPath));
@@ -611,12 +690,12 @@ public class CloudSyncContractTests
         };
         var state = BoundState();
         using var service = Service(handler);
-        var preview = await service.RotateKeyAsync(session, state, VaultKeyFile.Encode(RandomNumberGenerator.GetBytes(32)), Password, confirmConflicts: false, wrapProfile: KdfProfile.Fast);
+        var preview = await service.RotateKeyAsync(session, state, VaultKeyFile.Encode(RandomNumberGenerator.GetBytes(32)), confirmConflicts: false);
         Assert.True(preview.NeedsConfirmation);
         Assert.False(preview.Committed);
         Assert.DoesNotContain(handler.Calls, call => call.Method == "PUT");
         var error = await Assert.ThrowsAsync<SyncConflictException>(() => service.RotateKeyAsync(
-            session, state, VaultKeyFile.Encode(RandomNumberGenerator.GetBytes(32)), Password, confirmConflicts: true, wrapProfile: KdfProfile.Fast));
+            session, state, VaultKeyFile.Encode(RandomNumberGenerator.GetBytes(32)), confirmConflicts: true));
         Assert.DoesNotContain("remote-secret", error.Message);
         Assert.Equal(before, await File.ReadAllBytesAsync(session.VaultPath));
         CryptographicOperations.ZeroMemory(current);
@@ -645,11 +724,19 @@ public class CloudSyncContractTests
         };
         var state = BoundState();
         using var service = Service(handler);
-        var result = await service.RotateKeyAsync(session, state, VaultKeyFile.Encode(RandomNumberGenerator.GetBytes(32)), Password, confirmConflicts: true, wrapProfile: KdfProfile.Fast);
+        var next = RandomNumberGenerator.GetBytes(32);
+        var result = await service.RotateKeyAsync(session, state, VaultKeyFile.Encode(next), confirmConflicts: true);
         Assert.True(result.Committed);
         Assert.Equal(2, attempts);
         Assert.Equal(2, state.KeyVersion);
         Assert.False(state.SyncBlocked);
+        var commit = handler.Calls.Last(call => call.Path.EndsWith("/commit"));
+        Assert.Equal("rotate", ReadField(commit.Body, "purpose"));
+        Assert.Equal(VaultKeyFile.Id(next), ReadField(commit.Body, "keyId"));
+        Assert.DoesNotContain("wrappedKey", commit.Body);
+        Assert.Equal(VaultKeyFile.Id(next), state.CloudKeyId);
+        Assert.Equal(VaultKeyFile.Id(next), session.EncryptionKeyId);
+        CryptographicOperations.ZeroMemory(next);
         CryptographicOperations.ZeroMemory(current);
     }
 
@@ -663,7 +750,7 @@ public class CloudSyncContractTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.RotateKeyAsync(
-            session, BoundState(), VaultKeyFile.Encode(RandomNumberGenerator.GetBytes(32)), Password, true, cts.Token, KdfProfile.Fast));
+            session, BoundState(), VaultKeyFile.Encode(RandomNumberGenerator.GetBytes(32)), true, cts.Token));
         Assert.Empty(handler.Calls);
         Assert.Equal(before, await File.ReadAllBytesAsync(session.VaultPath));
     }
@@ -680,7 +767,7 @@ public class CloudSyncContractTests
         handler.On = (method, path) =>
         {
             if (method == "GET" && path.EndsWith("/vault")) return Json(200, Vault(2, remoteVault));
-            if (method == "GET" && path.EndsWith("/status")) return Json(200, """{"vaultVersion":2,"keyVersion":2,"hasWrappedKey":true}""");
+            if (method == "GET" && path.EndsWith("/status")) return Json(200, """{"vaultVersion":2,"keyVersion":2}""");
             if (method == "PUT" && path.EndsWith("/vault")) return Json(200, """{"ok":true,"vaultVersion":3}""");
             return Json(500, """{"error":"意外"}""");
         };
@@ -771,11 +858,13 @@ public class CloudSyncContractTests
         try
         {
             var raw = Convert.ToBase64String(key);
-            foreach (var call in handler.Calls.Where(call => call.Path.Contains("vault") || call.Path.Contains("wrapped-key") || call.Path.Contains("commit")))
+            foreach (var call in handler.Calls.Where(call => call.Path.Contains("vault") || call.Path.Contains("commit")))
             {
                 Assert.DoesNotContain(raw, call.Body);
+                Assert.DoesNotContain("KP2-", call.Body);
                 Assert.DoesNotContain(Password, call.Body);
                 Assert.DoesNotContain(Code, call.Body);
+                Assert.DoesNotContain("wrappedKey", call.Body);
             }
         }
         finally
@@ -804,32 +893,27 @@ public class CloudSyncContractTests
     {
         Email = "person@example.com",
         Password = Password,
-        BindingKey = "KPB-test-binding-key",
         Code = Code,
         DeviceName = "test",
         Platform = "Linux",
-        ClientVersion = "0.9.1"
+        ClientVersion = "1.0.1"
     };
 
     private static VaultSyncService Service(Script handler) => new("http://sync.test", handler);
 
-    private static string BindBody(long vaultVersion, bool hasWrappedKey, bool? hasVault = null)
+    private static string BindBody(long vaultVersion, long? keyVersion = null, string? vaultKeyId = null)
     {
-        var vault = hasVault ?? vaultVersion > 0;
         return JsonSerializer.Serialize(new
         {
             deviceToken = Token,
             deviceId = 9,
             vaultVersion,
-            bindingKeyFingerprint = "abcd",
-            hasVault = vault,
-            hasWrappedKey,
+            vaultKeyId,
+            hasVault = vaultVersion > 0,
+            keyVersion = keyVersion ?? (vaultVersion > 0 ? 1 : 0),
             serverTime = "2026-11-11T00:00:00Z"
         });
     }
-
-    private static string Wrapped(byte[] wrap) =>
-        JsonSerializer.Serialize(new { dataBase64 = Convert.ToBase64String(wrap) });
 
     private static string Vault(long version, byte[] data) =>
         JsonSerializer.Serialize(new

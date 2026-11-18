@@ -8,7 +8,7 @@
 |---|---|
 | `Styles/GlassTheme.axaml` | 入口：亮/暗资源、动效时长与缓动、通用 `glass-trough` / `glass-thumb` / `glass-switch-row` 样式、减少动画规则 |
 | `Styles/GlassSegmentedTheme.axaml` | `SegmentedControl` 与选项主题（默认 / `compact` / `wrap`） |
-| `Styles/GlassToggleTheme.axaml` | `ToggleSwitch` 默认主题（标准 / `compact`） |
+| `Styles/GlassToggleTheme.axaml` | `ToggleSwitch` 默认主题（全局唯一尺寸） |
 | `Styles/GlassComboTheme.axaml` | `ComboBox` / `ComboBoxItem` 默认主题（标准 / `compact`） |
 | `Controls/SegmentedControl.cs` | 继承 `ListBox`；滑块定位、键盘、按压态 |
 | `Controls/GlassHighlight.cs` | 玻璃块顶部镜面高光（按比例绘制） |
@@ -30,7 +30,7 @@
 | 动画时长 | `Glass.SlideDuration`（滑块 480ms）、`Glass.PressDuration`（按压 200ms）、`Glass.ColorDuration`、`Glass.TrackColorDuration`（开关底色 300ms）、`Glass.HoverDuration`、`Glass.PopupFadeDuration` / `Glass.PopupMoveDuration`、`Glass.ChevronDuration`、`Glass.ReducedFadeDuration` |
 | 强调色与文字 | `GlassAccent`（填充/描边）、`GlassAccentText`（小字号选中文字，已按 WCAG AA 调深/调亮）、`GlassTextSecondary` |
 | 分段尺寸 | `GlassSegmentedTheme.axaml` 末尾 `c|SegmentedControl ListBoxItem`（高 34 / compact 26）；凹槽 `Padding`、`CornerRadius` 在控件主题 Setter 和 `^.compact` |
-| 开关尺寸 | `GlassToggleTheme.axaml`：`PART_Switch` 58×34、`PART_Thumb` 40×28、开启位移 `translate(12px)`、按住拉长 `Margin -6`；compact 对应 46×28 / 32×22 / 8px / -4 |
+| 开关尺寸 | `GlassToggleTheme.axaml`：`PART_Switch` 40×22、`PART_Thumb` 26×18（离边 2px，紧凑投影）、开启位移 `translate(10px)`、按住拉长 `Margin -4`。生成器、设置、详情生成弹层统一用这一种，不再有 compact |
 | 下拉尺寸 | `GlassComboTheme.axaml`：`MinHeight` 42、`CornerRadius` 14、`MaxDropDownHeight` 320、下拉项 `MinHeight` 38；compact 32 / 10 |
 
 ## 替换清单
@@ -43,7 +43,7 @@
 | `Views/MainWindow.axaml` 旧编辑器认证方式 | 同上（`OnAccountAuthPassword/Key`） | `SegmentedControl`，`SelectedIndex` 单向绑定 `UseKeyAuth`，`OnAccountAuthChanged` 调原 `SetKeyAuth` |
 | `Views/Details/DetailPanelView.axaml.cs` 认证 | `Controls.Details.SegmentedControl` | `Controls.SegmentedControl`（`compact`） |
 | `Styles/DetailCompositeTheme.axaml` 账号切换 | 同上 | `Controls.SegmentedControl`（`compact wrap`：放不下就换行，不滚动） |
-| `Views/Details/DetailPanelView.axaml.cs` 生成密码弹层 | 4 个 `CheckBox` | 4 个 `ToggleSwitch`（`compact`） |
+| `Views/Details/DetailPanelView.axaml.cs` 生成密码弹层 | 4 个 `CheckBox` | 4 个 `ToggleSwitch`（与全局同尺寸） |
 | 所有 `ToggleSwitch`、`ComboBox` | Fluent 主题 + App.axaml 全局补丁样式 | 玻璃默认主题；详情面板的 3 个下拉加 `compact` |
 
 已删除：`Views/LiquidGlassSegments.cs`、`Controls/Details/SegmentedControl.cs`；App.axaml 中 `liquid-*`、`ComboBox`、`ComboBoxItem`、`ToggleSwitch` 全局样式。
@@ -58,3 +58,4 @@
 - **字重 650**：微软雅黑只有常规与粗体，选中态用 `SemiBold`，实际渲染为粗体；等宽格子布局下不会抖动。不定宽的账号页签选中不加粗。
 - **按住拉长**：用内层 `Margin` 实现而非 `Width`，保证回弹任意中间帧都不越出 3px 边距。
 - **暗色玻璃块**：规格 34%→14% 白时，选中蓝字对比度只有 3.3:1，已降到 15%→8%，选中文字用 `#C8DCFF`（≥ 5.4:1；字形顶端碰到高光条处约 4.3:1）。
+- **分段切换不自动滚动到选中项**：`SegmentedControl` 继承 `ListBox`，但关闭了 `AutoScrollToSelectedItem`。所有选项始终可见，选中项变化时不再发出 BringIntoView，否则请求会冒泡到外层页面，把详情或设置页整体滚走。

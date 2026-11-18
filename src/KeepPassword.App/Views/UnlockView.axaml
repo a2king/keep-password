@@ -144,6 +144,11 @@
             <Button Classes="link" Content="忘记主密码？" Margin="0,0,18,4" Click="OnBeginRecovery" IsVisible="{Binding RecoveryAvailable}" />
           </WrapPanel>
 
+          <WrapPanel Margin="2,0,0,8" IsVisible="{Binding IsCreate}">
+            <Button Classes="link" Content="使用已有加密密钥（换电脑）" Margin="0,0,18,4" Click="OnCreateWithExistingKey" IsVisible="{Binding ShowUseExistingKey}" />
+            <Button Classes="link" Content="改为生成新的加密密钥" Margin="0,0,18,4" Click="OnCreateWithNewKey" IsVisible="{Binding ShowUseNewKey}" />
+          </WrapPanel>
+
           <StackPanel IsVisible="{Binding ShowCreateShort}">
             <TextBlock Text="短密钥" Classes="label" />
             <TextBox x:Name="ShortBox" views:AsciiInput.IsEnabled="True" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Watermark="之后每次用它解锁" Classes="mono" />

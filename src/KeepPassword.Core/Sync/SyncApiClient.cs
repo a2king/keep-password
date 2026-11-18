@@ -56,13 +56,15 @@ public sealed class SyncApiClient : IDisposable
         return await ReadAsync<VaultDownloadResponse>(response, authenticated: true, ct);
     }
 
-    public async Task<VaultUploadResponse> UploadVaultAsync(string deviceToken, long baseVersion, long keyVersion, byte[] data, CancellationToken ct = default)
+    /// <param name="keyId">数据密钥编号（<see cref="Vault.VaultKeyFile.Id"/>）。服务器用它拦截用错密钥的上传，不能用来解密。</param>
+    public async Task<VaultUploadResponse> UploadVaultAsync(string deviceToken, long baseVersion, long keyVersion, string? keyId, byte[] data, CancellationToken ct = default)
     {
         using var message = Authorized(HttpMethod.Put, "api/sync/vault", deviceToken);
         message.Content = JsonContent.Create(new
         {
             baseVersion,
             keyVersion,
+            keyId,
             dataBase64 = Convert.ToBase64String(data)
         }, options: JsonOptions);
         using var response = await SendAsync(message, ct);
@@ -89,21 +91,16 @@ public sealed class SyncApiClient : IDisposable
         await EnsureSuccess(response, authenticated: true, ct);
     }
 
-    public async Task UploadWrappedKeyAsync(string deviceToken, byte[] wrapped, CancellationToken ct = default)
-    {
-        using var message = Authorized(HttpMethod.Put, "api/sync/wrapped-key", deviceToken);
-        message.Content = JsonContent.Create(new { dataBase64 = Convert.ToBase64String(wrapped) }, options: JsonOptions);
-        using var response = await SendAsync(message, ct);
-        await EnsureSuccess(response, authenticated: true, ct);
-    }
-
+    /// <summary>
+    /// 原子提交密文与密钥代。只上传密文和密钥编号，不上传任何能解开保险库的数据。
+    /// </summary>
     public async Task<SyncCommitResponse> CommitAsync(
         string deviceToken,
         string purpose,
         long expectedKeyVersion,
         long expectedVaultVersion,
+        string keyId,
         byte[] vault,
-        byte[]? wrapped,
         CancellationToken ct = default)
     {
         using var message = Authorized(HttpMethod.Put, "api/sync/commit", deviceToken);
@@ -112,8 +109,8 @@ public sealed class SyncApiClient : IDisposable
             purpose,
             expectedKeyVersion,
             expectedVaultVersion,
-            dataBase64 = Convert.ToBase64String(vault),
-            wrappedKeyBase64 = wrapped is null ? null : Convert.ToBase64String(wrapped)
+            keyId,
+            dataBase64 = Convert.ToBase64String(vault)
         }, options: JsonOptions);
         using var response = await SendAsync(message, ct);
         if (response.StatusCode is HttpStatusCode.Conflict or (HttpStatusCode)426)
@@ -123,14 +120,6 @@ public sealed class SyncApiClient : IDisposable
         }
 
         return await ReadAsync<SyncCommitResponse>(response, authenticated: true, ct);
-    }
-
-    public async Task<byte[]?> DownloadWrappedKeyAsync(string deviceToken, CancellationToken ct = default)
-    {
-        using var message = Authorized(HttpMethod.Get, "api/sync/wrapped-key", deviceToken);
-        using var response = await SendAsync(message, ct);
-        var body = await ReadAsync<WrappedKeyResponse>(response, authenticated: true, ct);
-        return string.IsNullOrEmpty(body.DataBase64) ? null : Convert.FromBase64String(body.DataBase64);
     }
 
     private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -362,7 +351,7 @@ public sealed class SyncApiClient : IDisposable
 
         if (body?.KeyChanged == true)
         {
-            return new SyncKeyChangedException(body.KeyVersion, upgradeRequired: false);
+            return new SyncKeyChangedException(body.KeyVersion, upgradeRequired: false, body.VaultKeyId);
         }
 
         return new SyncConflictException(body?.VaultVersion ?? 0, body?.ServerTime);
@@ -376,6 +365,7 @@ public sealed class SyncApiClient : IDisposable
         public bool UpgradeRequired { get; set; }
         public long KeyVersion { get; set; }
         public long VaultVersion { get; set; }
+        public string? VaultKeyId { get; set; }
         public string? ServerTime { get; set; }
     }
 }
@@ -420,7 +410,7 @@ public class SyncApiException : Exception
 
 public sealed class SyncKeyChangedException : SyncApiException
 {
-    public SyncKeyChangedException(long keyVersion, bool upgradeRequired)
+    public SyncKeyChangedException(long keyVersion, bool upgradeRequired, string? cloudKeyId = null)
         : base(
             upgradeRequired ? SyncFailureKind.Validation : SyncFailureKind.Conflict,
             upgradeRequired ? SyncMessages.UpgradeRequired : SyncMessages.KeyChanged,
@@ -428,11 +418,15 @@ public sealed class SyncKeyChangedException : SyncApiException
     {
         KeyVersion = keyVersion;
         UpgradeRequired = upgradeRequired;
+        CloudKeyId = cloudKeyId;
     }
 
     public long KeyVersion { get; }
 
     public bool UpgradeRequired { get; }
+
+    /// <summary>服务器记录的云端密钥编号；未知时为空。</summary>
+    public string? CloudKeyId { get; }
 }
 
 public sealed class SyncConflictException : SyncApiException
@@ -449,11 +443,11 @@ public sealed class SyncConflictException : SyncApiException
     public string? ServerTime { get; }
 }
 
+/// <summary>1.0.1 起只需要网站账号密码和邮箱验证码。不再有 .kpbind。</summary>
 public sealed class DeviceBindRequest
 {
     public string Email { get; set; } = "";
     public string Password { get; set; } = "";
-    public string BindingKey { get; set; } = "";
     public string Code { get; set; } = "";
     public string DeviceName { get; set; } = "";
     public string Platform { get; set; } = "";
@@ -465,9 +459,9 @@ public sealed class DeviceBindResponse
     public string DeviceToken { get; set; } = "";
     public int DeviceId { get; set; }
     public long VaultVersion { get; set; }
-    public string? BindingKeyFingerprint { get; set; }
+    /// <summary>云端密文所用数据密钥的编号。云端为空或旧数据尚未上报时为空。</summary>
+    public string? VaultKeyId { get; set; }
     public bool HasVault { get; set; }
-    public bool HasWrappedKey { get; set; }
     public long KeyVersion { get; set; }
     public string? ServerTime { get; set; }
 }
@@ -477,9 +471,7 @@ public sealed class SyncStatusResponse
     public long VaultVersion { get; set; }
     public long VaultSizeBytes { get; set; }
     public string? VaultSha256 { get; set; }
-    public string? BindingKeyFingerprint { get; set; }
-    public string? BindingKeyCreatedAt { get; set; }
-    public bool HasWrappedKey { get; set; }
+    public string? VaultKeyId { get; set; }
     public long KeyVersion { get; set; }
     public string? ServerTime { get; set; }
 }
@@ -517,18 +509,13 @@ public sealed class SyncCommitResponse
     public string? VaultSha256 { get; set; }
 }
 
-public sealed class WrappedKeyResponse
-{
-    public string? DataBase64 { get; set; }
-}
-
 public sealed class BindResult
 {
-    public BindResult(SyncSessionState state, bool vaultSynced, bool adoptedCloudKey)
+    public BindResult(SyncSessionState state, bool vaultSynced, bool needsKeyFile = false)
     {
         State = state;
         VaultSynced = vaultSynced;
-        AdoptedCloudKey = adoptedCloudKey;
+        NeedsKeyFile = needsKeyFile;
     }
 
     public SyncSessionState State { get; }
@@ -536,6 +523,9 @@ public sealed class BindResult
     /// <summary>保险库上传或合并上传已得到成功响应。</summary>
     public bool VaultSynced { get; }
 
-    /// <summary>本机数据密钥已切换为云端密钥包解开的密钥。云端密钥包没有被覆盖。</summary>
-    public bool AdoptedCloudKey { get; }
+    /// <summary>
+    /// 云端保险库用的是另一把数据密钥。设备已绑定但同步暂停，需要用户选择对应的 .kpkey
+    /// （<see cref="VaultSyncService.AdoptKeyFileAsync"/>）。本地数据未改动。
+    /// </summary>
+    public bool NeedsKeyFile { get; }
 }

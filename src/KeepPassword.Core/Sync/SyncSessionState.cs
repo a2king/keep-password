@@ -25,7 +25,9 @@ public sealed class SyncSessionState
     public long KeyVersion { get; set; }
     public bool SyncBlocked { get; set; }
     public string? SyncBlockReason { get; set; }
-    public string? BindingKeyFingerprint { get; set; }
+
+    /// <summary>云端密文所用数据密钥的编号（.kpkey 文件名中的那串）。只用于提示。旧版 .sync 文件里没有，读取时为空。</summary>
+    public string? CloudKeyId { get; set; }
     public string BaseUrl { get; set; } = SyncDefaults.BaseUrl;
     public int PollMinutes { get; set; } = (int)SyncDefaults.DefaultPollInterval.TotalMinutes;
 

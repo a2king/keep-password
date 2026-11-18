@@ -326,6 +326,111 @@ public class DetailDrawerTests
         Point ScrollerPosition, Rect ScrollerBounds, double TitleHeight,
         Point AccountPosition, Rect AccountBounds, Point? NodePosition, Rect? NodeBounds);
 
+    [AvaloniaFact]
+    public async Task OpeningClusterEntry_StartsAtTheTopOfTheEditor()
+    {
+        using var fixture = await DrawerFixture.CreateAsync(customizeEntries: (first, second) =>
+        {
+            first.Kind = second.Kind = VaultItemKind.Cluster;
+            first.Nodes = [new ClusterNode { Name = "graphd-1", Host = "192.0.2.10", Port = "9669" }];
+            second.Nodes = [new ClusterNode { Name = "graphd-2", Host = "192.0.2.11", Port = "9669" }];
+        });
+        foreach (var entry in new[] { fixture.First, fixture.Second })
+        {
+            fixture.ClickEntry(entry.Id);
+            await fixture.WaitUntilAsync(() => fixture.IsOpen);
+            await fixture.ObserveFramesAsync(TimeSpan.FromMilliseconds(400));
+            Assert.True(fixture.Scroller.Extent.Height > fixture.Scroller.Viewport.Height, "需要内容足够长才能复现下滚");
+            Assert.Equal(0, fixture.Scroller.Offset.Y);
+        }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(VaultItemKind.SshKey)]
+    [InlineData(VaultItemKind.ApiCredential)]
+    [InlineData(VaultItemKind.Cluster)]
+    public async Task LegacyEditor_UsesTheSameFooter_UndoAndSaveGreyUntilEdited(VaultItemKind kind)
+    {
+        using var fixture = await DrawerFixture.CreateAsync(customizeEntries: (first, second) =>
+        {
+            first.Kind = second.Kind = kind;
+            if (kind == VaultItemKind.Cluster)
+            {
+                first.Nodes = [new ClusterNode { Name = "Test node", Host = "192.0.2.10", Port = "22" }];
+                second.Nodes = [new ClusterNode { Name = "Test node", Host = "192.0.2.11", Port = "22" }];
+            }
+            else
+            {
+                // SSH 密钥和 API 凭据没有账号列表，只有各自的必填字段。
+                first.Accounts = [];
+                second.Accounts = [];
+                var key = kind == VaultItemKind.SshKey ? FieldKeys.PrivateKey : FieldKeys.ApiKey;
+                first.Fields[key] = "test-only-secret-1";
+                second.Fields[key] = "test-only-secret-2";
+            }
+        });
+        Assert.Null(fixture.Modern);
+        fixture.ClickEntry(fixture.First.Id);
+        await fixture.WaitUntilAsync(() => fixture.IsOpen);
+
+        // 头部与新版详情同一个控件、同样位置：类型图标 + 名称 + 类型标签，右上只有收藏和关闭。
+        var header = fixture.LegacyHeader;
+        Assert.True(header.IsEffectivelyVisible);
+        Assert.Equal(fixture.First.Name, header.Title);
+        Assert.Equal(VaultItemKinds.DisplayName(kind), header.KindLabel);
+        Assert.Same(DetailHeaderContent.Icon(kind), header.KindIcon);
+        var headerAt = header.TranslatePoint(default, fixture.Panel)!.Value;
+        Assert.Equal(32, headerAt.Y, precision: 1);
+        Assert.Equal(104, header.Bounds.Height, precision: 1);
+        Assert.Equal(["PART_CloseButton", "PART_Favorite", "PART_TitleButton"],
+            header.GetVisualDescendants().OfType<Button>().Select(button => button.Name!).Order().ToArray());
+        Assert.DoesNotContain(fixture.Panel.GetVisualDescendants().OfType<Border>(), border => border.Classes.Contains("count-badge"));
+        header.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "PART_Favorite")
+            .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        await fixture.WaitUntilAsync(() => header.IsFavorite);
+        Assert.True(fixture.Window.View!.Favorite);
+
+        var bar = fixture.Window.FindControl<KeepPassword.App.Controls.Details.SaveBar>("LegacyFooter")!;
+        Assert.True(bar.IsEffectivelyVisible);
+        var buttons = bar.GetVisualDescendants().OfType<Button>().ToDictionary(button => button.Name!);
+        Assert.True(buttons["PART_Delete"].IsEnabled);
+        Assert.False(buttons["PART_Cancel"].IsEnabled);
+        Assert.False(buttons["PART_SaveButton"].IsEnabled);
+        SaveBarLayout.AssertDeleteLeftUndoSaveRight(bar);
+        // 与新版详情的底栏在面板里的位置、尺寸一致。
+        var panelBar = bar.TranslatePoint(default, fixture.Panel)!.Value;
+        var border = fixture.Panel.BorderThickness.Left;
+        Assert.Equal(border, panelBar.X, precision: 1);
+        Assert.Equal(fixture.Panel.Bounds.Width - border, bar.Bounds.Width, precision: 1);
+        Assert.Equal(64, bar.Bounds.Height, precision: 1);
+        Assert.Equal(fixture.Panel.Bounds.Height, panelBar.Y + bar.Bounds.Height, precision: 1);
+        // 不再保留旧的「删除」「保存修改」按钮：这两个文字只出现在底栏里。
+        var outside = fixture.Panel.GetVisualDescendants().OfType<TextBlock>().Where(text => !text.GetVisualAncestors().Contains(bar));
+        Assert.DoesNotContain(outside, text => text.Text is "删除" or "保存修改" or "删除条目" or "撤销修改");
+
+        var view = fixture.Window.View!;
+        view.Name = "Edited name";
+        fixture.Window.UpdateLayout();
+        Assert.True(buttons["PART_Cancel"].IsEnabled);
+        Assert.True(buttons["PART_SaveButton"].IsEnabled);
+
+        buttons["PART_Cancel"].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        fixture.Window.UpdateLayout();
+        Assert.Equal(fixture.First.Name, view.Name);
+        Assert.False(view.IsDirty);
+        Assert.False(buttons["PART_Cancel"].IsEnabled);
+        Assert.False(buttons["PART_SaveButton"].IsEnabled);
+        Assert.True(view.HasDetail);
+
+        view.Name = "Saved name";
+        fixture.Window.UpdateLayout();
+        buttons["PART_SaveButton"].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        await fixture.WaitUntilAsync(() => !buttons["PART_SaveButton"].IsEnabled);
+        Assert.Equal("Saved name", view.Name);
+        Assert.False(view.IsDirty);
+        Assert.False(buttons["PART_Cancel"].IsEnabled);
+    }
+
     private sealed class DrawerFixture : IDisposable
     {
         private readonly string _directory;
@@ -379,7 +484,7 @@ public class DetailDrawerTests
                 ? Window.FindControl<DetailPanelView>("ModernDetail") : null;
             Content = (Control?)Modern ?? Window.FindControl<Grid>("DetailContent")!;
             Scroller = Modern?.Scroller ?? Window.FindControl<ScrollViewer>("DetailScroller")!;
-            Title = Window.FindControl<TextBlock>("DetailTitle")!;
+            LegacyHeader = Window.FindControl<KeepPassword.App.Controls.Details.DetailHeader>("LegacyHeader")!;
             List = Window.FindControl<ScrollViewer>("AccountScroller")!;
             ListPane = Window.FindControl<Grid>("ItemsListPane")!;
             TagFilters = Window.FindControl<ItemsControl>("TagFiltersList")!;
@@ -392,8 +497,8 @@ public class DetailDrawerTests
         public DetailPanelView? Modern { get; }
         public Control Content { get; }
         public ScrollViewer Scroller { get; }
-        public TextBlock Title { get; }
-        public string? DisplayedTitle => Modern?.Header.Title ?? Title.Text;
+        public KeepPassword.App.Controls.Details.DetailHeader LegacyHeader { get; }
+        public string? DisplayedTitle => Modern?.Header.Title ?? LegacyHeader.Title;
         public ScrollViewer List { get; }
         public Grid ListPane { get; }
         public ItemsControl TagFilters { get; }
@@ -433,9 +538,9 @@ public class DetailDrawerTests
 
         public void ClickClose()
         {
-            var button = Modern is not null
-                ? Modern.Header.GetVisualDescendants().OfType<Button>().Single(control => control.Name is "PART_Close" or "PART_CloseButton")
-                : Panel.GetVisualDescendants().OfType<Button>().Single(control => control.Content is string text && text == "关闭");
+            // 两种编辑器共用同一个头部控件，关闭按钮相同。
+            var header = Modern?.Header ?? LegacyHeader;
+            var button = header.GetVisualDescendants().OfType<Button>().Single(control => control.Name == "PART_CloseButton");
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         }
 
@@ -486,7 +591,7 @@ public class DetailDrawerTests
             var account = Assert.Single(editorCards.Where(card => card.DataContext is AccountEditorView));
             var node = editorCards.SingleOrDefault(card => card.DataContext is NodeEditorView);
             return new EditorFrame(
-                Assert.IsType<Point>(Scroller.TranslatePoint(new Point(), Window)), Scroller.Bounds, Title.Bounds.Height,
+                Assert.IsType<Point>(Scroller.TranslatePoint(new Point(), Window)), Scroller.Bounds, LegacyHeader.Bounds.Height,
                 Assert.IsType<Point>(account.TranslatePoint(new Point(), Window)), account.Bounds,
                 node?.TranslatePoint(new Point(), Window), node?.Bounds);
         }

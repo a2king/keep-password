@@ -25,10 +25,10 @@ public class CloudSyncBindGateTests
             ServiceFactory = _ => new VaultSyncService("http://sync.test", handler)
         };
         coordinator.Attach(session);
-        var first = coordinator.BindAsync("person@example.com", "website-password-12", "KPB-test-binding-key", "ABCD2345");
+        var first = coordinator.BindAsync("person@example.com", "website-password-12", "ABCD2345");
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var busy = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            coordinator.BindAsync("person@example.com", "website-password-12", "KPB-test-binding-key", "ABCD2345"));
+            coordinator.BindAsync("person@example.com", "website-password-12", "ABCD2345"));
         Assert.Contains("正在绑定", busy.Message);
         Assert.Equal(1, posts);
         release.TrySetResult();
