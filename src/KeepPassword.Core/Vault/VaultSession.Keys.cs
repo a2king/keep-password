@@ -156,6 +156,18 @@ public sealed partial class VaultSession
         }
     }
 
+    /// <summary>密钥来自用户已有的密钥文件或其他已同步设备：不再提醒保存新的密钥文件。</summary>
+    internal void MarkKeyFileSaved()
+    {
+        lock (_gate)
+        {
+            EnsureUnlocked();
+            if (_keyFileSaved || _formatVersion < VaultStore.IndependentKeyVersion) return;
+            VaultStore.UpdateKeyHeader(_path, _kdf, _passwordWrap, keyFileSaved: true);
+            _keyFileSaved = true;
+        }
+    }
+
     public string ExportCsv(string encryptionKey)
     {
         lock (_gate)

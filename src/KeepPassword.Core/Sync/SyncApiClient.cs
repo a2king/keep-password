@@ -77,6 +77,64 @@ public sealed class SyncApiClient : IDisposable
         return await ReadAsync<VaultUploadResponse>(response, authenticated: true, ct);
     }
 
+    // ---- 设备配对（服务器只中转承诺、临时公钥和密文信封） ----
+
+    public Task<PairingInfo> CreatePairingAsync(string deviceToken, string commitment, CancellationToken ct = default) =>
+        PairingCallAsync(HttpMethod.Post, "api/sync/pairing", deviceToken, new { commitment }, ct);
+
+    public async Task<IReadOnlyList<PairingInfo>> GetPendingPairingsAsync(string deviceToken, CancellationToken ct = default)
+    {
+        using var message = Authorized(HttpMethod.Get, "api/sync/pairing/pending", deviceToken);
+        using var response = await SendAsync(message, ct);
+        var body = await ReadAsync<PairingList>(response, authenticated: true, ct);
+        return body.Requests ?? [];
+    }
+
+    public Task<PairingInfo> GetPairingAsync(string deviceToken, string pairingId, CancellationToken ct = default) =>
+        PairingCallAsync(HttpMethod.Get, PairingPath(pairingId), deviceToken, null, ct);
+
+    public Task<PairingInfo> OfferPairingAsync(string deviceToken, string pairingId, string publicKey, CancellationToken ct = default) =>
+        PairingCallAsync(HttpMethod.Post, PairingPath(pairingId, "offer"), deviceToken, new { publicKey }, ct);
+
+    public Task<PairingInfo> RevealPairingAsync(string deviceToken, string pairingId, string publicKey, CancellationToken ct = default) =>
+        PairingCallAsync(HttpMethod.Post, PairingPath(pairingId, "reveal"), deviceToken, new { publicKey }, ct);
+
+    public Task<PairingInfo> ApprovePairingAsync(string deviceToken, string pairingId, string envelope, CancellationToken ct = default) =>
+        PairingCallAsync(HttpMethod.Post, PairingPath(pairingId, "approve"), deviceToken, new { envelope }, ct);
+
+    public Task<PairingInfo> RejectPairingAsync(string deviceToken, string pairingId, CancellationToken ct = default) =>
+        PairingCallAsync(HttpMethod.Post, PairingPath(pairingId, "reject"), deviceToken, new { }, ct);
+
+    public async Task CompletePairingAsync(string deviceToken, string pairingId, CancellationToken ct = default)
+    {
+        using var message = Authorized(HttpMethod.Post, PairingPath(pairingId, "complete"), deviceToken);
+        message.Content = JsonContent.Create(new { }, options: JsonOptions);
+        using var response = await SendAsync(message, ct);
+        await EnsureSuccess(response, authenticated: true, ct);
+    }
+
+    private static string PairingPath(string pairingId, string? action = null)
+    {
+        if (string.IsNullOrEmpty(pairingId) || pairingId.Any(ch => !(char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_')))
+        {
+            throw new SyncApiException(SyncFailureKind.Validation, "配对请求无效。");
+        }
+
+        return action is null ? $"api/sync/pairing/{pairingId}" : $"api/sync/pairing/{pairingId}/{action}";
+    }
+
+    private async Task<PairingInfo> PairingCallAsync(HttpMethod method, string path, string deviceToken, object? body, CancellationToken ct)
+    {
+        using var message = Authorized(method, path, deviceToken);
+        if (body is not null)
+        {
+            message.Content = JsonContent.Create(body, options: JsonOptions);
+        }
+
+        using var response = await SendAsync(message, ct);
+        return await ReadAsync<PairingInfo>(response, authenticated: true, ct);
+    }
+
     public async Task<bool> PingAsync(CancellationToken ct = default)
     {
         using var message = new HttpRequestMessage(HttpMethod.Get, "api/health");
@@ -528,4 +586,26 @@ public sealed class BindResult
     /// （<see cref="VaultSyncService.AdoptKeyFileAsync"/>）。本地数据未改动。
     /// </summary>
     public bool NeedsKeyFile { get; }
+}
+
+/// <summary>服务器上的配对会话。公钥和信封都不能用来解密保险库。</summary>
+public sealed class PairingInfo
+{
+    public string PairingId { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string? Commitment { get; set; }
+    public string? RequesterDeviceName { get; set; }
+    public string? RequesterPlatform { get; set; }
+    public string? ApproverDeviceName { get; set; }
+    public string? ApproverPlatform { get; set; }
+    public string? RequesterPublicKey { get; set; }
+    public string? ApproverPublicKey { get; set; }
+    public string? Envelope { get; set; }
+    public DateTimeOffset? CreatedAt { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
+}
+
+internal sealed class PairingList
+{
+    public List<PairingInfo>? Requests { get; set; }
 }

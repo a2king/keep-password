@@ -24,6 +24,7 @@ public sealed class UnlockViewModel : ViewModelBase
     private bool _useEncryptionKey;
     private bool _isLocalKeyVault;
     private bool _createWithKey;
+    private bool _createFromCloud;
     private string _answer1 = "";
     private string _answer2 = "";
     private string _answer3 = "";
@@ -61,6 +62,11 @@ public sealed class UnlockViewModel : ViewModelBase
         {
             if (IsCreate)
             {
+                if (_createFromCloud)
+                {
+                    return "设置本机短密钥后，在「设置 → 云同步」里登录官网账号，再到另一台已同步的电脑上核对确认码并批准。云端数据会自动下载，不需要密钥文件。";
+                }
+
                 return _createWithKey
                     ? "选择你保存的加密密钥文件（.kpkey），再设置本机短密钥。新保险库沿用这把密钥，开启云同步后会直接下载并合并云端数据。"
                     : "设置短密钥后，将生成一把独立的加密密钥。请按提示永久保存密钥文件；本机之后用短密钥解锁。换电脑时请选择「使用已有加密密钥」。";
@@ -133,8 +139,10 @@ public sealed class UnlockViewModel : ViewModelBase
 
     public bool ShowCreateShort => IsCreate;
     public bool CreateWithExistingKey => IsCreate && _createWithKey;
+    public bool CreateFromCloud => IsCreate && _createFromCloud;
     public bool ShowUseExistingKey => IsCreate && !_createWithKey;
-    public bool ShowUseNewKey => IsCreate && _createWithKey;
+    public bool ShowUseCloud => IsCreate && !_createFromCloud;
+    public bool ShowUseNewKey => IsCreate && (_createWithKey || _createFromCloud);
 
     public bool ShowCreateConfirmShort => IsCreate;
 
@@ -176,7 +184,7 @@ public sealed class UnlockViewModel : ViewModelBase
     public string SubmitText => IsRecovering
         ? (_isLocalKeyVault ? "重置短密钥并解锁" : "重置并解锁")
         : IsCreate
-            ? (_createWithKey ? "导入密钥并创建" : "创建并解锁")
+            ? (_createWithKey ? "导入密钥并创建" : _createFromCloud ? "创建并前往云同步" : "创建并解锁")
             : ShowKeyUnlock
                 ? "导入密钥并解锁"
                 : "解锁";
@@ -324,6 +332,18 @@ public sealed class UnlockViewModel : ViewModelBase
     {
         if (!IsCreate) return;
         _createWithKey = true;
+        _createFromCloud = false;
+        Error = "";
+        NotifyMode();
+    }
+
+    /// <summary>换电脑：先建库，再通过云同步请另一台设备批准，自动取得密钥。</summary>
+    public void UseCloudForCreate()
+    {
+        if (!IsCreate) return;
+        _createFromCloud = true;
+        _createWithKey = false;
+        EncryptionKey = "";
         Error = "";
         NotifyMode();
     }
@@ -331,6 +351,7 @@ public sealed class UnlockViewModel : ViewModelBase
     public void UseNewKeyForCreate()
     {
         _createWithKey = false;
+        _createFromCloud = false;
         EncryptionKey = "";
         Error = "";
         NotifyMode();
@@ -394,6 +415,7 @@ public sealed class UnlockViewModel : ViewModelBase
         var useShort = ShowShortUnlock;
         var useKey = ShowKeyUnlock || (IsRecovering && _isLocalKeyVault);
         var createWithKey = CreateWithExistingKey;
+        var createFromCloud = CreateFromCloud;
         var encryptionKey = EncryptionKey;
         if ((IsCreate || ShowKeyUnlock) && string.IsNullOrEmpty(shortKey))
         {
@@ -419,7 +441,7 @@ public sealed class UnlockViewModel : ViewModelBase
 
                 if (IsCreate)
                 {
-                    return _store.CreateLocalSession(_path, shortKey, encryptionKey: createWithKey ? encryptionKey : null);
+                    return _store.CreateLocalSession(_path, shortKey, encryptionKey: createWithKey ? encryptionKey : null, awaitCloudKey: createFromCloud);
                 }
 
                 if (useKey)
@@ -556,6 +578,8 @@ public sealed class UnlockViewModel : ViewModelBase
         OnPropertyChanged(nameof(CreateWithExistingKey));
         OnPropertyChanged(nameof(ShowUseExistingKey));
         OnPropertyChanged(nameof(ShowUseNewKey));
+        OnPropertyChanged(nameof(ShowUseCloud));
+        OnPropertyChanged(nameof(CreateFromCloud));
         OnPropertyChanged(nameof(SubmitText));
         OnPropertyChanged(nameof(Initial));
     }

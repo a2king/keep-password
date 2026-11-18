@@ -51,7 +51,11 @@ public sealed partial class VaultStore
     /// 换电脑时传入已保存的 .kpkey 内容：新保险库沿用这把数据密钥，不生成新密钥，也不再提示保存密钥文件。
     /// 绑定云同步后可直接解开云端数据。为空时生成新的随机密钥。
     /// </param>
-    public VaultSession CreateLocalSession(string path, string shortKey, string account = "", string? encryptionKey = null)
+    /// <param name="awaitCloudKey">
+    /// 换电脑并准备从其他设备获取密钥：先用临时密钥建库，界面不在创建时弹出保存密钥文件。
+    /// 配对成功后改用云端密钥并视为已保存；没有配对（例如云端其实为空）时这把密钥仍是“未保存”，会继续提醒保存。
+    /// </param>
+    public VaultSession CreateLocalSession(string path, string shortKey, string account = "", string? encryptionKey = null, bool awaitCloudKey = false)
     {
         if (string.IsNullOrEmpty(shortKey))
         {
@@ -70,8 +74,9 @@ public sealed partial class VaultStore
         }
 
         var existingKey = !string.IsNullOrWhiteSpace(encryptionKey);
+        _ = awaitCloudKey; // 只影响界面是否在创建时弹出保存窗口，见 UnlockView。
         // 先解析密钥：格式不对时什么都不写。
-        var dataKey = existingKey ? VaultKeyFile.Parse(encryptionKey!) : RandomNumberGenerator.GetBytes(Argon2Id.HashLength);
+        var dataKey = !string.IsNullOrWhiteSpace(encryptionKey) ? VaultKeyFile.Parse(encryptionKey) : RandomNumberGenerator.GetBytes(Argon2Id.HashLength);
         var kdf = new KdfMaterial(Profile, RandomNumberGenerator.GetBytes(Argon2Id.SaltLength));
         var entries = new List<VaultEntry>();
         byte[]? wrapKey = null;

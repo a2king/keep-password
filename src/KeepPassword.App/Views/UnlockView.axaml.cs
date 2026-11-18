@@ -148,7 +148,8 @@ public partial class UnlockView : UserControl
 
             _animating = true;
             ClearInputValues();
-            if (session.NeedsKeyFileSave)
+            // 「从另一台设备同步」：密钥马上会换成云端的，创建时不弹保存窗口。
+            if (session.NeedsKeyFileSave && !view.CreateFromCloud)
             {
                 using var setupCancellation = token.Register(session.Lock);
                 Badge.StopSpin();
@@ -206,6 +207,7 @@ public partial class UnlockView : UserControl
             if (View == view)
             {
                 _animating = false;
+                _cloudSetupRequested = view.CreateFromCloud;
                 Unlocked?.Invoke(session);
             }
             else
@@ -262,6 +264,24 @@ public partial class UnlockView : UserControl
         View?.UseExistingKeyForCreate();
         RecoveryKeyBox.Focus();
         _ = Motion.EnterAsync(UnlockForm, 4);
+    }
+
+    private void OnCreateFromCloud(object? sender, RoutedEventArgs e)
+    {
+        View?.UseCloudForCreate();
+        RecoveryKeyBox.Text = "";
+        ShortBox.Focus();
+        _ = Motion.EnterAsync(UnlockForm, 4);
+    }
+
+    private bool _cloudSetupRequested;
+
+    /// <summary>刚创建的保险库选了「从另一台设备同步」：主窗口取走这个标记后打开云同步设置。</summary>
+    public bool TakeCloudSetupRequest()
+    {
+        var requested = _cloudSetupRequested;
+        _cloudSetupRequested = false;
+        return requested;
     }
 
     private void OnCreateWithNewKey(object? sender, RoutedEventArgs e)
