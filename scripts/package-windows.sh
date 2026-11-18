@@ -75,7 +75,7 @@ echo "== 扩展与说明 =="
 cp -a "$ROOT/extension/." "$STAGING/extension/"
 rm -rf "$STAGING/extension/tests"
 # 说明文字放在 scripts/install-readme.txt，与 PowerShell 版共用；带 UTF-8 BOM 方便 Windows 记事本识别。
-python3 -c "import sys; sys.stdout.buffer.write(b'ï»¿' + open(sys.argv[1], 'rb').read())"   "$ROOT/scripts/install-readme.txt" > "$STAGING/使用说明.txt"
+python3 -c "import sys; sys.stdout.buffer.write(b'\xef\xbb\xbf' + open(sys.argv[1], 'rb').read())"   "$ROOT/scripts/install-readme.txt" > "$STAGING/使用说明.txt"
 
 echo "== 高压缩打包 payload =="
 (
