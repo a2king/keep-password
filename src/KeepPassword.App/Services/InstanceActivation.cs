@@ -30,11 +30,41 @@ public sealed class InstanceActivation : IDisposable
         }
         else
         {
-            _socketPath = Path.Combine(Path.GetTempPath(), "keep-password-activate.sock");
+            _socketPath = UnixSocketPath();
         }
     }
 
     public bool IsPrimary { get; }
+
+    /// <summary>
+    /// 每个用户自己的 socket 路径。原来放在共享的 /tmp 下：Linux 多用户时，后启动的用户删不掉别人的 socket
+    /// （UnauthorizedAccessException 未被捕获会直接崩溃），也绑定不上。优先用 XDG_RUNTIME_DIR（只有本人可访问），
+    /// 否则在临时目录建一个仅本人可访问的子目录。macOS 的 socket 路径上限 104 字节，名字保持很短。
+    /// </summary>
+    internal static string UnixSocketPath()
+    {
+        var runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+        if (!string.IsNullOrEmpty(runtime) && Directory.Exists(runtime))
+        {
+            return Path.Combine(runtime, "keep-password-activate.sock");
+        }
+
+        var user = new string(Environment.UserName.Where(char.IsAsciiLetterOrDigit).Take(32).ToArray());
+        var directory = Path.Combine(Path.GetTempPath(), "kp-" + (user.Length == 0 ? "user" : user));
+        try
+        {
+            Directory.CreateDirectory(directory);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        return Path.Combine(directory, "activate.sock");
+    }
 
     public void SignalActivate()
     {
@@ -115,7 +145,7 @@ public sealed class InstanceActivation : IDisposable
                 File.Delete(_socketPath);
             }
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
         }
 

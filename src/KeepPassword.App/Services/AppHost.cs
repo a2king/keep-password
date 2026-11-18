@@ -53,7 +53,9 @@ public sealed class AppHost : IDisposable
         if (_exiting)
         {
             _activation.SignalActivate();
-            _desktop.Shutdown();
+            // 这里还在框架初始化阶段，消息循环尚未开始；此时直接 Shutdown 会让随后启动的循环抛出
+            // “Dispatcher shut down”并崩溃退出。排队到循环开始后再退出。
+            Dispatcher.UIThread.Post(() => _desktop.Shutdown());
             return;
         }
 
@@ -76,6 +78,7 @@ public sealed class AppHost : IDisposable
         if (OperatingSystem.IsMacOS())
         {
             InstallMacFocusWatcher();
+            InstallMacReopen();
         }
 
         _ = AppUpdateService.SilentCheckAsync();
@@ -295,7 +298,7 @@ public sealed class AppHost : IDisposable
                 return;
             }
 
-            if (_trayReady)
+            if (CanHideToTray)
             {
                 _main.Hide();
             }
@@ -341,13 +344,34 @@ public sealed class AppHost : IDisposable
         }
 
         e.Cancel = true;
-        if (_trayReady)
+        if (CanHideToTray)
         {
             _main.Hide();
             return;
         }
 
         _main.WindowState = WindowState.Minimized;
+    }
+
+    /// <summary>
+    /// 能否把窗口藏进托盘。Linux 上许多桌面（例如未装扩展的 GNOME）没有托盘区，托盘图标创建成功也看不见，
+    /// 窗口一旦藏起来就找不回来，所以 Linux 只最小化到任务栏。
+    /// </summary>
+    private bool CanHideToTray => _trayReady && !OperatingSystem.IsLinux();
+
+    /// <summary>macOS：窗口关到后台后，点程序坞图标重新打开窗口。</summary>
+    private void InstallMacReopen()
+    {
+        if (Application.Current?.TryGetFeature<IActivatableLifetime>() is { } lifetime)
+        {
+            lifetime.Activated += (_, args) =>
+            {
+                if (args.Kind == ActivationKind.Reopen)
+                {
+                    Dispatcher.UIThread.Post(ShowFromTray);
+                }
+            };
+        }
     }
 
     private void LockVault()

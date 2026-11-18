@@ -343,6 +343,8 @@ Windows 安装包请用上面的 `package-windows.sh`。
 - `tests/KeepPassword.App.Tests`：用临时保险库做的界面回归测试，覆盖加密密钥保存流程、详情抽屉动画、动画偏好和英文输入限制，不访问真实保险库。
 - `extension/tests`：浏览器扩展的填充逻辑测试，运行 `node --test extension/tests/autofill.test.cjs`。
 - Windows 上的手工验收清单见 [docs/windows-acceptance.md](docs/windows-acceptance.md)。
-- macOS、Linux 未做完整的图形验收，程序补全在这两个平台上只有空实现。
+- macOS、Linux 未做完整的图形验收，Linux 程序补全只有空实现。CI 会在 macOS 和 Linux 上跑测试、打包并启动一次。
+- macOS 包必须在 Mac 上打（`scripts/package-macos.sh`）：Apple 芯片拒绝运行未签名的程序，在其他系统上交叉发布的主程序没有签名。默认 ad-hoc 签名，可在本机运行；对外分发需要 Developer ID 签名和公证（`MAC_SIGN_IDENTITY`）。
+- Linux 包：`scripts/package-linux.sh` 生成 tar.gz，解压后运行 `install.sh` 加入应用菜单。Linux 上关闭窗口只最小化到任务栏，因为不少桌面没有托盘区。
 
 </details>

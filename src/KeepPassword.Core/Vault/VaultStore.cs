@@ -889,9 +889,10 @@ public sealed partial class VaultStore
         }
     }
 
-    private static byte[] LoadOrCreateDeviceKey()
+    private static byte[] LoadOrCreateDeviceKey() => LoadOrCreateDeviceKey(DeviceKeyPath());
+
+    internal static byte[] LoadOrCreateDeviceKey(string path)
     {
-        var path = DeviceKeyPath();
         var directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(directory))
         {
@@ -899,8 +900,11 @@ public sealed partial class VaultStore
             FileProtection.RestrictToCurrentUser(directory);
         }
 
+        // 只有一开始就读到损坏（长度不对）的密钥文件时才允许覆盖；正常情况下绝不覆盖别人刚写好的密钥。
+        var replaceInvalid = false;
         if (File.Exists(path))
         {
+            replaceInvalid = true;
             var existing = File.ReadAllBytes(path);
             if (existing.Length == Argon2Id.HashLength)
             {
@@ -910,21 +914,43 @@ public sealed partial class VaultStore
             CryptographicOperations.ZeroMemory(existing);
         }
 
+        // macOS / Linux 的快速解锁靠这把设备密钥。两个进程同时首次创建时，原来共用同一个 .tmp 文件名并允许覆盖：
+        // 一边会因临时文件被抢走而失败，或者后写入的密钥覆盖先写入的，使先写好的 .quick 再也解不开（短密钥解锁失效）。
+        // 改为各用各的临时文件、不覆盖已有密钥；抢输的一方改读赢家写入的那一把。
         var key = RandomNumberGenerator.GetBytes(Argon2Id.HashLength);
-        var temp = path + ".tmp";
+        var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             File.WriteAllBytes(temp, key);
             FileProtection.RestrictToCurrentUser(temp);
-            File.Move(temp, path, overwrite: true);
+            try
+            {
+                File.Move(temp, path, overwrite: replaceInvalid);
+            }
+            catch (IOException) when (!replaceInvalid && File.Exists(path))
+            {
+                CryptographicOperations.ZeroMemory(key);
+                var winner = File.ReadAllBytes(path);
+                if (winner.Length != Argon2Id.HashLength)
+                {
+                    CryptographicOperations.ZeroMemory(winner);
+                    throw new InvalidDataException("设备密钥文件已损坏。");
+                }
+
+                return winner;
+            }
+
             FileProtection.RestrictToCurrentUser(path);
             return key;
         }
         catch
         {
             CryptographicOperations.ZeroMemory(key);
-            TryDeleteFile(temp);
             throw;
+        }
+        finally
+        {
+            TryDeleteFile(temp);
         }
     }
 
