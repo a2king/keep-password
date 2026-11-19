@@ -431,6 +431,24 @@ public class DetailDrawerTests
         Assert.False(buttons["PART_Cancel"].IsEnabled);
     }
 
+    [AvaloniaFact]
+    public async Task EntryCards_ShowSpaceOnlyInAllSpacesView()
+    {
+        using var fixture = await DrawerFixture.CreateAsync(customizeEntries: (first, _) => first.Space = "工作");
+        var view = fixture.Window.View!;
+        fixture.Window.UpdateLayout();
+        Assert.True(fixture.SpaceLabel(fixture.First.Id)?.IsEffectivelyVisible);
+        Assert.False(fixture.SpaceLabel(fixture.Second.Id)?.IsEffectivelyVisible ?? false);
+
+        view.SelectSpace("工作");
+        fixture.Window.UpdateLayout();
+        Assert.False(fixture.SpaceLabel(fixture.First.Id)?.IsEffectivelyVisible ?? false);
+
+        view.SelectSpace(MainViewModel.AllKey);
+        fixture.Window.UpdateLayout();
+        Assert.True(fixture.SpaceLabel(fixture.First.Id)?.IsEffectivelyVisible);
+    }
+
     private sealed class DrawerFixture : IDisposable
     {
         private readonly string _directory;
@@ -535,6 +553,12 @@ public class DetailDrawerTests
                 .Single(control => control.Classes.Contains("account-card") && control.Tag is Guid tag && tag == id);
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         }
+
+        public TextBlock? SpaceLabel(Guid id) =>
+            Window.GetVisualDescendants().OfType<Button>()
+                .Single(control => control.Classes.Contains("account-card") && control.Tag is Guid tag && tag == id)
+                .GetVisualDescendants().OfType<TextBlock>()
+                .FirstOrDefault(text => text.DataContext is EntryItemView item && text.Text == item.Space && item.Space.Length > 0);
 
         public void ClickClose()
         {
