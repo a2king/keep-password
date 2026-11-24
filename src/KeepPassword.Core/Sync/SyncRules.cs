@@ -70,6 +70,9 @@ public sealed class KeyChangeResult
 {
     public bool NeedsConfirmation { get; init; }
     public int ConflictCount { get; init; }
+
+    /// <summary>需要确认时的冲突清单（只含名称和差异项，不含密码），供界面逐条选择本机或云端。</summary>
+    public IReadOnlyList<KeepPassword.Core.Vault.MergeConflict> Conflicts { get; init; } = [];
     public bool Committed { get; init; }
     public long KeyVersion { get; init; }
     public long VaultVersion { get; init; }

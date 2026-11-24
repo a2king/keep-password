@@ -1125,6 +1125,7 @@ public partial class SettingsView : UserControl
                     ? ""
                     : $" · 加密密钥编号 {sync.CloudKeyId}（换电脑时带上文件名含此编号的 .kpkey）");
             SyncAdoptButton.IsVisible = sync.CanAdoptKey;
+            SyncPairButton.IsVisible = sync.CanAdoptKey;
             SyncRotateButton.IsEnabled = !sync.SyncBlocked;
         }
         else if (showBind && string.IsNullOrWhiteSpace(SyncEmailBox.Text) && !string.IsNullOrWhiteSpace(sync.Email))
@@ -1193,6 +1194,11 @@ public partial class SettingsView : UserControl
 
             VaultChanged?.Invoke(this, EventArgs.Empty);
             RefreshSyncUi();
+            // 云端用的是另一把密钥：直接请其他设备批准，不需要选密钥文件。
+            if (_sync.NeedsKeyFile)
+            {
+                await RunPairingAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -1293,15 +1299,13 @@ public partial class SettingsView : UserControl
             var preview = await _sync.AdoptKeyFileAsync(text, confirmConflicts: false);
             if (preview.NeedsConfirmation)
             {
-                var agreed = await Dialogs.ConfirmAsync(Host, "确认合并后恢复同步",
-                    $"有 {preview.ConflictCount} 条尚未同步的本地内容和云端不同。取消则继续暂停同步，本地库保持原样。",
-                    "确认合并并恢复");
-                if (!agreed)
+                var choices = await PairingDialogs.ChooseConflictsAsync(Host, preview.Conflicts);
+                if (choices is null)
                 {
                     return;
                 }
 
-                await _sync.AdoptKeyFileAsync(text, confirmConflicts: true);
+                await _sync.AdoptKeyFileAsync(text, confirmConflicts: true, choices: choices);
             }
 
             SyncErrorBox.IsVisible = false;
@@ -1312,6 +1316,69 @@ public partial class SettingsView : UserControl
         {
             ShowSyncError(SyncFailureText(ex));
         }
+    }
+
+    private async void OnSyncPair(object? sender, RoutedEventArgs e) => await RunPairingAsync();
+
+    /// <summary>从另一台已同步的设备取得数据密钥，然后合并：没有冲突直接上传，有冲突逐条选择。</summary>
+    private async Task RunPairingAsync()
+    {
+        if (_sync is null)
+        {
+            return;
+        }
+
+        byte[]? key = null;
+        try
+        {
+            key = await PairingDialogs.RequestKeyAsync(Host, _sync);
+            if (key is null)
+            {
+                return;
+            }
+
+            var preview = await _sync.AdoptPairedKeyAsync(key, confirmConflicts: false);
+            if (preview.NeedsConfirmation)
+            {
+                var choices = await PairingDialogs.ChooseConflictsAsync(Host, preview.Conflicts);
+                if (choices is null)
+                {
+                    ShowSyncError("已取消合并。同步保持暂停，本地保险库未改动；可以随时点「从其他设备获取密钥」重新开始。");
+                    return;
+                }
+
+                await _sync.AdoptPairedKeyAsync(key, confirmConflicts: true, choices);
+            }
+
+            SyncErrorBox.IsVisible = false;
+            VaultChanged?.Invoke(this, EventArgs.Empty);
+            UpdateEncryptionKeyStatus();
+            RefreshSyncUi();
+        }
+        catch (Exception ex)
+        {
+            ShowSyncError(SyncFailureText(ex));
+        }
+        finally
+        {
+            if (key is not null)
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(key);
+            }
+        }
+    }
+
+    /// <summary>创建保险库时选了「从另一台设备同步」：滚到云同步卡片，光标放到邮箱框。</summary>
+    public void FocusCloudSync()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            SyncSection.BringIntoView();
+            if (SyncBindPanel.IsVisible)
+            {
+                SyncEmailBox.Focus();
+            }
+        }, DispatcherPriority.Loaded);
     }
 
     private async void OnSyncDisconnect(object? sender, RoutedEventArgs e)

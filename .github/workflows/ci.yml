@@ -16,6 +16,43 @@ jobs:
       - name: Test
         run: dotnet test KeepPassword.sln -c Release --nologo
 
+      - name: Package Linux tarball
+        run: bash scripts/package-linux.sh artifacts/linux
+
+      - name: Start packaged app once (second launch must exit cleanly)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb dbus-x11 >/dev/null
+          dir=$(ls -d artifacts/linux/KeepPassword-*-linux-x64)
+          export HOME=$(mktemp -d)
+          xvfb-run -a dbus-run-session -- bash -c "
+            \"$dir/KeepPassword\" & first=\$!; sleep 10
+            kill -0 \$first || { echo '主程序启动后退出了'; exit 1; }
+            \"$dir/KeepPassword\" || { echo '第二次启动没有正常退出'; exit 1; }
+            kill \$first"
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test
+        run: dotnet test KeepPassword.sln -c Release --nologo
+
+      - name: Package and ad-hoc sign .app
+        run: bash scripts/package-macos.sh artifacts/macos osx-arm64
+
+      - name: Verify signature and launch
+        run: |
+          app="artifacts/macos/Keep Password.app"
+          codesign --verify --deep --strict "$app"
+          "$app/Contents/MacOS/KeepPassword" & pid=$!
+          sleep 10
+          kill -0 $pid || { echo "主程序启动后退出了"; exit 1; }
+          kill $pid
+
   windows:
     runs-on: windows-latest
     env:

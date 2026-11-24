@@ -293,9 +293,16 @@
                                 </Panel>
                               </Border>
                               <StackPanel Grid.Column="1" Margin="4,0,0,0" VerticalAlignment="Center" Spacing="3">
-                                <Grid ColumnDefinitions="*,Auto">
+                                <Grid ColumnDefinitions="*,Auto,Auto">
                                   <TextBlock Text="{Binding Address}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" />
                                   <PathIcon Grid.Column="1" Data="{StaticResource Icon.Star}" Width="14" Height="14" Foreground="{DynamicResource Kp.Star}" Margin="6,0,0,0" VerticalAlignment="Center" IsVisible="{Binding Favorite}" />
+                                  <!-- 空间：灰色小字，与彩色标签区分；过长截断，悬停看全名。 -->
+                                  <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="3" Margin="6,0,0,0" MaxWidth="96" VerticalAlignment="Center"
+                                              IsVisible="{Binding ShowSpace}" ToolTip.Tip="{Binding Space, StringFormat='空间：{0}'}">
+                                    <PathIcon Data="{StaticResource Icon.Space}" Width="12" Height="12" Foreground="{DynamicResource Kp.TextMuted}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Space}" FontSize="11.5" Foreground="{DynamicResource Kp.TextMuted}" MaxWidth="81"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                  </StackPanel>
                                 </Grid>
                                 <TextBlock Text="{Binding Username}" Classes="muted mono" FontSize="12" TextTrimming="CharacterEllipsis" />
                                 <ItemsControl ItemsSource="{Binding Tags}" Height="20" Margin="0,2,0,0" ClipToBounds="True">

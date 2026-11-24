@@ -13,6 +13,7 @@ using KeepPassword.App.Services;
 using KeepPassword.App.ViewModels;
 using KeepPassword.App.Views.Details;
 using KeepPassword.Core.Security;
+using KeepPassword.Core.Sync;
 using KeepPassword.Core.Totp;
 using KeepPassword.Core.Vault;
 
@@ -122,7 +123,42 @@ public partial class MainWindow : Window
         _platformAutofill = platformAutofillSupported;
         _pauseWatcher = pauseWatcher;
         _cloudSync = cloudSync;
+        if (cloudSync is not null)
+        {
+            cloudSync.PairingRequested += OnPairingRequested;
+        }
+
         ShowUnlockScreen();
+    }
+
+    /// <summary>另一台新设备请求加入：确认码就绪后弹窗，用户核对后批准或拒绝。锁定时一律拒绝。</summary>
+    private async void OnPairingRequested(PairingApproval approval)
+    {
+        if (_cloudSync is null || _session is not { IsUnlocked: true } || !VaultRoot.IsVisible)
+        {
+            if (_cloudSync is not null) await _cloudSync.RejectPairingAsync(approval);
+            else approval.Dispose();
+            return;
+        }
+
+        BringToFront();
+        var approved = await PairingDialogs.ConfirmApprovalAsync(this, approval);
+        try
+        {
+            if (approved && _session is { IsUnlocked: true })
+            {
+                await _cloudSync.ApprovePairingAsync(approval);
+            }
+            else
+            {
+                await _cloudSync.RejectPairingAsync(approval);
+            }
+        }
+        catch (Exception ex) when (ex is SyncApiException or InvalidOperationException or HttpRequestException)
+        {
+            approval.Dispose();
+            await Dialogs.AlertAsync(this, "批准失败", ex is SyncApiException ? ex.Message : "批准失败，请让新设备重新发起请求。");
+        }
     }
 
     public MainViewModel? View => VaultRoot.DataContext as MainViewModel;
@@ -184,6 +220,7 @@ public partial class MainWindow : Window
 
     public void ShowVault(VaultSession session)
     {
+        var openCloudSync = UnlockRoot.TakeCloudSetupRequest();
         _session = session;
         ResetFilterExpansion();
         VaultRoot.DataContext = new MainViewModel(session, _platformAutofill);
@@ -194,6 +231,12 @@ public partial class MainWindow : Window
         UnlockRoot.ClearSecrets();
         UnlockRoot.IsVisible = false;
         _ = Motion.EnterAsync(VaultRoot, 6);
+        if (openCloudSync)
+        {
+            // 创建时选了「从另一台设备同步」：直接打开设置里的云同步。
+            OnUsers(this, new RoutedEventArgs());
+            SettingsRoot.FocusCloudSync();
+        }
     }
 
     public void PrepareClose() => AllowClose = true;

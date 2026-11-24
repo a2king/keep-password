@@ -145,7 +145,8 @@
           </WrapPanel>
 
           <WrapPanel Margin="2,0,0,8" IsVisible="{Binding IsCreate}">
-            <Button Classes="link" Content="使用已有加密密钥（换电脑）" Margin="0,0,18,4" Click="OnCreateWithExistingKey" IsVisible="{Binding ShowUseExistingKey}" />
+            <Button Classes="link" Content="从另一台设备同步（换电脑）" Margin="0,0,18,4" Click="OnCreateFromCloud" IsVisible="{Binding ShowUseCloud}" />
+            <Button Classes="link" Content="使用已有加密密钥文件" Margin="0,0,18,4" Click="OnCreateWithExistingKey" IsVisible="{Binding ShowUseExistingKey}" />
             <Button Classes="link" Content="改为生成新的加密密钥" Margin="0,0,18,4" Click="OnCreateWithNewKey" IsVisible="{Binding ShowUseNewKey}" />
           </WrapPanel>
 

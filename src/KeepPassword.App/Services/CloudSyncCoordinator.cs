@@ -18,13 +18,22 @@ public sealed class CloudSyncCoordinator : IDisposable
     private int _binding;
     private int _pushQueued;
     private bool _requiresRebind;
+    private CancellationTokenSource? _pairingWatch;
+    private readonly HashSet<string> _seenPairings = [];
     private string? _lastStatus;
     private string? _lastError;
 
     /// <summary>测试注入同步客户端。生产路径不设置。</summary>
     internal Func<string, VaultSyncService>? ServiceFactory { get; set; }
 
+    /// <summary>已绑定设备检查新设备配对请求的间隔；对方公开公钥前按 <see cref="PairingFastInterval"/> 追问。</summary>
+    internal TimeSpan PairingPollInterval { get; set; } = TimeSpan.FromSeconds(10);
+    internal TimeSpan PairingFastInterval { get; set; } = TimeSpan.FromSeconds(2);
+
     public event Action? Changed;
+
+    /// <summary>有新设备请求加入，确认码已就绪（在 UI 线程触发）。接收方负责调用批准或拒绝。</summary>
+    public event Action<PairingApproval>? PairingRequested;
 
     public bool IsBound
     {
@@ -87,7 +96,7 @@ public sealed class CloudSyncCoordinator : IDisposable
             _state = SyncSessionState.TryLoad(session.VaultPath);
             if (_state is not null)
             {
-                _service = new VaultSyncService(_state.BaseUrl);
+                _service = OpenService(_state.BaseUrl);
                 if (_state.SyncBlocked)
                 {
                     _lastError = BlockText(_state);
@@ -106,6 +115,7 @@ public sealed class CloudSyncCoordinator : IDisposable
         }
 
         RaiseChanged();
+        StartPairingWatch();
         if (IsBound)
         {
             _ = RefreshAsync();
@@ -115,11 +125,15 @@ public sealed class CloudSyncCoordinator : IDisposable
     public void Detach()
     {
         CancellationTokenSource? loop;
+        CancellationTokenSource? watch;
         VaultSyncService? service;
         lock (_gate)
         {
             loop = _loop;
             _loop = null;
+            watch = _pairingWatch;
+            _pairingWatch = null;
+            _seenPairings.Clear();
             service = _service;
             _service = null;
             _session = null;
@@ -131,6 +145,8 @@ public sealed class CloudSyncCoordinator : IDisposable
 
         try { loop?.Cancel(); } catch { /* ignore */ }
         loop?.Dispose();
+        try { watch?.Cancel(); } catch { /* ignore */ }
+        watch?.Dispose();
         service?.Dispose();
         RaiseChanged();
     }
@@ -431,6 +447,7 @@ public sealed class CloudSyncCoordinator : IDisposable
         }
 
         RaiseChanged();
+        StartPairingWatch();
     }
 
     private void NoteSyncFailure(Exception ex, CancellationToken ct)
@@ -494,20 +511,203 @@ public sealed class CloudSyncCoordinator : IDisposable
         }
     }
 
-    public async Task<KeyChangeResult> AdoptKeyFileAsync(string keyFileText, bool confirmConflicts, CancellationToken ct = default)
+    public async Task<KeyChangeResult> AdoptKeyFileAsync(string keyFileText, bool confirmConflicts, CancellationToken ct = default,
+        IReadOnlyDictionary<Guid, MergeSide>? choices = null)
     {
         await _io.WaitAsync(ct);
         try
         {
             var (session, state, service) = RequireBound();
             var waitingForKey = state.SyncBlockReason == SyncMessages.NeedsKeyReason;
-            var result = await service.AdoptKeyFileAsync(session, state, keyFileText, confirmConflicts, ct);
+            var result = await service.AdoptKeyFileAsync(session, state, keyFileText, confirmConflicts, ct, choices);
             NoteKeyResult(state, result, waitingForKey ? "已用密钥文件恢复同步。" + SyncMessages.AdoptedHint : "已用新密钥恢复同步");
             return result;
         }
         finally
         {
             _io.Release();
+        }
+    }
+
+    // ---------------- 设备配对 ----------------
+
+    /// <summary>新设备：向其他已绑定设备请求数据密钥。调用方负责轮询、取消和释放。</summary>
+    public async Task<PairingRequest> StartPairingAsync(CancellationToken ct = default)
+    {
+        var (_, state, service) = RequireBound();
+        return await PairingRequest.StartAsync(service.Api, state.DeviceToken, ct);
+    }
+
+    /// <summary>新设备：用配对收到的数据密钥恢复同步。校验、合并和冲突确认与选择密钥文件相同。</summary>
+    public async Task<KeyChangeResult> AdoptPairedKeyAsync(byte[] dataKey, bool confirmConflicts,
+        IReadOnlyDictionary<Guid, MergeSide>? choices = null, CancellationToken ct = default)
+    {
+        await _io.WaitAsync(ct);
+        try
+        {
+            var (session, state, service) = RequireBound();
+            var result = await service.AdoptPairedKeyAsync(session, state, dataKey, confirmConflicts, choices, ct);
+            NoteKeyResult(state, result, "已从其他设备取得密钥并开启同步");
+            return result;
+        }
+        finally
+        {
+            _io.Release();
+        }
+    }
+
+    /// <summary>老设备：用户核对确认码一致后批准，把本机数据密钥加密发给新设备。</summary>
+    public async Task ApprovePairingAsync(PairingApproval approval, CancellationToken ct = default)
+    {
+        byte[] dataKey;
+        lock (_gate)
+        {
+            dataKey = (_session ?? throw new InvalidOperationException("请先解锁保险库。")).CopyDataKey();
+        }
+
+        try
+        {
+            await approval.ApproveAsync(dataKey, ct);
+            SetStatus($"已批准「{approval.DeviceName}」加入云同步");
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(dataKey);
+            approval.Dispose();
+        }
+    }
+
+    public async Task RejectPairingAsync(PairingApproval approval)
+    {
+        try
+        {
+            await approval.RejectAsync();
+        }
+        finally
+        {
+            approval.Dispose();
+        }
+    }
+
+    private void StartPairingWatch()
+    {
+        CancellationTokenSource cts;
+        lock (_gate)
+        {
+            if (_pairingWatch is not null || _session is null)
+            {
+                return;
+            }
+
+            cts = new CancellationTokenSource();
+            _pairingWatch = cts;
+        }
+
+        _ = Task.Run(() => PairingWatchAsync(cts.Token));
+    }
+
+    private async Task PairingWatchAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await CheckPairingsAsync(ct);
+                await Task.Delay(PairingPollInterval, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex) when (ex is SyncApiException or HttpRequestException or InvalidOperationException or ObjectDisposedException)
+            {
+                // 网络或令牌问题由正常同步报告；配对检查静默重试。
+                try { await Task.Delay(PairingPollInterval, ct); } catch (OperationCanceledException) { return; }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 老设备检查待批准的配对请求，自动响应并在确认码就绪后通知界面。
+    /// 只有本机密钥就是云端密钥时才响应，避免把一把过期的密钥交给新设备。
+    /// </summary>
+    internal async Task CheckPairingsAsync(CancellationToken ct)
+    {
+        VaultSyncService service;
+        string token;
+        lock (_gate)
+        {
+            if (_session is not { IsUnlocked: true } session || _state is not { } state || _service is null
+                || _requiresRebind || state.SyncBlocked)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(state.CloudKeyId)
+                && !string.Equals(state.CloudKeyId, session.EncryptionKeyId, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            service = _service;
+            token = state.DeviceToken;
+        }
+
+        var pending = await service.Api.GetPendingPairingsAsync(token, ct);
+        foreach (var request in pending.Where(request => request.Status == "requested"))
+        {
+            lock (_gate)
+            {
+                if (!_seenPairings.Add(request.PairingId)) continue;
+            }
+
+            PairingApproval approval;
+            try
+            {
+                approval = await PairingApproval.OfferAsync(service.Api, token, request, ct);
+            }
+            catch (SyncApiException)
+            {
+                continue; // 其他设备已经响应，或请求已结束。
+            }
+
+            _ = WaitForPairingCodeAsync(approval, request.ExpiresAt, ct);
+        }
+    }
+
+    private async Task WaitForPairingCodeAsync(PairingApproval approval, DateTimeOffset? expiresAt, CancellationToken ct)
+    {
+        var until = expiresAt ?? DateTimeOffset.UtcNow.AddMinutes(10);
+        try
+        {
+            while (DateTimeOffset.UtcNow < until)
+            {
+                if (await approval.PollAsync(ct))
+                {
+                    if (Dispatcher.UIThread.CheckAccess()) RaisePairing(approval);
+                    else Dispatcher.UIThread.Post(() => RaisePairing(approval));
+                    return;
+                }
+
+                await Task.Delay(PairingFastInterval, ct);
+            }
+        }
+        catch (Exception ex) when (ex is SyncApiException or HttpRequestException or OperationCanceledException)
+        {
+        }
+
+        approval.Dispose();
+    }
+
+    private void RaisePairing(PairingApproval approval)
+    {
+        if (PairingRequested is { } handler)
+        {
+            handler(approval);
+        }
+        else
+        {
+            _ = RejectPairingAsync(approval);
         }
     }
 

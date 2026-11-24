@@ -285,7 +285,7 @@
         </Border>
 
         <!-- 云同步 -->
-        <Border Classes="section">
+        <Border x:Name="SyncSection" Classes="section">
           <StackPanel Spacing="8">
             <TextBlock Text="云同步" Classes="h2" Margin="0,0,0,0" />
             <TextBlock Text="使用已在官网完成邮箱验证的账号同步加密保险库。服务器只保存密文，不保存加密密钥，不能解密。换电脑时请带上加密密钥文件（.kpkey）。这里的验证码是开启同步时单独发送的 8 位字母数字，不能用注册验证码或 6 位重置码。"
@@ -299,7 +299,8 @@
                          TextWrapping="Wrap" Classes="muted" />
               <WrapPanel Orientation="Horizontal">
                 <Button Classes="accent" Content="立即刷新" Margin="0,0,8,8" Click="OnSyncRefresh" />
-                <Button x:Name="SyncAdoptButton" Classes="accent" Content="用密钥文件恢复同步…" Margin="0,0,8,8" IsVisible="False" Click="OnSyncAdoptKey" />
+                <Button x:Name="SyncPairButton" Classes="accent" Content="从其他设备获取密钥…" Margin="0,0,8,8" IsVisible="False" Click="OnSyncPair" />
+                <Button x:Name="SyncAdoptButton" Classes="soft" Content="用密钥文件恢复同步…" Margin="0,0,8,8" IsVisible="False" Click="OnSyncAdoptKey" />
                 <Button x:Name="SyncRotateButton" Classes="soft" Content="更换云端密钥…" Margin="0,0,8,8" Click="OnSyncRotateKey" />
                 <Button Classes="danger" Content="断开云同步" Margin="0,0,8,8" Click="OnSyncDisconnect" />
               </WrapPanel>
@@ -311,6 +312,7 @@
               <TextBlock Text="官网密码" Classes="label" />
               <TextBox x:Name="SyncPasswordBox" PasswordChar="•" views:PasswordReveal.IsEnabled="True" Classes="mono" />
               <TextBlock Text="网站密码只用来登录同步服务，不参与加密，也不会保存在本机。" TextWrapping="Wrap" Classes="muted" />
+              <TextBlock Text="换电脑：绑定后，在另一台已开启同步的电脑上核对确认码并批准，云端数据会自动下载合并，不需要密钥文件。" TextWrapping="Wrap" Classes="muted" />
               <TextBlock Text="邮箱验证码" Classes="label" />
               <TextBlock Text="8 位字母数字，15 分钟内有效。连续错误 5 次后失效。重新发送会使上一封失效。"
                          TextWrapping="Wrap" Classes="muted" />

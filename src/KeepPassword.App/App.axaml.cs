@@ -16,6 +16,7 @@ public partial class App : Application
     {
         Image.SourceProperty.Changed.AddClassHandler<Image>((image, _) =>
             RenderOptions.SetBitmapInterpolationMode(image, BitmapInterpolationMode.HighQuality));
+        Controls.TextCaret.Install();
         AvaloniaXamlLoader.Load(this);
     }
 

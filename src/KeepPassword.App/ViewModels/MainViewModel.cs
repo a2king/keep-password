@@ -48,6 +48,7 @@ public sealed class LabelChipView : ViewModelBase
 public sealed class EntryItemView : ViewModelBase
 {
     private bool _isSelected;
+    private bool _showSpace;
 
     public required Guid Id { get; init; }
 
@@ -58,6 +59,15 @@ public sealed class EntryItemView : ViewModelBase
     public string KindBadge { get; init; } = "";
 
     public bool Favorite { get; init; }
+
+    public string Space { get; init; } = "";
+
+    /// <summary>只在“全部空间”下显示：选中具体空间时每张卡都相同，没有信息量。</summary>
+    public bool ShowSpace
+    {
+        get => _showSpace;
+        set => Set(ref _showSpace, value);
+    }
 
     public IReadOnlyList<string> Tags { get; init; } = [];
 
@@ -826,6 +836,7 @@ public sealed class MainViewModel : ViewModelBase
             Username = subtitle,
             KindBadge = VaultItemKinds.Badge(entry.Kind),
             Favorite = entry.Favorite,
+            Space = entry.Space.Trim(),
             Tags = entry.Tags.ToList(),
             Logo = entry.Kind switch
             {
@@ -974,6 +985,7 @@ public sealed class MainViewModel : ViewModelBase
             }
 
             view.IsSelected = view.Id == selected;
+            view.ShowSpace = _spaceFilter == AllKey && view.Space.Length > 0;
             entries.Add(view);
         }
 

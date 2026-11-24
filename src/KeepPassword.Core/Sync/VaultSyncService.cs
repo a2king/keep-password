@@ -461,13 +461,25 @@ public sealed class VaultSyncService : IDisposable
         CancellationToken ct = default) =>
         ExclusiveResult(ct, () => RotateCoreAsync(session, state, keyFileText, confirmConflicts, ct));
 
+    /// <param name="choices">逐条冲突的选择；为空时冲突按较新的一边。</param>
     public Task<KeyChangeResult> AdoptKeyFileAsync(
         VaultSession session,
         SyncSessionState state,
         string keyFileText,
         bool confirmConflicts,
+        CancellationToken ct = default,
+        IReadOnlyDictionary<Guid, MergeSide>? choices = null) =>
+        ExclusiveResult(ct, () => AdoptCoreAsync(session, state, keyFileText, confirmConflicts, choices, ct));
+
+    /// <summary>用配对收到的数据密钥恢复同步：与选择密钥文件完全相同的校验、合并和冲突确认。</summary>
+    public Task<KeyChangeResult> AdoptPairedKeyAsync(
+        VaultSession session,
+        SyncSessionState state,
+        byte[] dataKey,
+        bool confirmConflicts,
+        IReadOnlyDictionary<Guid, MergeSide>? choices = null,
         CancellationToken ct = default) =>
-        ExclusiveResult(ct, () => AdoptCoreAsync(session, state, keyFileText, confirmConflicts, ct));
+        AdoptKeyFileAsync(session, state, VaultKeyFile.Encode(dataKey), confirmConflicts, ct, choices);
 
     private async Task<T> ExclusiveResult<T>(CancellationToken ct, Func<Task<T>> work)
     {
@@ -577,6 +589,7 @@ public sealed class VaultSyncService : IDisposable
         SyncSessionState state,
         string keyFileText,
         bool confirmConflicts,
+        IReadOnlyDictionary<Guid, MergeSide>? choices,
         CancellationToken ct)
     {
         var nextKey = VaultKeyFile.Parse(keyFileText);
@@ -604,15 +617,22 @@ public sealed class VaultSyncService : IDisposable
                 throw new SyncApiException(SyncFailureKind.Validation, SyncMessages.WrongKeyFile(nextId, state.CloudKeyId));
             }
 
-            var merged = VaultMerge.Merge(session.AllRecords, remoteEntries, session.Spaces, session.Tags);
-            var conflicts = VaultMerge.ContentConflicts(session.AllRecords, remoteEntries);
+            var conflicts = VaultMerge.DescribeConflicts(session.AllRecords, remoteEntries);
             if (conflicts.Count > 0 && !confirmConflicts)
             {
-                return new KeyChangeResult { NeedsConfirmation = true, ConflictCount = conflicts.Count, KeyVersion = state.KeyVersion, VaultVersion = state.VaultVersion };
+                return new KeyChangeResult
+                {
+                    NeedsConfirmation = true, ConflictCount = conflicts.Count, Conflicts = conflicts,
+                    KeyVersion = state.KeyVersion, VaultVersion = state.VaultVersion
+                };
             }
+
+            var merged = VaultMerge.Merge(session.AllRecords, remoteEntries, session.Spaces, session.Tags, choices: choices);
 
             var status = await _api.GetStatusAsync(state.DeviceToken, ct);
             session.ReplaceWithDataKey(nextKey, merged.Entries, merged.Spaces, merged.Tags);
+            // 这把密钥来自用户的密钥文件或另一台已同步设备（那台可随时重新导出），不再逼用户保存。
+            session.MarkKeyFileSaved();
             state.KeyVersion = status.KeyVersion;
             state.VaultVersion = download.VaultVersion;
             state.CloudKeyId = nextId;
